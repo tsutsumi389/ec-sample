@@ -63,18 +63,25 @@ function ProductListContent() {
     <div className="max-w-6xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6">{search ? `「${search}」の検索結果` : '商品一覧'}</h1>
 
-      {loading && <p className="text-gray-500">読み込み中...</p>}
+      {loading && (
+        <p className="text-gray-500 flex items-center" role="status">
+          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-indigo-600 mr-2" />
+          読み込み中...
+        </p>
+      )}
       {error && <p className="text-red-600">{error}</p>}
 
       {!loading && !error && products.length === 0 && (
         <p className="text-gray-500">該当する商品がありません。</p>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+      <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
         {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <li key={product.id}>
+            <ProductCard product={product} />
+          </li>
         ))}
-      </div>
+      </ul>
 
       <Pagination page={page} totalPages={totalPages} onChange={handlePageChange} />
     </div>
@@ -83,7 +90,14 @@ function ProductListContent() {
 
 export default function HomePage() {
   return (
-    <Suspense fallback={<div className="max-w-6xl mx-auto px-4 py-8 text-gray-500">読み込み中...</div>}>
+    <Suspense
+      fallback={
+        <div className="max-w-6xl mx-auto px-4 py-8 text-gray-500 flex items-center" role="status">
+          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-indigo-600 mr-2" />
+          読み込み中...
+        </div>
+      }
+    >
       <ProductListContent />
     </Suspense>
   );

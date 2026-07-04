@@ -72,7 +72,20 @@ export default function AdminProductsPage() {
       {loading && <p className="text-gray-500">読み込み中...</p>}
       {error && <p className="text-red-600 mb-4">{error}</p>}
 
-      {!loading && (
+      {!loading && products.length === 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+          <p className="text-gray-500 mb-4">登録された商品がありません。「新規作成」から商品を追加してください。</p>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700"
+          >
+            新規作成
+          </button>
+        </div>
+      )}
+
+      {!loading && products.length > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-500">
