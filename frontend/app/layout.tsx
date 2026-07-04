@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 
 const SITE_NAME = 'EC Sample Store';
 
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <Header />
           <main className="flex-1">{children}</main>
+          <Footer />
         </AuthProvider>
       </body>
     </html>

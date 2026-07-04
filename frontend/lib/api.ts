@@ -20,6 +20,46 @@ export class ApiError extends Error {
   }
 }
 
+// 会員登録でメールアドレスが重複した場合のメッセージ。フィールドエラーとしての
+// 突き合わせにも使うため、定数として公開する（register ページ参照）。
+export const EMAIL_ALREADY_REGISTERED_MESSAGE = 'このメールアドレスは既に登録されています。';
+
+// バックエンド（FastAPI）が返す英語の detail をユーザー向けの日本語メッセージへ変換するための対応表。
+// 新しいエラー文言をAPI側に追加した場合はここにも追記すること。
+const KNOWN_ERROR_MESSAGES: Record<string, string> = {
+  'Could not validate credentials': '認証情報を確認できませんでした。再度ログインしてください。',
+  'Admin privileges required': 'この操作には管理者権限が必要です。',
+  'Product not found': '商品が見つかりませんでした。',
+  'Invalid status': '指定されたステータスは無効です。',
+  'Order not found': '注文が見つかりませんでした。',
+  'Email already registered': EMAIL_ALREADY_REGISTERED_MESSAGE,
+  'Incorrect email or password': 'メールアドレスまたはパスワードが正しくありません。',
+  'Cart item not found': 'カート内に該当する商品が見つかりませんでした。',
+};
+
+// ステータスコードに応じたフォールバックメッセージ（対応表に無い/未知のdetailの場合に使用）。
+function fallbackMessageForStatus(status: number): string {
+  if (status === 400) return '入力内容に誤りがあります。内容をご確認のうえ、再度お試しください。';
+  if (status === 401) return '認証が必要です。ログインし直してください。';
+  if (status === 403) return 'この操作を行う権限がありません。';
+  if (status === 404) return '対象のデータが見つかりませんでした。';
+  if (status === 422) return '入力内容を確認してください。';
+  if (status >= 500) return 'サーバーエラーが発生しました。しばらくしてから再度お試しください。';
+  return `リクエストに失敗しました (${status})`;
+}
+
+// 英数字のみで構成される文字列は、バックエンドが返す未翻訳の英語メッセージとみなす。
+// （日本語の文言は既にAPI側で用意されているものが多く、その場合はそのまま表示する）
+const LOOKS_UNTRANSLATED_ENGLISH = /^[\x00-\x7F]*$/;
+
+function translateDetail(status: number, rawDetail: string): string {
+  const trimmed = rawDetail.trim();
+  if (!trimmed) return fallbackMessageForStatus(status);
+  if (KNOWN_ERROR_MESSAGES[trimmed]) return KNOWN_ERROR_MESSAGES[trimmed];
+  if (LOOKS_UNTRANSLATED_ENGLISH.test(trimmed)) return fallbackMessageForStatus(status);
+  return trimmed;
+}
+
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return window.localStorage.getItem(TOKEN_KEY);
@@ -39,17 +79,18 @@ async function parseErrorMessage(res: Response): Promise<string> {
   try {
     const data: ApiErrorBody = await res.json();
     if (typeof data.detail === 'string') {
-      return data.detail;
+      return translateDetail(res.status, data.detail);
     }
     if (Array.isArray(data.detail)) {
-      return data.detail
+      const joined = data.detail
         .map((item) => (typeof item?.msg === 'string' ? item.msg : JSON.stringify(item)))
         .join(', ');
+      return translateDetail(res.status, joined);
     }
   } catch {
     // レスポンスボディがJSONでない場合は無視してデフォルトメッセージを使う
   }
-  return `リクエストに失敗しました (${res.status})`;
+  return fallbackMessageForStatus(res.status);
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {

@@ -7,6 +7,8 @@ import { api, ApiError } from '@/lib/api';
 import type { Order } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from '@/lib/order-status';
+import Spinner from '@/components/Spinner';
+import Price from '@/components/Price';
 
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
@@ -33,18 +35,37 @@ export default function OrdersPage() {
   }, [user]);
 
   if (authLoading || !user) {
-    return <div className="max-w-4xl mx-auto px-4 py-8 text-gray-500">読み込み中...</div>;
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8 text-gray-600 flex items-center">
+        <Spinner className="mr-2" />
+        読み込み中...
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold mb-6">注文履歴</h1>
 
-      {loading && <p className="text-gray-500">読み込み中...</p>}
-      {error && <p className="text-red-600">{error}</p>}
+      {loading && (
+        <p className="text-gray-600 flex items-center">
+          <Spinner className="mr-2" />
+          読み込み中...
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-red-600">
+          {error}
+        </p>
+      )}
 
       {!loading && !error && orders.length === 0 && (
-        <p className="text-gray-500">注文履歴がありません。</p>
+        <div>
+          <p className="text-gray-600 mb-2">注文履歴がありません。</p>
+          <Link href="/" className="text-indigo-600 hover:underline">
+            商品を見る
+          </Link>
+        </div>
       )}
 
       <div className="space-y-3">
@@ -57,7 +78,7 @@ export default function OrdersPage() {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <p className="font-medium">注文番号 #{order.id}</p>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-600">
                   {new Date(order.created_at).toLocaleString('ja-JP')}
                 </p>
               </div>
@@ -67,7 +88,7 @@ export default function OrdersPage() {
                 >
                   {ORDER_STATUS_LABELS[order.status]}
                 </span>
-                <p className="font-bold text-lg">¥{order.total_amount.toLocaleString()}</p>
+                <Price value={order.total_amount} size="lg" strong as="p" />
               </div>
             </div>
           </Link>

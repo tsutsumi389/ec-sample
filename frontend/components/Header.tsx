@@ -11,8 +11,12 @@ export default function Header() {
   const pathname = usePathname();
   const [search, setSearch] = useState('');
 
+  const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
+
   const navLinkClass = (href: string) =>
-    pathname === href ? 'text-indigo-600 font-semibold' : 'text-gray-700 hover:text-indigo-600';
+    `inline-block px-2 py-2 -m-2 rounded-md underline decoration-gray-300 underline-offset-2 hover:decoration-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 ${
+      isActive(href) ? 'text-indigo-600 font-semibold decoration-indigo-400' : 'text-gray-700 hover:text-indigo-600'
+    }`;
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -31,7 +35,23 @@ export default function Header() {
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4 flex-wrap">
-        <Link href="/" className="text-xl font-bold text-indigo-600 whitespace-nowrap">
+        <Link href="/" className="flex items-center gap-1.5 text-xl font-bold text-indigo-600 whitespace-nowrap">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            className="shrink-0"
+          >
+            <path
+              d="M4 6h16l-1.5 9.5a2 2 0 0 1-2 1.5H7.5a2 2 0 0 1-2-1.5L4 6Z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+            <path d="M8 6V5a4 4 0 0 1 8 0v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
           EC Sample
         </Link>
 
@@ -45,14 +65,14 @@ export default function Header() {
           />
           <button
             type="submit"
-            className="bg-indigo-600 text-white px-4 py-1.5 rounded-r-md text-sm hover:bg-indigo-700"
+            className="bg-indigo-600 text-white px-4 py-1.5 rounded-r-md text-sm hover:bg-indigo-700 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2"
           >
             検索
           </button>
         </form>
 
-        <nav className="flex items-center gap-4 text-sm whitespace-nowrap">
-          <Link href="/cart" className={navLinkClass('/cart')} aria-current={pathname === '/cart' ? 'page' : undefined}>
+        <nav className="flex items-center gap-2 text-sm whitespace-nowrap">
+          <Link href="/cart" className={navLinkClass('/cart')} aria-current={isActive('/cart') ? 'page' : undefined}>
             カート
           </Link>
 
@@ -61,21 +81,25 @@ export default function Header() {
               <Link
                 href="/orders"
                 className={navLinkClass('/orders')}
-                aria-current={pathname === '/orders' ? 'page' : undefined}
+                aria-current={isActive('/orders') ? 'page' : undefined}
               >
                 注文履歴
               </Link>
               {user.role === 'admin' && (
                 <Link
                   href="/admin"
-                  className={pathname?.startsWith('/admin') ? 'text-indigo-600 font-semibold' : 'text-gray-700 hover:text-indigo-600'}
+                  className={navLinkClass('/admin')}
                   aria-current={pathname?.startsWith('/admin') ? 'page' : undefined}
                 >
                   管理画面
                 </Link>
               )}
-              <span className="text-gray-500 hidden sm:inline">{user.name} さん</span>
-              <button type="button" onClick={handleLogout} className="text-gray-700 hover:text-indigo-600">
+              <span className="text-gray-600 hidden sm:inline">{user.name} さん</span>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-block px-2 py-2 -m-2 rounded-md text-gray-700 underline decoration-gray-300 underline-offset-2 hover:text-indigo-600 hover:decoration-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2"
+              >
                 ログアウト
               </button>
             </>
@@ -83,10 +107,10 @@ export default function Header() {
 
           {!loading && !user && (
             <>
-              <Link href="/login" className="text-gray-700 hover:text-indigo-600">
+              <Link href="/login" className={navLinkClass('/login')}>
                 ログイン
               </Link>
-              <Link href="/register" className="text-gray-700 hover:text-indigo-600">
+              <Link href="/register" className={navLinkClass('/register')}>
                 会員登録
               </Link>
             </>
