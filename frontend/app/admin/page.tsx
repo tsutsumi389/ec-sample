@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { AdminOrder, Product, User } from '@/lib/types';
+import Spinner from '@/components/Spinner';
 
 export default function AdminDashboardPage() {
   const [productCount, setProductCount] = useState<number | null>(null);
@@ -36,14 +37,23 @@ export default function AdminDashboardPage() {
     <div>
       <h1 className="text-2xl font-bold mb-6">ダッシュボード</h1>
 
-      {loading && <p className="text-gray-500">読み込み中...</p>}
-      {error && <p className="text-red-600">{error}</p>}
+      {loading && (
+        <p className="text-gray-600 flex items-center">
+          <Spinner className="mr-2" />
+          読み込み中...
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-red-600">
+          {error}
+        </p>
+      )}
 
       {!loading && !error && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {cards.map((card) => (
             <div key={card.label} className="bg-white rounded-lg border border-gray-200 p-6">
-              <p className="text-sm text-gray-500">{card.label}</p>
+              <p className="text-sm text-gray-600">{card.label}</p>
               <p className="mt-2 text-3xl font-bold text-indigo-600">{card.value}</p>
             </div>
           ))}

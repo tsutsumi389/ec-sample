@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import type { Product } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
+import Spinner from '@/components/Spinner';
+import Price from '@/components/Price';
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
@@ -58,13 +60,20 @@ export default function ProductDetailPage() {
   };
 
   if (loading) {
-    return <div className="max-w-4xl mx-auto px-4 py-8 text-gray-500">読み込み中...</div>;
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8 text-gray-600 flex items-center">
+        <Spinner className="mr-2" />
+        読み込み中...
+      </div>
+    );
   }
 
   if (notFound || !product) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <p className="text-red-600">{notFound ? '商品が見つかりませんでした。' : error || '商品情報の取得に失敗しました。'}</p>
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <p role="alert" className="text-red-600">
+          {notFound ? '商品が見つかりませんでした。' : error || '商品情報の取得に失敗しました。'}
+        </p>
         <Link href="/" className="text-indigo-600 hover:underline">
           商品一覧に戻る
         </Link>
@@ -73,7 +82,7 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8">
       <Link href="/" className="text-sm text-indigo-600 hover:underline">
         ← 商品一覧に戻る
       </Link>
@@ -81,13 +90,23 @@ export default function ProductDetailPage() {
       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="bg-gray-100 rounded-lg overflow-hidden aspect-[4/3]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+          <img
+            src={product.image_url}
+            alt={product.name}
+            onError={(e) => {
+              const img = e.currentTarget;
+              if (img.src.endsWith('/no-image.svg')) return;
+              img.onerror = null;
+              img.src = '/no-image.svg';
+            }}
+            className="w-full h-full object-cover"
+          />
         </div>
 
         <div>
           <h1 className="text-2xl font-bold">{product.name}</h1>
-          <p className="mt-2 text-3xl font-bold text-indigo-600">¥{product.price.toLocaleString()}</p>
-          <p className="mt-1 text-sm text-gray-500">在庫: {product.stock}個</p>
+          <Price value={product.price} size="3xl" as="p" className="mt-2" />
+          <p className="mt-1 text-sm text-gray-600">在庫: {product.stock}個</p>
           <p className="mt-4 text-gray-700 whitespace-pre-wrap">{product.description}</p>
 
           {product.stock > 0 ? (
@@ -99,7 +118,7 @@ export default function ProductDetailPage() {
                 id="quantity"
                 value={quantity}
                 onChange={(e) => setQuantity(Number(e.target.value))}
-                className="border border-gray-300 rounded-md px-2 py-1.5 text-sm"
+                className="border border-gray-300 rounded-md px-2 py-2.5 text-sm"
               >
                 {Array.from({ length: Math.min(product.stock, 10) }, (_, i) => i + 1).map((q) => (
                   <option key={q} value={q}>
@@ -120,8 +139,20 @@ export default function ProductDetailPage() {
             <p className="mt-6 text-red-600 font-medium">在庫切れ</p>
           )}
 
-          {message && <p className="mt-3 text-green-600">{message}</p>}
-          {error && <p className="mt-3 text-red-600">{error}</p>}
+          {message && (
+            <p
+              role="status"
+              aria-live="polite"
+              className="mt-3 bg-green-50 border border-green-200 text-green-700 rounded-md px-4 py-3 text-sm"
+            >
+              {message}
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="mt-3 text-red-600">
+              {error}
+            </p>
+          )}
         </div>
       </div>
     </div>

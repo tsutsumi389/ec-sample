@@ -1,26 +1,29 @@
-from urllib.parse import quote
-
 from sqlalchemy.orm import Session
 
 from app.auth import hash_password
 from app.models import Product, User
 
 
-def _placeholder_image(text: str) -> str:
-    return f"https://placehold.co/400x300?text={quote(text)}"
+def _placeholder_image(slug: str) -> str:
+    """picsum.photos はシード値ごとに安定した実写画像を返す。
+
+    placehold.co の ?text= に日本語商品名を渡すと日本語グリフを持たないため
+    豆腐文字の画像になる。slug は英数字のみで日本語をURLに含めない。
+    """
+    return f"https://picsum.photos/seed/{slug}/400/300"
 
 
 SEED_PRODUCTS = [
-    {"name": "ワイヤレスイヤホン", "description": "ノイズキャンセリング機能付きの高音質ワイヤレスイヤホンです。", "price": 8980, "stock": 45},
-    {"name": "コーヒーメーカー", "description": "全自動ドリップ式コーヒーメーカー。豆から挽けるミル内蔵。", "price": 12800, "stock": 20},
-    {"name": "電気ケトル", "description": "1Lの大容量で素早く沸騰する電気ケトルです。", "price": 3480, "stock": 60},
-    {"name": "モバイルバッテリー", "description": "大容量20000mAhでスマホを約5回充電可能。", "price": 2980, "stock": 80},
-    {"name": "折りたたみ傘", "description": "軽量で持ち運びやすい自動開閉式の折りたたみ傘。", "price": 1980, "stock": 100},
-    {"name": "デスクライト", "description": "目に優しいLEDデスクライト。調光・調色機能付き。", "price": 4500, "stock": 35},
-    {"name": "ヨガマット", "description": "滑りにくい厚手のヨガマット。収納バッグ付き。", "price": 2500, "stock": 50},
-    {"name": "ステンレスボトル", "description": "保温保冷に優れた真空断熱ステンレスボトル 500ml。", "price": 1500, "stock": 90},
-    {"name": "ブルートゥーススピーカー", "description": "防水仕様のポータブルBluetoothスピーカー。", "price": 6980, "stock": 30},
-    {"name": "腕時計", "description": "シンプルで上品なデザインのクオーツ腕時計。", "price": 15800, "stock": 5},
+    {"name": "ワイヤレスイヤホン", "slug": "wireless-earphone", "description": "ノイズキャンセリング機能付きの高音質ワイヤレスイヤホンです。", "price": 8980, "stock": 45},
+    {"name": "コーヒーメーカー", "slug": "coffee-maker", "description": "全自動ドリップ式コーヒーメーカー。豆から挽けるミル内蔵。", "price": 12800, "stock": 20},
+    {"name": "電気ケトル", "slug": "electric-kettle", "description": "1Lの大容量で素早く沸騰する電気ケトルです。", "price": 3480, "stock": 60},
+    {"name": "モバイルバッテリー", "slug": "mobile-battery", "description": "大容量20000mAhでスマホを約5回充電可能。", "price": 2980, "stock": 80},
+    {"name": "折りたたみ傘", "slug": "folding-umbrella", "description": "軽量で持ち運びやすい自動開閉式の折りたたみ傘。", "price": 1980, "stock": 100},
+    {"name": "デスクライト", "slug": "desk-light", "description": "目に優しいLEDデスクライト。調光・調色機能付き。", "price": 4500, "stock": 35},
+    {"name": "ヨガマット", "slug": "yoga-mat", "description": "滑りにくい厚手のヨガマット。収納バッグ付き。", "price": 2500, "stock": 50},
+    {"name": "ステンレスボトル", "slug": "stainless-bottle", "description": "保温保冷に優れた真空断熱ステンレスボトル 500ml。", "price": 1500, "stock": 90},
+    {"name": "ブルートゥーススピーカー", "slug": "bluetooth-speaker", "description": "防水仕様のポータブルBluetoothスピーカー。", "price": 6980, "stock": 30},
+    {"name": "腕時計", "slug": "wrist-watch", "description": "シンプルで上品なデザインのクオーツ腕時計。", "price": 15800, "stock": 5},
 ]
 
 
@@ -50,7 +53,7 @@ def seed_data(db: Session) -> None:
                 description=item["description"],
                 price=item["price"],
                 stock=item["stock"],
-                image_url=_placeholder_image(item["name"]),
+                image_url=_placeholder_image(item["slug"]),
                 is_active=True,
             )
         )

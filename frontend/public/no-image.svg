@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300" role="img" aria-label="画像はありません">
+  <rect width="400" height="300" fill="#F3F4F6"/>
+  <g fill="none" stroke="#9CA3AF" stroke-width="2">
+    <rect x="120" y="95" width="160" height="110" rx="8"/>
+    <circle cx="160" cy="130" r="12"/>
+    <path d="M120 190 L165 150 L200 180 L235 155 L280 195" />
+  </g>
+  <text x="200" y="230" font-family="-apple-system, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif" font-size="16" fill="#9CA3AF" text-anchor="middle">No Image</text>
+</svg>

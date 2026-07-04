@@ -7,6 +7,8 @@ import { api } from '@/lib/api';
 import type { Order } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from '@/lib/order-status';
+import Spinner from '@/components/Spinner';
+import Price from '@/components/Price';
 
 function OrderDetailContent() {
   const params = useParams<{ id: string }>();
@@ -38,12 +40,17 @@ function OrderDetailContent() {
   }, [user, id]);
 
   if (authLoading || !user || loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-8 text-gray-500">読み込み中...</div>;
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8 text-gray-600 flex items-center">
+        <Spinner className="mr-2" />
+        読み込み中...
+      </div>
+    );
   }
 
   if (notFound || !order) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         <p role="alert" className="text-red-600">
           注文情報が見つかりませんでした。
         </p>
@@ -55,7 +62,7 @@ function OrderDetailContent() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8">
       <Link href="/orders" className="text-sm text-indigo-600 hover:underline">
         ← 注文履歴に戻る
       </Link>
@@ -77,7 +84,7 @@ function OrderDetailContent() {
             {ORDER_STATUS_LABELS[order.status]}
           </span>
         </div>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-gray-600 mt-1">
           {new Date(order.created_at).toLocaleString('ja-JP')}
         </p>
         <p className="mt-4 text-sm text-gray-700">
@@ -90,17 +97,19 @@ function OrderDetailContent() {
             <div key={item.id} className="flex items-center justify-between py-3 gap-4">
               <div>
                 <p className="font-medium">{item.product_name}</p>
-                <p className="text-sm text-gray-500">
-                  ¥{item.price.toLocaleString()} × {item.quantity}
+                <p className="text-sm text-gray-600 flex items-center gap-1">
+                  <Price value={item.price} size="sm" /> × {item.quantity}
                 </p>
               </div>
-              <p className="font-semibold">¥{(item.price * item.quantity).toLocaleString()}</p>
+              <Price value={item.price * item.quantity} size="base" as="p" />
             </div>
           ))}
         </div>
 
         <div className="mt-4 flex justify-end border-t border-gray-200 pt-4">
-          <p className="text-xl font-bold">合計: ¥{order.total_amount.toLocaleString()}</p>
+          <p className="text-xl font-bold">
+            合計: <Price value={order.total_amount} size="xl" strong />
+          </p>
         </div>
       </div>
     </div>
@@ -109,7 +118,14 @@ function OrderDetailContent() {
 
 export default function OrderDetailPage() {
   return (
-    <Suspense fallback={<div className="max-w-3xl mx-auto px-4 py-8 text-gray-500">読み込み中...</div>}>
+    <Suspense
+      fallback={
+        <div className="max-w-6xl mx-auto px-4 py-8 text-gray-600 flex items-center">
+          <Spinner className="mr-2" />
+          読み込み中...
+        </div>
+      }
+    >
       <OrderDetailContent />
     </Suspense>
   );

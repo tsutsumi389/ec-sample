@@ -2,10 +2,12 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import type { Product, ProductListResponse } from '@/lib/types';
 import ProductCard from '@/components/ProductCard';
 import Pagination from '@/components/Pagination';
+import Spinner from '@/components/Spinner';
 
 const LIMIT = 12;
 
@@ -64,15 +66,26 @@ function ProductListContent() {
       <h1 className="text-2xl font-bold mb-6">{search ? `「${search}」の検索結果` : '商品一覧'}</h1>
 
       {loading && (
-        <p className="text-gray-500 flex items-center" role="status">
-          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-indigo-600 mr-2" />
+        <p className="text-gray-600 flex items-center">
+          <Spinner className="mr-2" />
           読み込み中...
         </p>
       )}
-      {error && <p className="text-red-600">{error}</p>}
+      {error && (
+        <p role="alert" className="text-red-600">
+          {error}
+        </p>
+      )}
 
       {!loading && !error && products.length === 0 && (
-        <p className="text-gray-500">該当する商品がありません。</p>
+        <div>
+          <p className="text-gray-600 mb-2">該当する商品がありません。</p>
+          {search && (
+            <Link href="/" className="text-indigo-600 hover:underline">
+              検索条件をクリアして全商品を見る
+            </Link>
+          )}
+        </div>
       )}
 
       <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -92,8 +105,8 @@ export default function HomePage() {
   return (
     <Suspense
       fallback={
-        <div className="max-w-6xl mx-auto px-4 py-8 text-gray-500 flex items-center" role="status">
-          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-indigo-600 mr-2" />
+        <div className="max-w-6xl mx-auto px-4 py-8 text-gray-600 flex items-center">
+          <Spinner className="mr-2" />
           読み込み中...
         </div>
       }
