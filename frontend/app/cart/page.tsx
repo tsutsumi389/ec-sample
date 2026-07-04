@@ -52,6 +52,7 @@ export default function CartPage() {
   };
 
   const handleRemove = async (itemId: number) => {
+    if (!window.confirm('カートから削除しますか？')) return;
     setUpdatingId(itemId);
     setError('');
     try {
@@ -73,7 +74,7 @@ export default function CartPage() {
     setError('');
     try {
       const order = await api.post<{ id: number }>('/orders', { shipping_address: address.trim() });
-      router.push(`/orders/${order.id}`);
+      router.push(`/orders/${order.id}?justOrdered=1`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '注文に失敗しました');
     } finally {
@@ -90,7 +91,11 @@ export default function CartPage() {
       <h1 className="text-2xl font-bold mb-6">カート</h1>
 
       {loading && <p className="text-gray-500">読み込み中...</p>}
-      {error && <p className="text-red-600 mb-4">{error}</p>}
+      {error && (
+        <p role="alert" className="text-red-600 mb-4">
+          {error}
+        </p>
+      )}
 
       {!loading && cart && cart.items.length === 0 && (
         <div>
@@ -139,9 +144,9 @@ export default function CartPage() {
                     type="button"
                     onClick={() => handleRemove(item.id)}
                     disabled={updatingId === item.id}
-                    className="text-sm text-red-600 hover:underline disabled:opacity-50"
+                    className="text-sm text-red-600 hover:underline disabled:opacity-50 px-2 py-2 -m-2"
                   >
-                    削除
+                    {updatingId === item.id ? '削除中...' : '削除'}
                   </button>
                 </div>
               </div>

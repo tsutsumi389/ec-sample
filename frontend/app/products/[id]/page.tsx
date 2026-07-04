@@ -25,10 +25,17 @@ export default function ProductDetailPage() {
     if (!id) return;
     setLoading(true);
     setNotFound(false);
+    setError('');
     api
       .get<Product>(`/products/${id}`)
       .then(setProduct)
-      .catch(() => setNotFound(true))
+      .catch((e) => {
+        if (e instanceof ApiError && e.status === 404) {
+          setNotFound(true);
+        } else {
+          setError('商品情報の取得に失敗しました');
+        }
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -57,7 +64,7 @@ export default function ProductDetailPage() {
   if (notFound || !product) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <p className="text-red-600">商品が見つかりませんでした。</p>
+        <p className="text-red-600">{notFound ? '商品が見つかりませんでした。' : error || '商品情報の取得に失敗しました。'}</p>
         <Link href="/" className="text-indigo-600 hover:underline">
           商品一覧に戻る
         </Link>

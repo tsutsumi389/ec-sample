@@ -1,14 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
 export default function Header() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [search, setSearch] = useState('');
+
+  const navLinkClass = (href: string) =>
+    pathname === href ? 'text-indigo-600 font-semibold' : 'text-gray-700 hover:text-indigo-600';
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -48,17 +52,25 @@ export default function Header() {
         </form>
 
         <nav className="flex items-center gap-4 text-sm whitespace-nowrap">
-          <Link href="/cart" className="text-gray-700 hover:text-indigo-600">
+          <Link href="/cart" className={navLinkClass('/cart')} aria-current={pathname === '/cart' ? 'page' : undefined}>
             カート
           </Link>
 
           {!loading && user && (
             <>
-              <Link href="/orders" className="text-gray-700 hover:text-indigo-600">
+              <Link
+                href="/orders"
+                className={navLinkClass('/orders')}
+                aria-current={pathname === '/orders' ? 'page' : undefined}
+              >
                 注文履歴
               </Link>
               {user.role === 'admin' && (
-                <Link href="/admin" className="text-gray-700 hover:text-indigo-600">
+                <Link
+                  href="/admin"
+                  className={pathname?.startsWith('/admin') ? 'text-indigo-600 font-semibold' : 'text-gray-700 hover:text-indigo-600'}
+                  aria-current={pathname?.startsWith('/admin') ? 'page' : undefined}
+                >
                   管理画面
                 </Link>
               )}

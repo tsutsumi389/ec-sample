@@ -61,13 +61,21 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="product-form-title"
+    >
       <div className="bg-white rounded-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-bold mb-4">{product ? '商品を編集' : '商品を新規作成'}</h2>
+        <h2 id="product-form-title" className="text-lg font-bold mb-4">{product ? '商品を編集' : '商品を新規作成'}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">商品名</label>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+              商品名<span className="text-red-600 ml-0.5">*</span>
+            </label>
             <input
+              id="name"
               type="text"
               required
               value={values.name}
@@ -77,8 +85,11 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">説明</label>
+            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+              説明
+            </label>
             <textarea
+              id="description"
               rows={3}
               value={values.description}
               onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
@@ -88,8 +99,11 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">価格（円）</label>
+              <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
+                価格（円）<span className="text-red-600 ml-0.5">*</span>
+              </label>
               <input
+                id="price"
                 type="number"
                 required
                 min={0}
@@ -99,8 +113,11 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">在庫数</label>
+              <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">
+                在庫数<span className="text-red-600 ml-0.5">*</span>
+              </label>
               <input
+                id="stock"
                 type="number"
                 required
                 min={0}
@@ -112,8 +129,11 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">画像URL</label>
+            <label htmlFor="image_url" className="block text-sm font-medium text-gray-700 mb-1">
+              画像URL
+            </label>
             <input
+              id="image_url"
               type="text"
               value={values.image_url}
               onChange={(e) => setValues((v) => ({ ...v, image_url: e.target.value }))}
