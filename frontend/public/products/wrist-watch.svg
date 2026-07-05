@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F5F4F1"/>
+  <!-- ground shadow -->
+  <ellipse cx="300" cy="512" rx="140" ry="18" fill="#E7E5E0"/>
+  <!-- upper band -->
+  <g>
+    <path d="M252 60 l96 0 14 130 -124 0 z" fill="#22574F"/>
+    <rect x="252" y="84" width="96" height="10" fill="#193A34"/>
+    <rect x="250" y="112" width="100" height="10" fill="#193A34"/>
+    <rect x="248" y="140" width="104" height="10" fill="#193A34"/>
+  </g>
+  <!-- lower band -->
+  <g>
+    <path d="M238 410 l124 0 -12 110 -100 0 z" fill="#22574F"/>
+    <rect x="248" y="440" width="104" height="10" fill="#193A34"/>
+    <rect x="250" y="468" width="100" height="10" fill="#193A34"/>
+    <!-- buckle -->
+    <rect x="262" y="498" width="76" height="22" rx="8" fill="#6B7280"/>
+  </g>
+  <!-- crown -->
+  <rect x="418" y="284" width="26" height="32" rx="8" fill="#6B7280"/>
+  <!-- case -->
+  <circle cx="300" cy="300" r="130" fill="#2A6B63"/>
+  <circle cx="300" cy="300" r="112" fill="#5FA19A"/>
+  <!-- dial -->
+  <circle cx="300" cy="300" r="98" fill="#F5F4F1"/>
+  <circle cx="300" cy="300" r="98" fill="none" stroke="#B9D9D5" stroke-width="6"/>
+  <!-- hour markers -->
+  <g stroke="#22574F" stroke-width="6" stroke-linecap="round">
+    <path d="M300 214 l0 18"/>
+    <path d="M300 368 l0 18"/>
+    <path d="M214 300 l18 0"/>
+    <path d="M368 300 l18 0"/>
+  </g>
+  <g fill="#9CA3AF">
+    <circle cx="343" cy="226" r="4"/><circle cx="374" cy="257" r="4"/>
+    <circle cx="374" cy="343" r="4"/><circle cx="343" cy="374" r="4"/>
+    <circle cx="257" cy="374" r="4"/><circle cx="226" cy="343" r="4"/>
+    <circle cx="226" cy="257" r="4"/><circle cx="257" cy="226" r="4"/>
+  </g>
+  <!-- hands: 10:09 -->
+  <path d="M300 300 l-42 -26" stroke="#22574F" stroke-width="10" stroke-linecap="round"/>
+  <path d="M300 300 l52 -44" stroke="#22574F" stroke-width="7" stroke-linecap="round"/>
+  <path d="M300 300 l16 52" stroke="#D97706" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="300" cy="300" r="9" fill="#22574F"/>
+  <circle cx="300" cy="300" r="4" fill="#D97706"/>
+  <!-- date window -->
+  <rect x="322" y="292" width="26" height="20" rx="4" fill="#B9D9D5" opacity="0"/>
+</svg>

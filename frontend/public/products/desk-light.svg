@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F5F4F1"/>
+  <!-- ground shadow -->
+  <ellipse cx="300" cy="496" rx="175" ry="20" fill="#E7E5E0"/>
+  <!-- light beam -->
+  <path d="M242 226 l-96 180 220 0 z" fill="#F3E1BC" opacity="0.75"/>
+  <!-- lamp head -->
+  <g transform="rotate(-24 260 200)">
+    <rect x="160" y="176" width="200" height="48" rx="24" fill="#2A6B63"/>
+    <rect x="176" y="212" width="168" height="10" rx="5" fill="#B9D9D5"/>
+    <circle cx="344" cy="200" r="10" fill="#D97706"/>
+  </g>
+  <!-- arm upper -->
+  <rect x="330" y="196" width="18" height="150" rx="9" transform="rotate(24 339 271)" fill="#22574F"/>
+  <!-- joint -->
+  <circle cx="372" cy="336" r="16" fill="#6B7280"/>
+  <!-- arm lower -->
+  <rect x="363" y="336" width="18" height="126" rx="9" fill="#22574F"/>
+  <!-- joint at head -->
+  <circle cx="338" cy="208" r="14" fill="#6B7280"/>
+  <!-- base -->
+  <rect x="272" y="452" width="200" height="26" rx="13" fill="#2A6B63"/>
+  <rect x="252" y="472" width="240" height="20" rx="10" fill="#22574F"/>
+  <!-- touch controls on base -->
+  <circle cx="316" cy="465" r="6" fill="#B9D9D5"/>
+  <circle cx="344" cy="465" r="6" fill="#B9D9D5"/>
+  <circle cx="428" cy="465" r="6" fill="#8FC0BA"/>
+  <!-- small plant pot for scale -->
+  <g>
+    <path d="M118 430 q0 -34 26 -34 q26 0 26 34 z" fill="#5FA19A"/>
+    <path d="M144 396 q-4 -28 14 -44 q10 22 -6 44 z" fill="#8FC0BA"/>
+    <path d="M144 396 q4 -24 -12 -40 q-10 20 4 40 z" fill="#8FC0BA"/>
+    <path d="M116 430 l56 0 -6 48 q-1 12 -14 12 l-16 0 q-13 0 -14 -12 z" fill="#9CA3AF"/>
+    <ellipse cx="144" cy="494" rx="34" ry="7" fill="#E7E5E0"/>
+  </g>
+</svg>

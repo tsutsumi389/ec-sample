@@ -7,7 +7,7 @@ export default function NotFound() {
       <p className="text-gray-600 mb-6">
         お探しのページは存在しないか、移動または削除された可能性があります。
       </p>
-      <Link href="/" className="text-indigo-600 hover:underline">
+      <Link href="/" className="text-brand-600 hover:underline">
         トップに戻る
       </Link>
     </div>

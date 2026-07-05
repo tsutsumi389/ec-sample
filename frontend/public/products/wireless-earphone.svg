@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F5F4F1"/>
+  <!-- ground shadow -->
+  <ellipse cx="300" cy="492" rx="170" ry="20" fill="#E7E5E0"/>
+  <!-- charging case (open) -->
+  <g>
+    <!-- lid -->
+    <path d="M170 250 q0 -80 130 -80 q130 0 130 80 l0 18 -260 0 z" fill="#5FA19A"/>
+    <path d="M170 250 q0 -80 130 -80 q130 0 130 80 l0 6 -260 0 z" fill="#8FC0BA" opacity="0.5"/>
+    <!-- body -->
+    <rect x="160" y="278" width="280" height="200" rx="44" fill="#2A6B63"/>
+    <rect x="160" y="278" width="280" height="24" fill="#22574F"/>
+    <!-- inner tray -->
+    <rect x="188" y="316" width="224" height="130" rx="30" fill="#B9D9D5"/>
+    <!-- earbud sockets -->
+    <circle cx="252" cy="380" r="34" fill="#8FC0BA"/>
+    <circle cx="348" cy="380" r="34" fill="#8FC0BA"/>
+    <!-- status LED -->
+    <circle cx="300" cy="462" r="7" fill="#D97706"/>
+    <!-- hinge -->
+    <rect x="270" y="262" width="60" height="12" rx="6" fill="#6B7280"/>
+  </g>
+  <!-- left earbud -->
+  <g>
+    <ellipse cx="252" cy="374" rx="26" ry="24" fill="#2A6B63"/>
+    <circle cx="244" cy="368" r="8" fill="#B9D9D5"/>
+    <rect x="246" y="388" width="14" height="34" rx="7" fill="#2A6B63"/>
+  </g>
+  <!-- right earbud (floating beside case) -->
+  <g>
+    <ellipse cx="480" cy="340" rx="30" ry="28" fill="#2A6B63"/>
+    <circle cx="470" cy="332" r="9" fill="#B9D9D5"/>
+    <rect x="472" y="356" width="16" height="42" rx="8" fill="#2A6B63"/>
+    <ellipse cx="494" cy="346" rx="10" ry="14" fill="#9CA3AF"/>
+    <ellipse cx="480" cy="416" rx="28" ry="6" fill="#E7E5E0"/>
+  </g>
+  <!-- sound waves -->
+  <g fill="none" stroke="#9CA3AF" stroke-width="6" stroke-linecap="round">
+    <path d="M124 300 q-18 30 0 60"/>
+    <path d="M96 284 q-30 46 0 92"/>
+  </g>
+</svg>

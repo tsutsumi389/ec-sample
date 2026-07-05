@@ -81,14 +81,14 @@ function LoginForm() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-indigo-600 text-white py-2.5 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50"
+            className="w-full bg-brand-600 text-white py-2.5 rounded-md font-medium hover:bg-brand-700 disabled:opacity-50"
           >
             {submitting ? 'ログイン中...' : 'ログイン'}
           </button>
         </form>
         <p className="mt-4 text-center text-sm text-gray-600">
           アカウントをお持ちでない方は{' '}
-          <Link href="/register" className="text-indigo-600 hover:underline">
+          <Link href="/register" className="text-brand-600 hover:underline">
             会員登録
           </Link>
         </p>

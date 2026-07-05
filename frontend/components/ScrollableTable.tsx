@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ArrowLeftIcon, ArrowRightIcon } from './Icons';
 
 interface ScrollableTableProps {
   children: ReactNode;
@@ -40,7 +41,11 @@ export default function ScrollableTable({ children }: ScrollableTableProps) {
   return (
     <div>
       {hasOverflow && (
-        <p className="px-4 pt-3 pb-1 text-xs text-gray-600 sm:hidden">← 横にスクロールできます →</p>
+        <p className="px-4 pt-3 pb-1 text-xs text-gray-600 sm:hidden flex items-center gap-1.5">
+          <ArrowLeftIcon className="w-3 h-3" />
+          横にスクロールできます
+          <ArrowRightIcon className="w-3 h-3" />
+        </p>
       )}
       <div className="relative">
         <div ref={scrollRef} className="overflow-x-auto">

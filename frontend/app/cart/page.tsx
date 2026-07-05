@@ -8,6 +8,11 @@ import type { Cart } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
+import { btnPrimary } from '@/lib/buttonStyles';
+
+/** 数量セレクト用の自前シェブロン（appearance-none と組で使う） */
+const SELECT_CHEVRON =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m19.5 8.25-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E";
 
 export default function CartPage() {
   const { user, loading: authLoading } = useAuth();
@@ -114,7 +119,7 @@ export default function CartPage() {
       {!loading && cart && cart.items.length === 0 && (
         <div>
           <p className="text-gray-600 mb-2">カートは空です。</p>
-          <Link href="/" className="text-indigo-600 hover:underline">
+          <Link href="/" className="text-brand-600 hover:underline">
             商品を見る
           </Link>
         </div>
@@ -124,7 +129,7 @@ export default function CartPage() {
         <>
           <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
             {cart.items.map((item) => (
-              <div key={item.id} className="flex items-center gap-4 p-4 flex-wrap">
+              <div key={item.id} className="flex gap-4 p-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.product.image_url}
@@ -135,53 +140,63 @@ export default function CartPage() {
                     img.onerror = null;
                     img.src = '/no-image.svg';
                   }}
-                  className="w-20 h-20 object-cover rounded-md bg-gray-100"
+                  className="w-20 h-20 object-cover rounded-md bg-gray-100 shrink-0"
                 />
-                <div className="flex-1 min-w-[140px]">
-                  <Link href={`/products/${item.product.id}`} className="font-medium hover:underline">
-                    {item.product.name}
-                  </Link>
-                  <Price value={item.product.price} size="sm" as="p" />
-                </div>
-                <div className="flex items-center gap-3">
-                  <select
-                    value={item.quantity}
-                    disabled={updatingId === item.id}
-                    onChange={(e) => handleQuantityChange(item.id, Number(e.target.value))}
-                    aria-label={`${item.product.name}の数量`}
-                    className="border border-gray-300 rounded-md px-2 py-2.5 text-sm"
-                  >
-                    {Array.from(
-                      { length: Math.max(item.product.stock, item.quantity, 1) },
-                      (_, i) => i + 1
-                    ).map((q) => (
-                      <option key={q} value={q}>
-                        {q}
-                      </option>
-                    ))}
-                  </select>
-                  <Price value={item.subtotal} size="base" as="p" className="w-24 text-right" />
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(item.id)}
-                    disabled={updatingId === item.id}
-                    aria-label={`${item.product.name}を削除`}
-                    className="text-sm text-red-600 hover:underline disabled:opacity-50 px-2 py-2 -m-2"
-                  >
-                    {updatingId === item.id ? '削除中...' : '削除'}
-                  </button>
+                <div className="flex-1 min-w-0 sm:flex sm:items-center sm:gap-4">
+                  <div className="min-w-0 sm:flex-1">
+                    <Link href={`/products/${item.product.id}`} className="font-medium hover:underline">
+                      {item.product.name}
+                    </Link>
+                    <p className="mt-1 text-sm text-gray-500">
+                      ¥{item.product.price.toLocaleString()} × {item.quantity}
+                    </p>
+                  </div>
+                  <div className="mt-2 sm:mt-0 flex items-center gap-3">
+                    <select
+                      value={item.quantity}
+                      disabled={updatingId === item.id}
+                      onChange={(e) => handleQuantityChange(item.id, Number(e.target.value))}
+                      aria-label={`${item.product.name}の数量`}
+                      style={{ backgroundImage: `url("${SELECT_CHEVRON}")` }}
+                      className="appearance-none bg-white border border-gray-300 rounded-md pl-3 pr-8 py-2.5 text-sm bg-no-repeat bg-[right_0.5rem_center] bg-[length:1rem_1rem] disabled:opacity-50"
+                    >
+                      {Array.from(
+                        { length: Math.max(item.product.stock, item.quantity, 1) },
+                        (_, i) => i + 1
+                      ).map((q) => (
+                        <option key={q} value={q}>
+                          {q}
+                        </option>
+                      ))}
+                    </select>
+                    <Price
+                      value={item.subtotal}
+                      size="base"
+                      as="p"
+                      className="flex-1 text-right sm:flex-none sm:w-24"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(item.id)}
+                      disabled={updatingId === item.id}
+                      aria-label={`${item.product.name}を削除`}
+                      className="shrink-0 text-sm text-red-600 hover:text-red-700 hover:underline transition-colors duration-150 disabled:opacity-50 px-2 py-2 -m-2"
+                    >
+                      {updatingId === item.id ? '削除中...' : '削除'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
+            <div className="flex items-center justify-between gap-4 px-4 py-4 bg-gray-50 rounded-b-lg">
+              <span className="text-sm font-medium text-gray-700">
+                合計（{cart.items.reduce((sum, item) => sum + item.quantity, 0)}点）
+              </span>
+              <Price value={cart.total_amount} size="2xl" strong as="p" />
+            </div>
           </div>
 
-          <div className="mt-6 flex justify-end">
-            <p className="text-xl font-bold">
-              合計: <Price value={cart.total_amount} size="xl" strong />
-            </p>
-          </div>
-
-          <div className="mt-8 bg-white rounded-lg border border-gray-200 p-4">
+          <div className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
             <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
               配送先住所
               <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
@@ -211,7 +226,7 @@ export default function CartPage() {
               type="button"
               onClick={handleOrder}
               disabled={submitting}
-              className="mt-4 w-full bg-indigo-600 text-white py-2.5 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50"
+              className={`${btnPrimary} mt-4 w-full`}
             >
               {submitting ? '注文処理中...' : '注文を確定する'}
             </button>

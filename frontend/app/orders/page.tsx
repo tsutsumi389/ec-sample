@@ -4,11 +4,21 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
-import type { Order } from '@/lib/types';
+import type { Order, OrderStatus } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
-import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from '@/lib/order-status';
+import { ORDER_STATUS_LABELS } from '@/lib/order-status';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
+import Badge, { type BadgeVariant } from '@/components/Badge';
+
+/** 注文ステータス → Badge variant（意味と色の対応: 未処理=amber系, 進行中=brand系, 完了=green系, 取消=gray系） */
+const STATUS_BADGE_VARIANTS: Record<OrderStatus, BadgeVariant> = {
+  pending: 'warning',
+  paid: 'info',
+  shipped: 'info',
+  delivered: 'success',
+  cancelled: 'neutral',
+};
 
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
@@ -62,7 +72,7 @@ export default function OrdersPage() {
       {!loading && !error && orders.length === 0 && (
         <div>
           <p className="text-gray-600 mb-2">注文履歴がありません。</p>
-          <Link href="/" className="text-indigo-600 hover:underline">
+          <Link href="/" className="text-brand-600 hover:underline">
             商品を見る
           </Link>
         </div>
@@ -83,12 +93,10 @@ export default function OrdersPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <span
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium ${ORDER_STATUS_COLORS[order.status]}`}
-                >
+                <Badge variant={STATUS_BADGE_VARIANTS[order.status]}>
                   {ORDER_STATUS_LABELS[order.status]}
-                </span>
-                <Price value={order.total_amount} size="lg" strong as="p" />
+                </Badge>
+                <Price value={order.total_amount} size="lg" strong as="p" className="min-w-[6rem] text-right" />
               </div>
             </div>
           </Link>

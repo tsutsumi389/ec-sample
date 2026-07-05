@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F5F4F1"/>
+  <!-- ground shadow -->
+  <ellipse cx="300" cy="480" rx="185" ry="20" fill="#E7E5E0"/>
+  <!-- lanyard -->
+  <path d="M448 232 q52 -28 44 -76 q-6 -34 -44 -34 q-30 0 -36 28" fill="none" stroke="#6B7280" stroke-width="12" stroke-linecap="round"/>
+  <!-- speaker body -->
+  <g>
+    <rect x="130" y="200" width="340" height="272" rx="60" fill="#2A6B63"/>
+    <rect x="130" y="200" width="340" height="40" rx="20" fill="#22574F"/>
+    <!-- grille panel -->
+    <rect x="160" y="252" width="280" height="190" rx="40" fill="#5FA19A"/>
+    <!-- grille dots -->
+    <g fill="#2A6B63">
+      <circle cx="210" cy="300" r="7"/><circle cx="250" cy="300" r="7"/><circle cx="290" cy="300" r="7"/><circle cx="330" cy="300" r="7"/><circle cx="370" cy="300" r="7"/>
+      <circle cx="230" cy="336" r="7"/><circle cx="270" cy="336" r="7"/><circle cx="310" cy="336" r="7"/><circle cx="350" cy="336" r="7"/><circle cx="390" cy="336" r="7"/>
+      <circle cx="210" cy="372" r="7"/><circle cx="250" cy="372" r="7"/><circle cx="290" cy="372" r="7"/><circle cx="330" cy="372" r="7"/><circle cx="370" cy="372" r="7"/>
+      <circle cx="230" cy="408" r="7"/><circle cx="270" cy="408" r="7"/><circle cx="310" cy="408" r="7"/><circle cx="350" cy="408" r="7"/><circle cx="390" cy="408" r="7"/>
+    </g>
+    <!-- top controls -->
+    <circle cx="240" cy="220" r="9" fill="#B9D9D5"/>
+    <circle cx="300" cy="220" r="9" fill="#B9D9D5"/>
+    <circle cx="360" cy="220" r="9" fill="#D97706"/>
+    <!-- bluetooth mark -->
+    <g transform="translate(300 456)">
+      <path d="M0 -12 l0 24 8 -7 -16 -12 16 -12 -8 -7 0 14" fill="none" stroke="#B9D9D5" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+    <!-- feet -->
+    <rect x="190" y="466" width="60" height="12" rx="6" fill="#22574F"/>
+    <rect x="350" y="466" width="60" height="12" rx="6" fill="#22574F"/>
+  </g>
+  <!-- sound waves + water drop (waterproof) -->
+  <g fill="none" stroke="#9CA3AF" stroke-width="6" stroke-linecap="round">
+    <path d="M96 300 q-20 36 0 72"/>
+    <path d="M68 282 q-32 54 0 108"/>
+    <path d="M504 300 q20 36 0 72"/>
+    <path d="M532 282 q32 54 0 108"/>
+  </g>
+  <path d="M508 168 q20 26 0 40 q-20 -14 0 -40 z" fill="#8FC0BA"/>
+</svg>

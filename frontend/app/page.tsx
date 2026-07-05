@@ -8,8 +8,38 @@ import type { Product, ProductListResponse } from '@/lib/types';
 import ProductCard from '@/components/ProductCard';
 import Pagination from '@/components/Pagination';
 import Spinner from '@/components/Spinner';
+import { ArrowRightIcon } from '@/components/Icons';
 
 const LIMIT = 12;
+
+function Hero() {
+  return (
+    <section className="bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500 text-white">
+      <div className="max-w-6xl mx-auto px-4 py-12 md:py-0 md:min-h-[360px] md:flex md:items-center">
+        <div className="max-w-xl">
+          <p className="text-xs md:text-sm font-medium tracking-widest text-brand-100">
+            HIBINO — 日々の暮らしの道具店
+          </p>
+          <h1 className="mt-3 md:mt-4 text-3xl md:text-5xl font-bold leading-tight">
+            日々の暮らしに、
+            <br className="md:hidden" />
+            よい道具を。
+          </h1>
+          <p className="mt-4 md:mt-5 text-sm md:text-base text-brand-100 leading-relaxed">
+            使うたびに気分がすこし上向く、長く付き合える生活道具を選び集めました。
+          </p>
+          <a
+            href="#products"
+            className="mt-6 md:mt-8 inline-flex items-center gap-2 bg-white text-brand-700 px-6 py-3 text-sm font-medium rounded-md hover:bg-brand-50 transition-colors duration-150"
+          >
+            商品を見る
+            <ArrowRightIcon className="w-4 h-4" />
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function ProductListContent() {
   const router = useRouter();
@@ -62,8 +92,15 @@ function ProductListContent() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">{search ? `「${search}」の検索結果` : '商品一覧'}</h1>
+    <div id="products" className="max-w-6xl mx-auto px-4 py-8 scroll-mt-4">
+      <div className="mb-6 border-b border-gray-200 pb-3">
+        <h2 className="text-xl font-bold leading-tight text-gray-900">
+          {search ? `「${search}」の検索結果` : '新着アイテム'}
+        </h2>
+        {!search && (
+          <p className="mt-1 text-sm text-gray-500">季節のおすすめと定番の道具をご紹介します。</p>
+        )}
+      </div>
 
       {loading && (
         <p className="text-gray-600 flex items-center">
@@ -81,16 +118,16 @@ function ProductListContent() {
         <div>
           <p className="text-gray-600 mb-2">該当する商品がありません。</p>
           {search && (
-            <Link href="/" className="text-indigo-600 hover:underline">
+            <Link href="/" className="text-brand-600 hover:underline">
               検索条件をクリアして全商品を見る
             </Link>
           )}
         </div>
       )}
 
-      <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+      <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 items-stretch">
         {products.map((product) => (
-          <li key={product.id}>
+          <li key={product.id} className="h-full">
             <ProductCard product={product} />
           </li>
         ))}
@@ -103,15 +140,18 @@ function ProductListContent() {
 
 export default function HomePage() {
   return (
-    <Suspense
-      fallback={
-        <div className="max-w-6xl mx-auto px-4 py-8 text-gray-600 flex items-center">
-          <Spinner className="mr-2" />
-          読み込み中...
-        </div>
-      }
-    >
-      <ProductListContent />
-    </Suspense>
+    <>
+      <Hero />
+      <Suspense
+        fallback={
+          <div className="max-w-6xl mx-auto px-4 py-8 text-gray-600 flex items-center">
+            <Spinner className="mr-2" />
+            読み込み中...
+          </div>
+        }
+      >
+        <ProductListContent />
+      </Suspense>
+    </>
   );
 }

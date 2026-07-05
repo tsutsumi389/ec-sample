@@ -7,6 +7,9 @@ import ProductFormModal, { ProductFormValues } from '@/components/ProductFormMod
 import ScrollableTable from '@/components/ScrollableTable';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
+import Badge from '@/components/Badge';
+import { PlusIcon } from '@/components/Icons';
+import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -67,11 +70,8 @@ export default function AdminProductsPage() {
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-2xl font-bold">商品管理</h1>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700"
-        >
+        <button type="button" onClick={openCreate} className={`${btnPrimary} inline-flex items-center gap-2`}>
+          <PlusIcon className="w-4 h-4" />
           新規作成
         </button>
       </div>
@@ -86,11 +86,8 @@ export default function AdminProductsPage() {
       {!loading && products.length === 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
           <p className="text-gray-600 mb-4">登録された商品がありません。「新規作成」から商品を追加してください。</p>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700"
-          >
+          <button type="button" onClick={openCreate} className={`${btnSecondary} inline-flex items-center gap-2`}>
+            <PlusIcon className="w-4 h-4" />
             新規作成
           </button>
         </div>
@@ -103,35 +100,31 @@ export default function AdminProductsPage() {
               <thead className="bg-gray-50 text-left text-gray-600">
                 <tr>
                   <th className="px-4 py-3 whitespace-nowrap">商品名</th>
-                  <th className="px-4 py-3 whitespace-nowrap">価格</th>
-                  <th className="px-4 py-3 whitespace-nowrap">在庫</th>
+                  <th className="px-4 py-3 whitespace-nowrap text-right">価格</th>
+                  <th className="px-4 py-3 whitespace-nowrap text-right">在庫</th>
                   <th className="px-4 py-3 whitespace-nowrap">状態</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {products.map((product) => (
-                  <tr key={product.id}>
+                  <tr key={product.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 font-medium whitespace-nowrap">{product.name}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
                       <Price value={product.price} size="sm" />
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{product.stock}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">{product.stock}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          product.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'
-                        }`}
-                      >
+                      <Badge variant={product.is_active ? 'success' : 'neutral'}>
                         {product.is_active ? '公開中' : '非公開'}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-right space-x-1 whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => openEdit(product)}
                         aria-label={`${product.name}を編集`}
-                        className="text-indigo-600 hover:underline px-2 py-2 -m-2 inline-block"
+                        className="text-brand-600 hover:underline px-2 py-2 -m-2 inline-block"
                       >
                         編集
                       </button>

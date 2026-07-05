@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { SearchIcon } from '@/components/Icons';
 
 export default function Header() {
   const { user, loading, logout } = useAuth();
@@ -14,8 +15,8 @@ export default function Header() {
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
 
   const navLinkClass = (href: string) =>
-    `inline-block px-2 py-2 -m-2 rounded-md underline decoration-gray-300 underline-offset-2 hover:decoration-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 ${
-      isActive(href) ? 'text-indigo-600 font-semibold decoration-indigo-400' : 'text-gray-700 hover:text-indigo-600'
+    `inline-block px-2 py-2 -m-2 rounded-md underline decoration-gray-300 underline-offset-2 hover:decoration-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 ${
+      isActive(href) ? 'text-brand-600 font-semibold decoration-brand-400' : 'text-gray-700 hover:text-brand-600'
     }`;
 
   const handleSearch = (e: FormEvent) => {
@@ -35,7 +36,7 @@ export default function Header() {
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4 flex-wrap">
-        <Link href="/" className="flex items-center gap-1.5 text-xl font-bold text-indigo-600 whitespace-nowrap">
+        <Link href="/" className="flex items-center gap-1.5 text-xl font-bold text-brand-600 whitespace-nowrap">
           <svg
             width="22"
             height="22"
@@ -52,7 +53,7 @@ export default function Header() {
             />
             <path d="M8 6V5a4 4 0 0 1 8 0v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
-          EC Sample
+          Hibino
         </Link>
 
         <form onSubmit={handleSearch} className="flex flex-1 min-w-[200px]">
@@ -61,12 +62,13 @@ export default function Header() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="商品を検索"
-            className="w-full border border-gray-300 rounded-l-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="w-full border border-gray-300 rounded-l-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
           />
           <button
             type="submit"
-            className="bg-indigo-600 text-white px-4 py-1.5 rounded-r-md text-sm hover:bg-indigo-700 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2"
+            className="inline-flex items-center gap-1.5 bg-white border border-l-0 border-gray-300 text-gray-700 px-4 py-1.5 rounded-r-md text-sm hover:bg-gray-50 whitespace-nowrap shrink-0 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
           >
+            <SearchIcon />
             検索
           </button>
         </form>
@@ -98,7 +100,7 @@ export default function Header() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="inline-block px-2 py-2 -m-2 rounded-md text-gray-700 underline decoration-gray-300 underline-offset-2 hover:text-indigo-600 hover:decoration-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2"
+                className="inline-block px-2 py-2 -m-2 rounded-md text-gray-700 underline decoration-gray-300 underline-offset-2 hover:text-brand-600 hover:decoration-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
               >
                 ログアウト
               </button>

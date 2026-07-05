@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F5F4F1"/>
+  <!-- ground shadow -->
+  <ellipse cx="300" cy="474" rx="200" ry="22" fill="#E7E5E0"/>
+  <!-- unrolled part -->
+  <path d="M130 430 l340 0 0 34 -340 0 q-16 0 -16 -17 q0 -17 16 -17 z" fill="#5FA19A"/>
+  <path d="M130 430 l340 0 0 12 -340 0 q-8 0 -8 -6 q0 -6 8 -6 z" fill="#8FC0BA"/>
+  <!-- rolled part -->
+  <g>
+    <circle cx="440" cy="380" r="86" fill="#2A6B63"/>
+    <circle cx="440" cy="380" r="62" fill="#5FA19A"/>
+    <circle cx="440" cy="380" r="40" fill="#B9D9D5"/>
+    <circle cx="440" cy="380" r="18" fill="#8FC0BA"/>
+    <circle cx="440" cy="380" r="7" fill="#22574F"/>
+    <!-- spiral hint -->
+    <path d="M440 294 q90 4 86 90" fill="none" stroke="#22574F" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <!-- carrying strap around roll -->
+  <rect x="404" y="286" width="22" height="182" rx="10" fill="#D97706"/>
+  <rect x="404" y="286" width="22" height="16" rx="8" fill="#B45309"/>
+  <path d="M415 286 q-60 -80 -150 -60 q-70 16 -84 78" fill="none" stroke="#D97706" stroke-width="12" stroke-linecap="round"/>
+  <!-- texture lines on unrolled mat -->
+  <g stroke="#3D837B" stroke-width="4" stroke-linecap="round" opacity="0.6">
+    <path d="M160 447 l40 0"/>
+    <path d="M225 447 l40 0"/>
+    <path d="M290 447 l40 0"/>
+  </g>
+  <!-- water bottle companion -->
+  <g>
+    <rect x="128" y="330" width="44" height="96" rx="14" fill="#B9D9D5"/>
+    <rect x="128" y="356" width="44" height="8" fill="#8FC0BA"/>
+    <rect x="138" y="310" width="24" height="24" rx="6" fill="#6B7280"/>
+    <ellipse cx="150" cy="430" rx="30" ry="6" fill="#E7E5E0"/>
+  </g>
+</svg>
