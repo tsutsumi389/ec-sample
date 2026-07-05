@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import type { Product } from '@/lib/types';
+import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
 
 export interface ProductFormValues {
   name: string;
@@ -101,11 +102,11 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
       aria-labelledby="product-form-title"
       ref={dialogRef}
     >
-      <div className="bg-white rounded-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
         <h2 id="product-form-title" className="text-lg font-bold mb-4">{product ? '商品を編集' : '商品を新規作成'}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
               商品名
               <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
               <span className="sr-only">（必須）</span>
@@ -122,7 +123,7 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
               説明
               <span className="ml-1 text-xs font-normal text-gray-600">（任意）</span>
             </label>
@@ -137,7 +138,7 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-2">
                 価格（円）
                 <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
                 <span className="sr-only">（必須）</span>
@@ -153,7 +154,7 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
               />
             </div>
             <div>
-              <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-2">
                 在庫数
                 <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
                 <span className="sr-only">（必須）</span>
@@ -171,7 +172,7 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
           </div>
 
           <div>
-            <label htmlFor="image_url" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="image_url" className="block text-sm font-medium text-gray-700 mb-2">
               画像URL
               <span className="ml-1 text-xs font-normal text-gray-600">（任意）</span>
             </label>
@@ -204,18 +205,10 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
           )}
 
           <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-md border border-gray-300 text-sm hover:bg-gray-50"
-            >
+            <button type="button" onClick={onClose} className={btnSecondary}>
               キャンセル
             </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-4 py-2 rounded-md bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
-            >
+            <button type="submit" disabled={submitting} className={btnPrimary}>
               {submitting ? '保存中...' : '保存する'}
             </button>
           </div>

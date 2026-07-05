@@ -4,11 +4,22 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import type { Order } from '@/lib/types';
+import type { Order, OrderStatus } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
-import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from '@/lib/order-status';
+import { ORDER_STATUS_LABELS } from '@/lib/order-status';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
+import Badge, { type BadgeVariant } from '@/components/Badge';
+import { ArrowLeftIcon } from '@/components/Icons';
+
+/** 注文ステータス → Badge variant（意味と色の対応: 未処理=amber系, 進行中=brand系, 完了=green系, 取消=gray系） */
+const STATUS_BADGE_VARIANTS: Record<OrderStatus, BadgeVariant> = {
+  pending: 'warning',
+  paid: 'info',
+  shipped: 'info',
+  delivered: 'success',
+  cancelled: 'neutral',
+};
 
 function OrderDetailContent() {
   const params = useParams<{ id: string }>();
@@ -54,7 +65,8 @@ function OrderDetailContent() {
         <p role="alert" className="text-red-600">
           注文情報が見つかりませんでした。
         </p>
-        <Link href="/orders" className="text-indigo-600 hover:underline">
+        <Link href="/orders" className="inline-flex items-center gap-1 text-brand-600 hover:underline">
+          <ArrowLeftIcon className="w-4 h-4" />
           注文履歴に戻る
         </Link>
       </div>
@@ -63,8 +75,9 @@ function OrderDetailContent() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <Link href="/orders" className="text-sm text-indigo-600 hover:underline">
-        ← 注文履歴に戻る
+      <Link href="/orders" className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline">
+        <ArrowLeftIcon className="w-4 h-4" />
+        注文履歴に戻る
       </Link>
 
       {justOrdered && (
@@ -80,9 +93,9 @@ function OrderDetailContent() {
       <div className="mt-4 bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h1 className="text-2xl font-bold">注文番号 #{order.id}</h1>
-          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${ORDER_STATUS_COLORS[order.status]}`}>
+          <Badge variant={STATUS_BADGE_VARIANTS[order.status]}>
             {ORDER_STATUS_LABELS[order.status]}
-          </span>
+          </Badge>
         </div>
         <p className="text-sm text-gray-600 mt-1">
           {new Date(order.created_at).toLocaleString('ja-JP')}
@@ -95,21 +108,25 @@ function OrderDetailContent() {
         <div className="mt-6 divide-y divide-gray-200 border-t border-gray-200">
           {(order.items || []).map((item) => (
             <div key={item.id} className="flex items-center justify-between py-3 gap-4">
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium">{item.product_name}</p>
-                <p className="text-sm text-gray-600 flex items-center gap-1">
-                  <Price value={item.price} size="sm" /> × {item.quantity}
+                <p className="mt-1 text-sm text-gray-500">
+                  ¥{item.price.toLocaleString()} × {item.quantity}
                 </p>
               </div>
-              <Price value={item.price * item.quantity} size="base" as="p" />
+              <Price
+                value={item.price * item.quantity}
+                size="base"
+                as="p"
+                className="w-24 shrink-0 text-right"
+              />
             </div>
           ))}
         </div>
 
-        <div className="mt-4 flex justify-end border-t border-gray-200 pt-4">
-          <p className="text-xl font-bold">
-            合計: <Price value={order.total_amount} size="xl" strong />
-          </p>
+        <div className="mt-4 flex items-baseline justify-end gap-3 border-t border-gray-200 pt-4">
+          <span className="text-sm font-medium text-gray-700">合計</span>
+          <Price value={order.total_amount} size="2xl" strong as="p" className="text-right" />
         </div>
       </div>
     </div>

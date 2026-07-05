@@ -22,11 +22,11 @@ interface PriceProps {
 
 /**
  * 金額表示を統一するための共通コンポーネント。
- * 色・太さの体系: 通常価格は indigo-600 + font-semibold、
- * 合計金額（strong）は indigo-700 + font-bold。サイズは呼び出し側の文脈に応じて変える。
+ * 色・太さの体系: 価格・金額は text-gray-900 で統一（brand 塗りは CTA 専用のため）。
+ * 通常価格は font-semibold、合計金額（strong）は font-bold。サイズは呼び出し側の文脈に応じて変える。
  */
 export default function Price({ value, size = 'base', strong = false, className = '', as: Tag = 'span' }: PriceProps) {
-  const colorClass = strong ? 'text-indigo-700' : 'text-indigo-600';
+  const colorClass = 'text-gray-900';
   const weightClass = strong ? 'font-bold' : 'font-semibold';
 
   return (

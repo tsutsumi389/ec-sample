@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F5F4F1"/>
+  <!-- ground shadow -->
+  <ellipse cx="300" cy="486" rx="185" ry="20" fill="#E7E5E0"/>
+  <!-- cable -->
+  <path d="M150 470 q-60 -30 -30 -80 q26 -44 90 -30" fill="none" stroke="#6B7280" stroke-width="10" stroke-linecap="round"/>
+  <rect x="196" y="346" width="44" height="24" rx="6" fill="#9CA3AF"/>
+  <!-- battery body -->
+  <g>
+    <rect x="150" y="180" width="300" height="290" rx="42" fill="#2A6B63"/>
+    <rect x="150" y="180" width="300" height="60" rx="42" fill="#22574F"/>
+    <rect x="150" y="216" width="300" height="24" fill="#22574F"/>
+    <!-- front face -->
+    <rect x="172" y="202" width="256" height="246" rx="30" fill="#5FA19A"/>
+    <!-- label band -->
+    <rect x="172" y="300" width="256" height="66" fill="#B9D9D5"/>
+    <text x="300" y="342" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="bold" fill="#22574F">20000mAh</text>
+    <!-- charge indicator -->
+    <g>
+      <circle cx="236" cy="256" r="10" fill="#B9D9D5"/>
+      <circle cx="279" cy="256" r="10" fill="#B9D9D5"/>
+      <circle cx="322" cy="256" r="10" fill="#B9D9D5"/>
+      <circle cx="365" cy="256" r="10" fill="#D97706"/>
+    </g>
+    <!-- lightning mark -->
+    <path d="M300 390 l-24 44 18 0 -12 40 34 -52 -18 0 14 -32 z" fill="#22574F"/>
+    <!-- power button -->
+    <rect x="450" y="260" width="14" height="60" rx="7" fill="#22574F"/>
+  </g>
+  <!-- USB ports on top -->
+  <rect x="216" y="168" width="70" height="22" rx="6" fill="#6B7280"/>
+  <rect x="228" y="174" width="46" height="10" rx="3" fill="#E5E7EB"/>
+  <rect x="314" y="168" width="70" height="22" rx="6" fill="#6B7280"/>
+  <rect x="326" y="174" width="46" height="10" rx="3" fill="#E5E7EB"/>
+</svg>

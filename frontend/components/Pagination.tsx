@@ -17,7 +17,7 @@ export default function Pagination({ page, totalPages, onChange }: PaginationPro
         type="button"
         onClick={() => onChange(page - 1)}
         disabled={page <= 1}
-        className="px-3 py-1.5 rounded-md border border-gray-300 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+        className="px-3 py-1.5 rounded-md border border-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
       >
         前へ
       </button>
@@ -27,7 +27,7 @@ export default function Pagination({ page, totalPages, onChange }: PaginationPro
           key={p}
           onClick={() => onChange(p)}
           className={`px-3 py-1.5 rounded-md border text-sm ${
-            p === page ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 hover:bg-gray-50'
+            p === page ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-300 hover:bg-gray-50'
           }`}
         >
           {p}
@@ -37,7 +37,7 @@ export default function Pagination({ page, totalPages, onChange }: PaginationPro
         type="button"
         onClick={() => onChange(page + 1)}
         disabled={page >= totalPages}
-        className="px-3 py-1.5 rounded-md border border-gray-300 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+        className="px-3 py-1.5 rounded-md border border-gray-300 text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
       >
         次へ
       </button>

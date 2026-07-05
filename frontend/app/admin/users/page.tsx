@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import type { User } from '@/lib/types';
 import ScrollableTable from '@/components/ScrollableTable';
 import Spinner from '@/components/Spinner';
+import Badge from '@/components/Badge';
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -49,18 +50,14 @@ export default function AdminUsersPage() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {users.map((u) => (
-                  <tr key={u.id}>
+                  <tr key={u.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">{u.id}</td>
                     <td className="px-4 py-3 font-medium whitespace-nowrap">{u.name}</td>
                     <td className="px-4 py-3 whitespace-nowrap">{u.email}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          u.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
+                      <Badge variant={u.role === 'admin' ? 'info' : 'neutral'}>
                         {u.role === 'admin' ? '管理者' : '一般'}
-                      </span>
+                      </Badge>
                     </td>
                   </tr>
                 ))}

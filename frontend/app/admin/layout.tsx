@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/Spinner';
+import { ChevronRightIcon } from '@/components/Icons';
 
 const NAV_ITEMS = [
   { href: '/admin', label: 'ダッシュボード' },
@@ -38,12 +39,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <p className="text-xs text-gray-600 mb-4">
-        管理画面{currentLabel && currentLabel !== 'ダッシュボード' ? ` › ${currentLabel}` : ''}
+      <p className="text-xs text-gray-600 mb-4 flex items-center gap-1">
+        管理画面
+        {currentLabel && currentLabel !== 'ダッシュボード' && (
+          <>
+            <ChevronRightIcon className="w-3 h-3 text-gray-400" />
+            <span>{currentLabel}</span>
+          </>
+        )}
       </p>
       <div className="flex flex-col md:flex-row gap-8">
         <aside className="md:w-48 shrink-0">
-          <nav className="space-y-1">
+          <nav className="space-y-1 bg-white border border-gray-200 rounded-lg p-2">
             {NAV_ITEMS.map((item) => {
               const active = isActive(item.href);
               return (
@@ -52,7 +59,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
                   className={`block px-3 py-2 rounded-md text-sm font-medium ${
-                    active ? 'bg-indigo-50 text-indigo-600 font-semibold' : 'text-gray-700 hover:bg-gray-100'
+                    active ? 'bg-brand-50 text-brand-600 font-semibold' : 'text-gray-700 hover:bg-gray-100'
                   }`}
                 >
                   {item.label}

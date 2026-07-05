@@ -8,6 +8,11 @@ import type { Product } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
+import StockLabel from '@/components/StockLabel';
+import { ArrowLeftIcon } from '@/components/Icons';
+
+const SELECT_CHEVRON =
+  "url(\"data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")";
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
@@ -74,70 +79,99 @@ export default function ProductDetailPage() {
         <p role="alert" className="text-red-600">
           {notFound ? '商品が見つかりませんでした。' : error || '商品情報の取得に失敗しました。'}
         </p>
-        <Link href="/" className="text-indigo-600 hover:underline">
+        <Link
+          href="/"
+          className="mt-2 inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline"
+        >
+          <ArrowLeftIcon className="w-4 h-4" />
           商品一覧に戻る
         </Link>
       </div>
     );
   }
 
+  const soldOut = product.stock <= 0;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <Link href="/" className="text-sm text-indigo-600 hover:underline">
-        ← 商品一覧に戻る
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline"
+      >
+        <ArrowLeftIcon className="w-4 h-4" />
+        商品一覧に戻る
       </Link>
 
       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-gray-100 rounded-lg overflow-hidden aspect-[4/3]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={product.image_url}
-            alt={product.name}
-            onError={(e) => {
-              const img = e.currentTarget;
-              if (img.src.endsWith('/no-image.svg')) return;
-              img.onerror = null;
-              img.src = '/no-image.svg';
-            }}
-            className="w-full h-full object-cover"
-          />
+        <div className="bg-gray-100 rounded-lg p-4 md:p-6 self-start">
+          <div className="aspect-[4/3] overflow-hidden rounded-md">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={product.image_url}
+              alt={product.name}
+              onError={(e) => {
+                const img = e.currentTarget;
+                if (img.src.endsWith('/no-image.svg')) return;
+                img.onerror = null;
+                img.src = '/no-image.svg';
+              }}
+              className="w-full h-full object-cover"
+            />
+          </div>
         </div>
 
         <div>
-          <h1 className="text-2xl font-bold">{product.name}</h1>
-          <Price value={product.price} size="3xl" as="p" className="mt-2" />
-          <p className="mt-1 text-sm text-gray-600">在庫: {product.stock}個</p>
-          <p className="mt-4 text-gray-700 whitespace-pre-wrap">{product.description}</p>
+          {/* グループ1: 商品名・価格・在庫 */}
+          <h1 className="text-2xl font-bold leading-tight">{product.name}</h1>
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
+            <Price value={product.price} size="3xl" as="p" />
+            <StockLabel stock={product.stock} />
+          </div>
 
-          {product.stock > 0 ? (
-            <div className="mt-6 flex items-center gap-3 flex-wrap">
-              <label htmlFor="quantity" className="text-sm text-gray-700">
+          {/* グループ2: 説明文 */}
+          <p className="mt-8 text-gray-700 leading-relaxed whitespace-pre-wrap">
+            {product.description}
+          </p>
+
+          {/* グループ3: 購入パネル */}
+          <div className="mt-8 border border-gray-200 bg-gray-50 rounded-lg p-4 md:p-5">
+            <div>
+              <label htmlFor="quantity" className="block text-sm font-medium text-gray-700">
                 数量
               </label>
               <select
                 id="quantity"
                 value={quantity}
                 onChange={(e) => setQuantity(Number(e.target.value))}
-                className="border border-gray-300 rounded-md px-2 py-2.5 text-sm"
+                disabled={soldOut}
+                className="mt-1 w-24 appearance-none border border-gray-300 rounded-md bg-white px-3 py-2.5 pr-9 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  backgroundImage: SELECT_CHEVRON,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 0.625rem center',
+                  backgroundSize: '1rem 1rem',
+                }}
               >
-                {Array.from({ length: Math.min(product.stock, 10) }, (_, i) => i + 1).map((q) => (
-                  <option key={q} value={q}>
-                    {q}
-                  </option>
-                ))}
+                {soldOut ? (
+                  <option value={1}>-</option>
+                ) : (
+                  Array.from({ length: Math.min(product.stock, 10) }, (_, i) => i + 1).map((q) => (
+                    <option key={q} value={q}>
+                      {q}
+                    </option>
+                  ))
+                )}
               </select>
-              <button
-                type="button"
-                onClick={handleAddToCart}
-                disabled={adding}
-                className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {adding ? '追加中...' : 'カートに追加'}
-              </button>
             </div>
-          ) : (
-            <p className="mt-6 text-red-600 font-medium">在庫切れ</p>
-          )}
+            <button
+              type="button"
+              onClick={handleAddToCart}
+              disabled={adding || soldOut}
+              className="mt-4 w-full sm:w-auto sm:px-8 bg-brand-600 hover:bg-brand-700 text-white px-6 py-3 text-sm font-medium rounded-md transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {soldOut ? '在庫切れ' : adding ? '追加中...' : 'カートに追加'}
+            </button>
+          </div>
 
           {message && (
             <p

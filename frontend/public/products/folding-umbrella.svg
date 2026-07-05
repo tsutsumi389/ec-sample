@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F5F4F1"/>
+  <!-- ground shadow -->
+  <ellipse cx="300" cy="500" rx="180" ry="20" fill="#E7E5E0"/>
+  <!-- open umbrella canopy -->
+  <g>
+    <path d="M300 96 q-190 10 -206 176 q30 -26 62 -26 q34 0 60 26 q26 -30 60 -30 l48 0 q34 0 60 30 q26 -26 60 -26 q32 0 62 26 q-16 -166 -206 -176 z" fill="#2A6B63"/>
+    <!-- alternating panels -->
+    <path d="M300 96 q-70 20 -84 150 q26 -30 60 -30 l24 0 z" fill="#5FA19A"/>
+    <path d="M300 96 q70 20 84 150 q-26 -30 -60 -30 l-24 0 z" fill="#5FA19A"/>
+    <path d="M300 96 q-190 10 -206 176 q30 -26 62 -26 q10 0 20 3 q10 -120 124 -153 z" fill="#B9D9D5"/>
+    <path d="M300 96 q190 10 206 176 q-30 -26 -62 -26 q-10 0 -20 3 q-10 -120 -124 -153 z" fill="#B9D9D5"/>
+    <!-- top tip -->
+    <rect x="294" y="66" width="12" height="34" rx="6" fill="#22574F"/>
+    <!-- shaft -->
+    <rect x="294" y="240" width="12" height="200" fill="#6B7280"/>
+    <!-- curved handle -->
+    <path d="M300 440 l0 24 q0 22 -24 22 q-22 0 -24 -20 l14 -2 q2 8 10 8 q10 0 10 -10 l0 -22 z" fill="#D97706"/>
+  </g>
+  <!-- folded umbrella lying at right -->
+  <g transform="rotate(14 470 430)">
+    <rect x="408" y="408" width="150" height="44" rx="22" fill="#2A6B63"/>
+    <path d="M430 408 l12 44 M462 408 l12 44 M494 408 l12 44" stroke="#22574F" stroke-width="8" stroke-linecap="round"/>
+    <rect x="546" y="418" width="26" height="24" rx="8" fill="#6B7280"/>
+    <rect x="396" y="420" width="20" height="20" rx="10" fill="#22574F"/>
+    <!-- strap -->
+    <rect x="470" y="404" width="18" height="52" rx="6" fill="#B9D9D5"/>
+  </g>
+  <!-- rain drops -->
+  <g fill="#8FC0BA">
+    <path d="M120 300 q10 16 0 24 q-10 -8 0 -24 z" transform="scale(1.6) translate(-30 -90)"/>
+    <circle cx="128" cy="382" r="7"/>
+    <circle cx="96" cy="330" r="6"/>
+  </g>
+</svg>

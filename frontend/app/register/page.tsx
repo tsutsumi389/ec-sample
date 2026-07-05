@@ -155,14 +155,14 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-indigo-600 text-white py-2.5 rounded-md font-medium hover:bg-indigo-700 disabled:opacity-50"
+            className="w-full bg-brand-600 text-white py-2.5 rounded-md font-medium hover:bg-brand-700 disabled:opacity-50"
           >
             {submitting ? '登録中...' : '登録する'}
           </button>
         </form>
         <p className="mt-4 text-center text-sm text-gray-600">
           すでにアカウントをお持ちの方は{' '}
-          <Link href="/login" className="text-indigo-600 hover:underline">
+          <Link href="/login" className="text-brand-600 hover:underline">
             ログイン
           </Link>
         </p>

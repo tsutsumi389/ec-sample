@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F5F4F1"/>
+  <!-- ground shadow -->
+  <ellipse cx="300" cy="502" rx="140" ry="18" fill="#E7E5E0"/>
+  <!-- bottle body -->
+  <g>
+    <path d="M232 232 q0 -36 30 -48 l0 -20 76 0 0 20 q30 12 30 48 l0 236 q0 34 -34 34 l-68 0 q-34 0 -34 -34 z" fill="#2A6B63"/>
+    <!-- shoulder highlight -->
+    <path d="M244 232 q2 -28 26 -40 l0 -18 18 0 0 24 q-26 10 -28 40 l0 230 q0 22 18 24 l-16 0 q-18 0 -18 -24 z" fill="#5FA19A" opacity="0.8"/>
+    <!-- cap -->
+    <rect x="256" y="128" width="88" height="48" rx="12" fill="#22574F"/>
+    <rect x="256" y="158" width="88" height="8" fill="#193A34"/>
+    <rect x="270" y="112" width="60" height="22" rx="10" fill="#6B7280"/>
+    <!-- label band -->
+    <rect x="232" y="300" width="136" height="96" fill="#B9D9D5"/>
+    <rect x="232" y="300" width="136" height="10" fill="#8FC0BA"/>
+    <rect x="232" y="386" width="136" height="10" fill="#8FC0BA"/>
+    <!-- label art: mountain + snowflake/steam -->
+    <path d="M258 372 l22 -34 14 20 12 -18 22 32 z" fill="#2A6B63"/>
+    <circle cx="330" cy="330" r="10" fill="#D97706"/>
+    <text x="300" y="426" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="bold" fill="#F5F4F1">500ml</text>
+  </g>
+  <!-- condensation drops -->
+  <g fill="#8FC0BA">
+    <circle cx="200" cy="280" r="7"/>
+    <circle cx="184" cy="330" r="5"/>
+    <circle cx="416" cy="300" r="6"/>
+  </g>
+  <!-- steam from cap -->
+  <g fill="none" stroke="#9CA3AF" stroke-width="6" stroke-linecap="round" opacity="0.8">
+    <path d="M282 92 q10 -16 0 -32"/>
+    <path d="M318 92 q10 -16 0 -32"/>
+  </g>
+</svg>

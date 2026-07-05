@@ -2,12 +2,20 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { Noto_Sans_JP } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
-const SITE_NAME = 'EC Sample Store';
+const notoSansJP = Noto_Sans_JP({
+  weight: ['400', '500', '700'],
+  subsets: ['latin'],
+  display: 'swap',
+});
+
+const SITE_NAME = 'Hibino';
+const SITE_DESCRIPTION = 'Hibino — 日々の暮らしの道具店';
 
 // 各ページが 'use client' でメタデータAPIを使えないため、
 // パスに応じてタブタイトル（document.title）をここで一括管理する。
@@ -37,9 +45,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ja">
       <head>
         <title>{SITE_NAME}</title>
-        <meta name="description" content="Next.js + FastAPI EC サンプルサイト" />
+        <meta name="description" content={SITE_DESCRIPTION} />
       </head>
-      <body className="min-h-screen bg-gray-50 text-gray-900 flex flex-col">
+      <body className={`${notoSansJP.className} min-h-screen bg-gray-50 text-gray-900 flex flex-col`}>
         <AuthProvider>
           <Header />
           <main className="flex-1">{children}</main>
