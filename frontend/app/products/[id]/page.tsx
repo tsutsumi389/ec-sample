@@ -10,6 +10,10 @@ import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
 import StockLabel from '@/components/StockLabel';
 import { ArrowLeftIcon } from '@/components/Icons';
+import RatingStars from '@/components/RatingStars';
+import WishlistButton from '@/components/WishlistButton';
+import RelatedProducts from '@/components/RelatedProducts';
+import ReviewSection from '@/components/ReviewSection';
 
 const SELECT_CHEVRON =
   "url(\"data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")";
@@ -103,7 +107,11 @@ export default function ProductDetailPage() {
       </Link>
 
       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-gray-100 rounded-lg p-4 md:p-6 self-start">
+        <div className="relative bg-gray-100 rounded-lg p-4 md:p-6 self-start">
+          <WishlistButton
+            productId={product.id}
+            className="absolute top-3 right-3 z-10"
+          />
           <div className="aspect-[4/3] overflow-hidden rounded-md">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -123,6 +131,9 @@ export default function ProductDetailPage() {
         <div>
           {/* グループ1: 商品名・価格・在庫 */}
           <h1 className="text-2xl font-bold leading-tight">{product.name}</h1>
+          <div className="mt-2">
+            <RatingStars value={product.avg_rating} count={product.review_count} size="sm" />
+          </div>
           <div className="mt-3 flex items-center gap-3 flex-wrap">
             <Price value={product.price} size="3xl" as="p" />
             <StockLabel stock={product.stock} />
@@ -189,6 +200,14 @@ export default function ProductDetailPage() {
           )}
         </div>
       </div>
+
+      <RelatedProducts productId={product.id} />
+
+      <ReviewSection
+        productId={product.id}
+        avgRating={product.avg_rating}
+        reviewCount={product.review_count}
+      />
     </div>
   );
 }

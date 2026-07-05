@@ -3,10 +3,16 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
 from app.database import get_db
-from app.models import Order, Product, User
+from app.models import Category, Coupon, Order, Product, User
 from app.schemas import (
     AdminOrderOut,
     AdminUserOut,
+    CategoryCreate,
+    CategoryOut,
+    CategoryUpdate,
+    CouponCreate,
+    CouponOut,
+    CouponUpdate,
     OrderStatusUpdate,
     ProductCreate,
     ProductOut,
@@ -94,3 +100,129 @@ def update_order_status(
 @router.get("/users", response_model=list[AdminUserOut])
 def list_users(db: Session = Depends(get_db)) -> list[User]:
     return db.query(User).order_by(User.id).all()
+
+
+# ---------- Categories ----------
+
+
+@router.get("/categories", response_model=list[CategoryOut])
+def list_categories(db: Session = Depends(get_db)) -> list[Category]:
+    return db.query(Category).order_by(Category.id).all()
+
+
+@router.post("/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
+def create_category(payload: CategoryCreate, db: Session = Depends(get_db)) -> Category:
+    existing = db.query(Category).filter(Category.slug == payload.slug).first()
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slug already exists")
+
+    category = Category(**payload.model_dump())
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return category
+
+
+@router.put("/categories/{category_id}", response_model=CategoryOut)
+def update_category(
+    category_id: int, payload: CategoryUpdate, db: Session = Depends(get_db)
+) -> Category:
+    category = db.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "slug" in data:
+        existing = (
+            db.query(Category)
+            .filter(Category.slug == data["slug"], Category.id != category_id)
+            .first()
+        )
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Slug already exists"
+            )
+
+    for field, value in data.items():
+        setattr(category, field, value)
+
+    db.commit()
+    db.refresh(category)
+    return category
+
+
+@router.delete("/categories/{category_id}", response_model=CategoryOut)
+def delete_category(category_id: int, db: Session = Depends(get_db)) -> CategoryOut:
+    category = db.get(Category, category_id)
+    if category is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+
+    result = CategoryOut.model_validate(category)
+    # Products are never deleted; only detach them from the removed category.
+    db.query(Product).filter(Product.category_id == category_id).update(
+        {Product.category_id: None}
+    )
+    db.delete(category)
+    db.commit()
+    return result
+
+
+# ---------- Coupons ----------
+
+
+@router.get("/coupons", response_model=list[CouponOut])
+def list_coupons(db: Session = Depends(get_db)) -> list[Coupon]:
+    return db.query(Coupon).order_by(Coupon.id).all()
+
+
+@router.post("/coupons", response_model=CouponOut, status_code=status.HTTP_201_CREATED)
+def create_coupon(payload: CouponCreate, db: Session = Depends(get_db)) -> Coupon:
+    existing = db.query(Coupon).filter(Coupon.code == payload.code).first()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Coupon code already exists"
+        )
+
+    coupon = Coupon(**payload.model_dump())
+    db.add(coupon)
+    db.commit()
+    db.refresh(coupon)
+    return coupon
+
+
+@router.put("/coupons/{coupon_id}", response_model=CouponOut)
+def update_coupon(coupon_id: int, payload: CouponUpdate, db: Session = Depends(get_db)) -> Coupon:
+    coupon = db.get(Coupon, coupon_id)
+    if coupon is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coupon not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "code" in data:
+        existing = (
+            db.query(Coupon)
+            .filter(Coupon.code == data["code"], Coupon.id != coupon_id)
+            .first()
+        )
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Coupon code already exists"
+            )
+
+    for field, value in data.items():
+        setattr(coupon, field, value)
+
+    db.commit()
+    db.refresh(coupon)
+    return coupon
+
+
+@router.delete("/coupons/{coupon_id}", response_model=CouponOut)
+def delete_coupon(coupon_id: int, db: Session = Depends(get_db)) -> CouponOut:
+    coupon = db.get(Coupon, coupon_id)
+    if coupon is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coupon not found")
+
+    result = CouponOut.model_validate(coupon)
+    db.delete(coupon)
+    db.commit()
+    return result

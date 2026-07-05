@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import type { AdminOrder, OrderStatus, Product, User } from '@/lib/types';
+import type { AdminOrder, Category, Coupon, OrderStatus, Product, User } from '@/lib/types';
 import { ORDER_STATUS_LABELS } from '@/lib/order-status';
 import Spinner from '@/components/Spinner';
 import Badge, { BadgeVariant } from '@/components/Badge';
 import Price from '@/components/Price';
 import ScrollableTable from '@/components/ScrollableTable';
-import { BoxIcon, CartIcon, UsersIcon } from '@/components/Icons';
+import { BoxIcon, CartIcon, ClipboardListIcon, UsersIcon } from '@/components/Icons';
 
 const STATUS_BADGE_VARIANTS: Record<OrderStatus, BadgeVariant> = {
   pending: 'warning',
@@ -22,6 +22,8 @@ const STATUS_BADGE_VARIANTS: Record<OrderStatus, BadgeVariant> = {
 export default function AdminDashboardPage() {
   const [productCount, setProductCount] = useState<number | null>(null);
   const [userCount, setUserCount] = useState<number | null>(null);
+  const [categoryCount, setCategoryCount] = useState<number | null>(null);
+  const [couponCount, setCouponCount] = useState<number | null>(null);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -31,11 +33,15 @@ export default function AdminDashboardPage() {
       api.get<Product[]>('/admin/products'),
       api.get<AdminOrder[]>('/admin/orders'),
       api.get<User[]>('/admin/users'),
+      api.get<Category[]>('/admin/categories'),
+      api.get<Coupon[]>('/admin/coupons'),
     ])
-      .then(([products, allOrders, users]) => {
+      .then(([products, allOrders, users, categories, coupons]) => {
         setProductCount(products.length);
         setOrders(allOrders);
         setUserCount(users.length);
+        setCategoryCount(categories.length);
+        setCouponCount(coupons.length);
       })
       .catch(() => setError('サマリの取得に失敗しました'))
       .finally(() => setLoading(false));
@@ -46,9 +52,11 @@ export default function AdminDashboardPage() {
     .slice(0, 5);
 
   const cards = [
-    { label: '商品数', value: productCount, Icon: BoxIcon },
-    { label: '注文数', value: orders.length, Icon: CartIcon },
-    { label: 'ユーザー数', value: userCount, Icon: UsersIcon },
+    { label: '商品数', value: productCount, Icon: BoxIcon, href: '/admin/products' },
+    { label: '注文数', value: orders.length, Icon: CartIcon, href: '/admin/orders' },
+    { label: 'ユーザー数', value: userCount, Icon: UsersIcon, href: '/admin/users' },
+    { label: 'カテゴリ数', value: categoryCount, Icon: ClipboardListIcon, href: '/admin/categories' },
+    { label: 'クーポン数', value: couponCount, Icon: ClipboardListIcon, href: '/admin/coupons' },
   ];
 
   return (
@@ -71,7 +79,11 @@ export default function AdminDashboardPage() {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {cards.map((card) => (
-              <div key={card.label} className="bg-white rounded-lg border border-gray-200 p-6 flex items-center gap-4">
+              <Link
+                key={card.label}
+                href={card.href}
+                className="bg-white rounded-lg border border-gray-200 p-6 flex items-center gap-4 hover:bg-gray-50 transition-colors"
+              >
                 <span className="flex items-center justify-center w-12 h-12 rounded-full bg-brand-100 text-brand-700 shrink-0">
                   <card.Icon className="w-6 h-6" />
                 </span>
@@ -79,7 +91,7 @@ export default function AdminDashboardPage() {
                   <p className="text-sm text-gray-600">{card.label}</p>
                   <p className="mt-1 text-3xl font-bold text-gray-900 leading-tight">{card.value}</p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
 

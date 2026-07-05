@@ -15,12 +15,69 @@ export interface Product {
   stock: number;
   image_url: string;
   is_active: boolean;
+  category_id: number | null;
+  avg_rating: number | null;
+  review_count: number;
   created_at: string;
 }
 
 export interface ProductListResponse {
   items: Product[];
   total: number;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  slug: string;
+  created_at: string;
+}
+
+export interface Review {
+  id: number;
+  product_id: number;
+  user_id: number;
+  user_name: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+}
+
+export interface WishlistItem {
+  id: number;
+  product: Product;
+  created_at: string;
+}
+
+export interface Address {
+  id: number;
+  recipient_name: string;
+  postal_code: string;
+  prefecture: string;
+  city: string;
+  address_line: string;
+  phone: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export type CouponDiscountType = 'percent' | 'fixed';
+
+export interface Coupon {
+  id: number;
+  code: string;
+  discount_type: CouponDiscountType;
+  discount_value: number;
+  min_order_amount: number;
+  is_active: boolean;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface CouponValidation {
+  valid: boolean;
+  discount_amount: number;
+  message: string;
 }
 
 export interface CartItem {
@@ -50,6 +107,8 @@ export interface Order {
   id: number;
   user_id: number;
   total_amount: number;
+  discount_amount: number;
+  coupon_code: string | null;
   status: OrderStatus;
   shipping_address: string;
   created_at: string;

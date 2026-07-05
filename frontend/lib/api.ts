@@ -35,7 +35,21 @@ const KNOWN_ERROR_MESSAGES: Record<string, string> = {
   'Email already registered': EMAIL_ALREADY_REGISTERED_MESSAGE,
   'Incorrect email or password': 'メールアドレスまたはパスワードが正しくありません。',
   'Cart item not found': 'カート内に該当する商品が見つかりませんでした。',
+  'Purchase required to review': 'レビューを投稿するには、対象商品の購入が必要です。',
+  'Already reviewed': 'この商品には既にレビューを投稿済みです。',
+  'Address not found': '指定された住所が見つかりませんでした。',
+  'Shipping address is required': 'お届け先住所を指定してください。',
+  'Invalid coupon code': '無効なクーポンコードです。',
+  'Coupon has expired': 'このクーポンは有効期限が切れています。',
+  'Cannot cancel this order': 'この注文はキャンセルできません。',
+  'Current password is incorrect': '現在のパスワードが正しくありません。',
+  'Slug already exists': 'このスラッグは既に使用されています。',
+  'Coupon code already exists': 'このクーポンコードは既に使用されています。',
 };
+
+// "Minimum order amount is {n}" のようにサーバー側で埋め込まれる可変値を含む detail に対応する。
+// 対応表に完全一致するキーが無い場合、このパターンに一致すればテンプレート化して訳す。
+const MIN_ORDER_AMOUNT_PATTERN = /^Minimum order amount is (\d+)$/;
 
 // ステータスコードに応じたフォールバックメッセージ（対応表に無い/未知のdetailの場合に使用）。
 function fallbackMessageForStatus(status: number): string {
@@ -56,6 +70,8 @@ function translateDetail(status: number, rawDetail: string): string {
   const trimmed = rawDetail.trim();
   if (!trimmed) return fallbackMessageForStatus(status);
   if (KNOWN_ERROR_MESSAGES[trimmed]) return KNOWN_ERROR_MESSAGES[trimmed];
+  const minOrderMatch = trimmed.match(MIN_ORDER_AMOUNT_PATTERN);
+  if (minOrderMatch) return `このクーポンの利用には ${minOrderMatch[1]} 円以上の注文が必要です。`;
   if (LOOKS_UNTRANSLATED_ENGLISH.test(trimmed)) return fallbackMessageForStatus(status);
   return trimmed;
 }

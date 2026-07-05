@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import type { Order, OrderStatus } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { ORDER_STATUS_LABELS } from '@/lib/order-status';
@@ -11,6 +11,9 @@ import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
 import Badge, { type BadgeVariant } from '@/components/Badge';
 import { ArrowLeftIcon } from '@/components/Icons';
+
+/** キャンセル操作をユーザーに許可するステータス */
+const CANCELLABLE_STATUSES: OrderStatus[] = ['pending', 'paid'];
 
 /** 注文ステータス → Badge variant（意味と色の対応: 未処理=amber系, 進行中=brand系, 完了=green系, 取消=gray系） */
 const STATUS_BADGE_VARIANTS: Record<OrderStatus, BadgeVariant> = {
@@ -32,6 +35,8 @@ function OrderDetailContent() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -49,6 +54,21 @@ function OrderDetailContent() {
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [user, id]);
+
+  const handleCancel = async () => {
+    if (!order) return;
+    if (!window.confirm('この注文をキャンセルしますか？')) return;
+    setCancelling(true);
+    setCancelError('');
+    try {
+      const updated = await api.post<Order>(`/orders/${order.id}/cancel`);
+      setOrder(updated);
+    } catch (e) {
+      setCancelError(e instanceof ApiError ? e.message : '注文のキャンセルに失敗しました');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   if (authLoading || !user || loading) {
     return (
@@ -105,6 +125,25 @@ function OrderDetailContent() {
           {order.shipping_address}
         </p>
 
+        {CANCELLABLE_STATUSES.includes(order.status) && (
+          <div className="mt-4">
+            {cancelError && (
+              <p role="alert" className="text-red-600 text-sm mb-2">
+                {cancelError}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="inline-flex items-center gap-2 rounded-md border border-red-300 text-red-600 px-4 py-2 text-sm font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {cancelling && <Spinner className="w-4 h-4" />}
+              注文をキャンセル
+            </button>
+          </div>
+        )}
+
         <div className="mt-6 divide-y divide-gray-200 border-t border-gray-200">
           {(order.items || []).map((item) => (
             <div key={item.id} className="flex items-center justify-between py-3 gap-4">
@@ -124,9 +163,22 @@ function OrderDetailContent() {
           ))}
         </div>
 
-        <div className="mt-4 flex items-baseline justify-end gap-3 border-t border-gray-200 pt-4">
-          <span className="text-sm font-medium text-gray-700">合計</span>
-          <Price value={order.total_amount} size="2xl" strong as="p" className="text-right" />
+        <div className="mt-4 border-t border-gray-200 pt-4">
+          {order.discount_amount > 0 && (
+            <div className="flex items-baseline justify-end gap-3 text-sm text-gray-600">
+              <span>
+                クーポン割引
+                {order.coupon_code && (
+                  <span className="ml-1 text-gray-500">({order.coupon_code})</span>
+                )}
+              </span>
+              <span>-¥{order.discount_amount.toLocaleString()}</span>
+            </div>
+          )}
+          <div className="flex items-baseline justify-end gap-3 mt-1">
+            <span className="text-sm font-medium text-gray-700">合計</span>
+            <Price value={order.total_amount} size="2xl" strong as="p" className="text-right" />
+          </div>
         </div>
       </div>
     </div>

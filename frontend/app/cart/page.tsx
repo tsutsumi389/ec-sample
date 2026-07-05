@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
-import type { Cart } from '@/lib/types';
+import type { Address, Cart, CouponValidation } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
@@ -26,6 +26,19 @@ export default function CartPage() {
   const [submitting, setSubmitting] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
+  // 住所帳
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [addressesLoaded, setAddressesLoaded] = useState(false);
+  const [selectedAddressId, setSelectedAddressId] = useState<number | 'manual'>('manual');
+
+  // クーポン
+  const [couponCode, setCouponCode] = useState('');
+  const [couponValidating, setCouponValidating] = useState(false);
+  const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount_amount: number } | null>(
+    null
+  );
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace('/login?redirect=/cart');
@@ -43,6 +56,21 @@ export default function CartPage() {
 
   useEffect(() => {
     if (user) loadCart();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    api
+      .get<Address[]>('/addresses')
+      .then((list) => {
+        setAddresses(list);
+        const defaultAddr = list.find((a) => a.is_default) ?? list[0];
+        if (defaultAddr) setSelectedAddressId(defaultAddr.id);
+      })
+      .catch(() => {
+        // 住所帳が取得できなくても従来のテキスト入力にフォールバックできるため致命的ではない
+      })
+      .finally(() => setAddressesLoaded(true));
   }, [user]);
 
   const handleQuantityChange = async (itemId: number, quantity: number) => {
@@ -73,8 +101,43 @@ export default function CartPage() {
     }
   };
 
+  const handleValidateCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code || !cart) return;
+    setCouponValidating(true);
+    setCouponResult(null);
+    try {
+      const result = await api.post<CouponValidation>('/coupons/validate', {
+        code,
+        subtotal: cart.total_amount,
+      });
+      setCouponResult(result);
+      if (result.valid) {
+        setAppliedCoupon({ code, discount_amount: result.discount_amount });
+      } else {
+        setAppliedCoupon(null);
+      }
+    } catch (e) {
+      setCouponResult({
+        valid: false,
+        discount_amount: 0,
+        message: e instanceof ApiError ? e.message : 'クーポンの確認に失敗しました',
+      });
+      setAppliedCoupon(null);
+    } finally {
+      setCouponValidating(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponResult(null);
+    setCouponCode('');
+  };
+
   const handleOrder = async () => {
-    if (!address.trim()) {
+    const useSavedAddress = addresses.length > 0 && selectedAddressId !== 'manual';
+    if (!useSavedAddress && !address.trim()) {
       setAddressError('配送先住所を入力してください');
       return;
     }
@@ -82,7 +145,16 @@ export default function CartPage() {
     setSubmitting(true);
     setError('');
     try {
-      const order = await api.post<{ id: number }>('/orders', { shipping_address: address.trim() });
+      const payload: Record<string, unknown> = {};
+      if (useSavedAddress) {
+        payload.address_id = selectedAddressId;
+      } else {
+        payload.shipping_address = address.trim();
+      }
+      if (appliedCoupon) {
+        payload.coupon_code = appliedCoupon.code;
+      }
+      const order = await api.post<{ id: number }>('/orders', payload);
       router.push(`/orders/${order.id}?justOrdered=1`);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '注文に失敗しました');
@@ -188,39 +260,164 @@ export default function CartPage() {
                 </div>
               </div>
             ))}
-            <div className="flex items-center justify-between gap-4 px-4 py-4 bg-gray-50 rounded-b-lg">
-              <span className="text-sm font-medium text-gray-700">
-                合計（{cart.items.reduce((sum, item) => sum + item.quantity, 0)}点）
-              </span>
-              <Price value={cart.total_amount} size="2xl" strong as="p" />
+            <div className="px-4 py-4 bg-gray-50 rounded-b-lg space-y-1">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-medium text-gray-700">
+                  小計（{cart.items.reduce((sum, item) => sum + item.quantity, 0)}点）
+                </span>
+                <Price value={cart.total_amount} size="base" as="p" />
+              </div>
+              {appliedCoupon && (
+                <div className="flex items-center justify-between gap-4 text-brand-700">
+                  <span className="text-sm font-medium">クーポン割引（{appliedCoupon.code}）</span>
+                  <p className="text-sm font-medium">-¥{appliedCoupon.discount_amount.toLocaleString()}</p>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-4 pt-1">
+                <span className="text-sm font-medium text-gray-700">合計</span>
+                <Price
+                  value={Math.max(cart.total_amount - (appliedCoupon?.discount_amount ?? 0), 0)}
+                  size="2xl"
+                  strong
+                  as="p"
+                />
+              </div>
             </div>
           </div>
 
           <div className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
-            <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
-              配送先住所
-              <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
-              <span className="sr-only">（必須）</span>
+            <label htmlFor="coupon" className="block text-sm font-medium text-gray-700 mb-2">
+              クーポンコード
             </label>
-            <textarea
-              id="address"
-              value={address}
-              onChange={(e) => {
-                setAddress(e.target.value);
-                if (addressError) setAddressError('');
-              }}
-              rows={3}
-              placeholder="例）東京都渋谷区〇〇1-2-3"
-              aria-invalid={Boolean(addressError)}
-              aria-describedby={addressError ? 'address-error' : undefined}
-              className={`w-full border rounded-md px-3 py-2.5 text-sm ${
-                addressError ? 'border-red-400' : 'border-gray-300'
-              }`}
-            />
-            {addressError && (
-              <p id="address-error" role="alert" className="mt-1 text-sm text-red-600">
-                {addressError}
+            <div className="flex gap-2">
+              <input
+                id="coupon"
+                type="text"
+                value={couponCode}
+                onChange={(e) => {
+                  setCouponCode(e.target.value);
+                  setCouponResult(null);
+                }}
+                placeholder="例）WELCOME10"
+                disabled={Boolean(appliedCoupon)}
+                className="flex-1 border border-gray-300 rounded-md px-3 py-2.5 text-sm disabled:opacity-50 disabled:bg-gray-50"
+              />
+              {appliedCoupon ? (
+                <button
+                  type="button"
+                  onClick={handleRemoveCoupon}
+                  className="shrink-0 rounded-md border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  解除
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleValidateCoupon}
+                  disabled={couponValidating || !couponCode.trim()}
+                  className="shrink-0 rounded-md border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {couponValidating ? '確認中...' : '適用する'}
+                </button>
+              )}
+            </div>
+            {couponResult && (
+              <p
+                role={couponResult.valid ? undefined : 'alert'}
+                className={`mt-2 text-sm ${couponResult.valid ? 'text-brand-700' : 'text-red-600'}`}
+              >
+                {couponResult.valid ? 'クーポンを適用しました。' : couponResult.message}
               </p>
+            )}
+          </div>
+
+          <div className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="block text-sm font-medium text-gray-700">
+                配送先住所
+                <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
+                <span className="sr-only">（必須）</span>
+              </span>
+              <Link href="/account/addresses" className="text-sm text-brand-600 hover:underline">
+                住所帳を管理
+              </Link>
+            </div>
+
+            {addressesLoaded && addresses.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {addresses.map((a) => (
+                  <label
+                    key={a.id}
+                    className={`flex items-start gap-2 border rounded-md px-3 py-2.5 text-sm cursor-pointer ${
+                      selectedAddressId === a.id
+                        ? 'border-brand-500 bg-brand-50'
+                        : 'border-gray-300'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="address-choice"
+                      className="mt-0.5"
+                      checked={selectedAddressId === a.id}
+                      onChange={() => {
+                        setSelectedAddressId(a.id);
+                        setAddressError('');
+                      }}
+                    />
+                    <span>
+                      <span className="font-medium">{a.recipient_name}</span>
+                      {a.is_default && (
+                        <span className="ml-2 text-xs text-brand-700">既定</span>
+                      )}
+                      <br />
+                      〒{a.postal_code} {a.prefecture}
+                      {a.city}
+                      {a.address_line}
+                      <br />
+                      {a.phone}
+                    </span>
+                  </label>
+                ))}
+                <label
+                  className={`flex items-start gap-2 border rounded-md px-3 py-2.5 text-sm cursor-pointer ${
+                    selectedAddressId === 'manual' ? 'border-brand-500 bg-brand-50' : 'border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="address-choice"
+                    className="mt-0.5"
+                    checked={selectedAddressId === 'manual'}
+                    onChange={() => setSelectedAddressId('manual')}
+                  />
+                  <span>別の住所を入力する</span>
+                </label>
+              </div>
+            )}
+
+            {(addresses.length === 0 || selectedAddressId === 'manual') && (
+              <>
+                <textarea
+                  id="address"
+                  value={address}
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    if (addressError) setAddressError('');
+                  }}
+                  rows={3}
+                  placeholder="例）東京都渋谷区〇〇1-2-3"
+                  aria-invalid={Boolean(addressError)}
+                  aria-describedby={addressError ? 'address-error' : undefined}
+                  className={`w-full border rounded-md px-3 py-2.5 text-sm ${
+                    addressError ? 'border-red-400' : 'border-gray-300'
+                  }`}
+                />
+                {addressError && (
+                  <p id="address-error" role="alert" className="mt-1 text-sm text-red-600">
+                    {addressError}
+                  </p>
+                )}
+              </>
             )}
             <button
               type="button"

@@ -10,6 +10,8 @@ import { ChevronRightIcon } from '@/components/Icons';
 const NAV_ITEMS = [
   { href: '/admin', label: 'ダッシュボード' },
   { href: '/admin/products', label: '商品管理' },
+  { href: '/admin/categories', label: 'カテゴリ管理' },
+  { href: '/admin/coupons', label: 'クーポン管理' },
   { href: '/admin/orders', label: '注文管理' },
   { href: '/admin/users', label: 'ユーザー管理' },
 ];
