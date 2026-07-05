@@ -3,8 +3,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user
 from app.database import get_db
-from app.models import Coupon
+from app.models import Coupon, User
 from app.schemas import CouponValidateRequest, CouponValidateResponse
 
 router = APIRouter(prefix="/coupons", tags=["coupons"])
@@ -39,6 +40,7 @@ def evaluate_coupon(coupon: Coupon | None, subtotal: int) -> tuple[bool, int, st
 @router.post("/validate", response_model=CouponValidateResponse)
 def validate_coupon(
     payload: CouponValidateRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> CouponValidateResponse:
     coupon = get_coupon_by_code(db, payload.code)

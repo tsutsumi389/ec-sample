@@ -66,6 +66,18 @@ def get_current_user(
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # パスワード変更後に発行された（＝変更時刻以降の iat を持つ）トークンのみ有効とする。
+    # 変更以前のトークンは失効させ、パスワード変更で全セッションを無効化できるようにする。
+    if user.password_changed_at is not None:
+        iat = payload.get("iat")
+        if iat is None or datetime.fromtimestamp(iat, tz=timezone.utc) < user.password_changed_at:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     return user
 
 

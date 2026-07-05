@@ -26,6 +26,10 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # パスワード最終変更時刻。これより前に発行された JWT（iat が古いもの）は失効させる。
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     cart_items: Mapped[list["CartItem"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

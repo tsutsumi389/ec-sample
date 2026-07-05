@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -77,5 +79,9 @@ def update_password(
         )
 
     current_user.hashed_password = hash_password(payload.new_password)
+    # パスワード変更以前に発行済みの JWT を失効させる（get_current_user で iat と照合）。
+    # JWT の iat は秒精度のため、変更時刻も秒に丸める。これにより、変更直後に
+    # 再ログインして取得した新トークン（同一秒の iat）が失効扱いになるのを防ぐ。
+    current_user.password_changed_at = datetime.now(timezone.utc).replace(microsecond=0)
     db.commit()
     return None
