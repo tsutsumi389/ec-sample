@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import OperationalError
 
 from app.database import Base, SessionLocal, engine
-from app.routers import admin, auth, cart, orders, products
+from app.routers import addresses, admin, auth, cart, categories, coupons, orders, products, wishlist
 from app.seed import seed_data
 
 
@@ -51,6 +51,10 @@ def health() -> dict[str, str]:
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
+app.include_router(categories.router, prefix="/api")
 app.include_router(cart.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
+app.include_router(wishlist.router, prefix="/api")
+app.include_router(addresses.router, prefix="/api")
+app.include_router(coupons.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")

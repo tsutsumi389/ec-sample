@@ -20,6 +20,9 @@ const STATUS_BADGE_VARIANTS: Record<OrderStatus, BadgeVariant> = {
   cancelled: 'neutral',
 };
 
+/** キャンセル操作をユーザーに許可するステータス */
+const CANCELLABLE_STATUSES: OrderStatus[] = ['pending', 'paid'];
+
 export default function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -27,6 +30,8 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [cancelError, setCancelError] = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -43,6 +48,22 @@ export default function OrdersPage() {
       .catch((e) => setError(e instanceof ApiError ? e.message : '注文履歴の取得に失敗しました'))
       .finally(() => setLoading(false));
   }, [user]);
+
+  const handleCancel = async (e: React.MouseEvent, orderId: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm('この注文をキャンセルしますか？')) return;
+    setCancellingId(orderId);
+    setCancelError('');
+    try {
+      const updated = await api.post<Order>(`/orders/${orderId}/cancel`);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+    } catch (e2) {
+      setCancelError(e2 instanceof ApiError ? e2.message : '注文のキャンセルに失敗しました');
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   if (authLoading || !user) {
     return (
@@ -68,6 +89,11 @@ export default function OrdersPage() {
           {error}
         </p>
       )}
+      {cancelError && (
+        <p role="alert" className="text-red-600 mb-4">
+          {cancelError}
+        </p>
+      )}
 
       {!loading && !error && orders.length === 0 && (
         <div>
@@ -91,6 +117,13 @@ export default function OrdersPage() {
                 <p className="text-sm text-gray-600">
                   {new Date(order.created_at).toLocaleString('ja-JP')}
                 </p>
+                {order.discount_amount > 0 && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    クーポン割引
+                    {order.coupon_code && <span className="ml-1">({order.coupon_code})</span>}
+                    : -¥{order.discount_amount.toLocaleString()}
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <Badge variant={STATUS_BADGE_VARIANTS[order.status]}>
@@ -99,6 +132,19 @@ export default function OrdersPage() {
                 <Price value={order.total_amount} size="lg" strong as="p" className="min-w-[6rem] text-right" />
               </div>
             </div>
+            {CANCELLABLE_STATUSES.includes(order.status) && (
+              <div className="mt-3 border-t border-gray-100 pt-3">
+                <button
+                  type="button"
+                  onClick={(e) => handleCancel(e, order.id)}
+                  disabled={cancellingId === order.id}
+                  className="inline-flex items-center gap-2 rounded-md border border-red-300 text-red-600 px-3 py-1.5 text-sm font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {cancellingId === order.id && <Spinner className="w-4 h-4" />}
+                  注文をキャンセル
+                </button>
+              </div>
+            )}
           </Link>
         ))}
       </div>

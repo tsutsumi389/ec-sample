@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.auth import hash_password
-from app.models import Product, User
+from app.models import Category, Coupon, Order, OrderItem, Product, Review, User
 
 
 def _product_image(slug: str) -> str:
@@ -38,6 +38,47 @@ SEED_PRODUCTS = [
     {"name": "腕時計", "slug": "wrist-watch", "description": "シンプルで上品なデザインのクオーツ腕時計。", "price": 15800, "stock": 0},
 ]
 
+SEED_CATEGORIES = [
+    {"name": "キッチン家電", "slug": "kitchen-appliances"},
+    {"name": "生活家電", "slug": "home-appliances"},
+    {"name": "日用品", "slug": "daily-goods"},
+    {"name": "アウトドア", "slug": "outdoor"},
+    {"name": "ファッション小物", "slug": "fashion-accessories"},
+]
+
+# 各商品スラッグに割り当てるカテゴリスラッグ
+PRODUCT_CATEGORY_SLUG = {
+    "wireless-earphone": "home-appliances",
+    "coffee-maker": "kitchen-appliances",
+    "electric-kettle": "kitchen-appliances",
+    "mobile-battery": "home-appliances",
+    "folding-umbrella": "daily-goods",
+    "desk-light": "home-appliances",
+    "yoga-mat": "outdoor",
+    "stainless-bottle": "daily-goods",
+    "bluetooth-speaker": "home-appliances",
+    "wrist-watch": "fashion-accessories",
+}
+
+SEED_COUPONS = [
+    {
+        "code": "WELCOME10",
+        "discount_type": "percent",
+        "discount_value": 10,
+        "min_order_amount": 0,
+        "is_active": True,
+        "expires_at": None,
+    },
+    {
+        "code": "SAVE500",
+        "discount_type": "fixed",
+        "discount_value": 500,
+        "min_order_amount": 5000,
+        "is_active": True,
+        "expires_at": None,
+    },
+]
+
 
 def seed_data(db: Session) -> None:
     """Insert initial seed data if the users table is empty."""
@@ -57,17 +98,82 @@ def seed_data(db: Session) -> None:
         role="user",
     )
     db.add_all([admin, user])
+    db.flush()
 
+    categories_by_slug: dict[str, Category] = {}
+    for cat in SEED_CATEGORIES:
+        category = Category(name=cat["name"], slug=cat["slug"])
+        db.add(category)
+        categories_by_slug[cat["slug"]] = category
+    db.flush()
+
+    products_by_slug: dict[str, Product] = {}
     for item in SEED_PRODUCTS:
-        db.add(
-            Product(
-                name=item["name"],
-                description=item["description"],
-                price=item["price"],
-                stock=item["stock"],
-                image_url=_product_image(item["slug"]),
-                is_active=True,
-            )
+        category = categories_by_slug.get(PRODUCT_CATEGORY_SLUG.get(item["slug"], ""))
+        product = Product(
+            name=item["name"],
+            description=item["description"],
+            price=item["price"],
+            stock=item["stock"],
+            image_url=_product_image(item["slug"]),
+            is_active=True,
+            category=category,
         )
+        db.add(product)
+        products_by_slug[item["slug"]] = product
+    db.flush()
+
+    for coupon in SEED_COUPONS:
+        db.add(Coupon(**coupon))
+
+    # 動作確認用: user@example.com の購入実績とレビューを投入する。
+    # レビュー投稿の資格（cancelled 以外の注文で購入済み）を満たすよう、
+    # 実際の Order/OrderItem も合わせて作成する。
+    earphone = products_by_slug["wireless-earphone"]
+    bottle = products_by_slug["stainless-bottle"]
+
+    earphone.stock -= 1
+    bottle.stock -= 1
+
+    sample_order = Order(
+        user_id=user.id,
+        total_amount=earphone.price + bottle.price,
+        discount_amount=0,
+        coupon_code=None,
+        status="delivered",
+        shipping_address="東京都渋谷区1-2-3 サンプルビル101\nTEL: 03-1234-5678",
+        items=[
+            OrderItem(
+                product_id=earphone.id,
+                product_name=earphone.name,
+                price=earphone.price,
+                quantity=1,
+            ),
+            OrderItem(
+                product_id=bottle.id,
+                product_name=bottle.name,
+                price=bottle.price,
+                quantity=1,
+            ),
+        ],
+    )
+    db.add(sample_order)
+
+    db.add_all(
+        [
+            Review(
+                product_id=earphone.id,
+                user_id=user.id,
+                rating=5,
+                comment="音質が良く、ノイズキャンセリングも効いていて満足しています。",
+            ),
+            Review(
+                product_id=bottle.id,
+                user_id=user.id,
+                rating=4,
+                comment="保温性が高くて便利です。もう少し軽いと嬉しい。",
+            ),
+        ]
+    )
 
     db.commit()

@@ -9,6 +9,7 @@ import ProductCard from '@/components/ProductCard';
 import Pagination from '@/components/Pagination';
 import Spinner from '@/components/Spinner';
 import { ArrowRightIcon } from '@/components/Icons';
+import ProductFilters, { type ProductFiltersValue, type ProductSort } from '@/components/ProductFilters';
 
 const LIMIT = 12;
 
@@ -46,6 +47,11 @@ function ProductListContent() {
   const searchParams = useSearchParams();
   const search = searchParams.get('search') || '';
   const page = Number(searchParams.get('page') || '1') || 1;
+  const categoryIdParam = searchParams.get('category_id');
+  const categoryId = categoryIdParam ? Number(categoryIdParam) || null : null;
+  const sortParam = searchParams.get('sort') as ProductSort | null;
+  const minPrice = searchParams.get('min_price') || '';
+  const maxPrice = searchParams.get('max_price') || '';
 
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
@@ -61,6 +67,10 @@ function ProductListContent() {
     if (search) params.set('search', search);
     params.set('page', String(page));
     params.set('limit', String(LIMIT));
+    if (categoryId) params.set('category_id', String(categoryId));
+    if (sortParam) params.set('sort', sortParam);
+    if (minPrice) params.set('min_price', minPrice);
+    if (maxPrice) params.set('max_price', maxPrice);
 
     api
       .get<ProductListResponse>(`/products?${params.toString()}`)
@@ -80,15 +90,51 @@ function ProductListContent() {
     return () => {
       cancelled = true;
     };
-  }, [search, page]);
+  }, [search, page, categoryId, sortParam, minPrice, maxPrice]);
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
-  const handlePageChange = (newPage: number) => {
+  const buildParams = (overrides: Record<string, string | null>) => {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
-    params.set('page', String(newPage));
-    router.push(`/?${params.toString()}`);
+    if (categoryId) params.set('category_id', String(categoryId));
+    if (sortParam) params.set('sort', sortParam);
+    if (minPrice) params.set('min_price', minPrice);
+    if (maxPrice) params.set('max_price', maxPrice);
+    params.set('page', String(page));
+
+    Object.entries(overrides).forEach(([key, val]) => {
+      if (val === null || val === '') {
+        params.delete(key);
+      } else {
+        params.set(key, val);
+      }
+    });
+
+    return params;
+  };
+
+  const handlePageChange = (newPage: number) => {
+    router.push(`/?${buildParams({ page: String(newPage) }).toString()}`);
+  };
+
+  const filtersValue: ProductFiltersValue = {
+    categoryId,
+    sort: sortParam,
+    minPrice,
+    maxPrice,
+  };
+
+  const handleFiltersChange = (next: ProductFiltersValue) => {
+    router.push(
+      `/?${buildParams({
+        category_id: next.categoryId ? String(next.categoryId) : null,
+        sort: next.sort,
+        min_price: next.minPrice,
+        max_price: next.maxPrice,
+        page: '1',
+      }).toString()}`
+    );
   };
 
   return (
@@ -101,6 +147,8 @@ function ProductListContent() {
           <p className="mt-1 text-sm text-gray-500">季節のおすすめと定番の道具をご紹介します。</p>
         )}
       </div>
+
+      <ProductFilters value={filtersValue} onChange={handleFiltersChange} />
 
       {loading && (
         <p className="text-gray-600 flex items-center">

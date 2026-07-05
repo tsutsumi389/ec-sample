@@ -1,7 +1,8 @@
 'use client';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import type { Product } from '@/lib/types';
+import { api, ApiError } from '@/lib/api';
+import type { Category, Product } from '@/lib/types';
 import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
 
 export interface ProductFormValues {
@@ -11,6 +12,7 @@ export interface ProductFormValues {
   stock: number;
   image_url: string;
   is_active: boolean;
+  category_id: number | null;
 }
 
 interface ProductFormModalProps {
@@ -26,14 +28,25 @@ const emptyForm: ProductFormValues = {
   stock: 0,
   image_url: '',
   is_active: true,
+  category_id: null,
 };
 
 export default function ProductFormModal({ product, onClose, onSubmit }: ProductFormModalProps) {
   const [values, setValues] = useState<ProductFormValues>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]);
   const dialogRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api
+      .get<Category[]>('/categories')
+      .then(setCategories)
+      .catch((e) => {
+        if (!(e instanceof ApiError)) throw e;
+      });
+  }, []);
 
   useEffect(() => {
     nameInputRef.current?.focus();
@@ -75,6 +88,7 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
         stock: product.stock,
         image_url: product.image_url,
         is_active: product.is_active,
+        category_id: product.category_id,
       });
     } else {
       setValues(emptyForm);
@@ -134,6 +148,31 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
               onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
               className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
             />
+          </div>
+
+          <div>
+            <label htmlFor="category_id" className="block text-sm font-medium text-gray-700 mb-2">
+              カテゴリ
+              <span className="ml-1 text-xs font-normal text-gray-600">（任意）</span>
+            </label>
+            <select
+              id="category_id"
+              value={values.category_id ?? ''}
+              onChange={(e) =>
+                setValues((v) => ({
+                  ...v,
+                  category_id: e.target.value ? Number(e.target.value) : null,
+                }))
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+            >
+              <option value="">未分類</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

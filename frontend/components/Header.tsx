@@ -87,6 +87,20 @@ export default function Header() {
               >
                 注文履歴
               </Link>
+              <Link
+                href="/wishlist"
+                className={navLinkClass('/wishlist')}
+                aria-current={isActive('/wishlist') ? 'page' : undefined}
+              >
+                お気に入り
+              </Link>
+              <Link
+                href="/account"
+                className={navLinkClass('/account')}
+                aria-current={isActive('/account') ? 'page' : undefined}
+              >
+                アカウント
+              </Link>
               {user.role === 'admin' && (
                 <Link
                   href="/admin"
