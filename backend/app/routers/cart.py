@@ -14,7 +14,7 @@ def _to_cart_item_out(item: CartItem) -> CartItemOut:
         id=item.id,
         product=ProductOut.model_validate(item.product),
         quantity=item.quantity,
-        subtotal=item.product.price * item.quantity,
+        subtotal=item.product.effective_price * item.quantity,
     )
 
 
@@ -45,8 +45,12 @@ def add_cart_item(
     db: Session = Depends(get_db),
 ) -> CartOut:
     product = db.get(Product, payload.product_id)
-    if product is None or not product.is_active:
+    if product is None or not product.is_viewable:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+    if product.status != "on_sale":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="この商品は現在購入できません"
+        )
 
     existing = (
         db.query(CartItem)

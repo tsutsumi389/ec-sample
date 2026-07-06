@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
 from app.database import get_db
-from app.models import Category, Coupon, Order, Product, User
+from app.models import Category, Coupon, Order, Product, ProductImage, User
 from app.schemas import (
     AdminOrderOut,
     AdminUserOut,
@@ -32,9 +32,21 @@ def list_all_products(db: Session = Depends(get_db)) -> list[Product]:
     return db.query(Product).order_by(Product.id).all()
 
 
+def _sync_images(product: Product, image_urls: list[str]) -> None:
+    """商品のギャラリー画像を与えられた URL 列で丸ごと置き換える（表示順は配列順）。"""
+    product.images = [
+        ProductImage(image_url=url, sort_order=index)
+        for index, url in enumerate(image_urls)
+        if url.strip()
+    ]
+
+
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
 def create_product(payload: ProductCreate, db: Session = Depends(get_db)) -> Product:
-    product = Product(**payload.model_dump())
+    data = payload.model_dump()
+    image_urls = data.pop("image_urls", [])
+    product = Product(**data)
+    _sync_images(product, image_urls)
     db.add(product)
     db.commit()
     db.refresh(product)
@@ -49,8 +61,13 @@ def update_product(
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    # image_urls は None=変更しない / [] や配列=その内容で丸ごと置換、として扱う。
+    image_urls = data.pop("image_urls", None)
+    for field, value in data.items():
         setattr(product, field, value)
+    if image_urls is not None:
+        _sync_images(product, image_urls)
 
     db.commit()
     db.refresh(product)
@@ -63,7 +80,8 @@ def delete_product(product_id: int, db: Session = Depends(get_db)) -> Product:
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    product.is_active = False
+    # 物理削除はせず archived に落とす（論理削除。過去注文のスナップショットは不変）。
+    product.status = "archived"
     db.commit()
     db.refresh(product)
     return product

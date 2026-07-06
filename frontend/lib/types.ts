@@ -7,14 +7,35 @@ export interface User {
   role: UserRole;
 }
 
+export type ProductStatus =
+  | 'draft'
+  | 'coming_soon'
+  | 'on_sale'
+  | 'suspended'
+  | 'discontinued'
+  | 'archived';
+
+export interface ProductImage {
+  id: number;
+  image_url: string;
+  sort_order: number;
+}
+
 export interface Product {
   id: number;
   name: string;
+  sku: string | null;
   description: string;
   price: number;
+  sale_price: number | null;
+  /** 実売価格（sale_price があればそれ、なければ price）。表示・計算の基準。 */
+  effective_price: number;
   stock: number;
+  status: ProductStatus;
+  /** 購入可能か（status==on_sale かつ在庫あり）。 */
+  purchasable: boolean;
   image_url: string;
-  is_active: boolean;
+  images: ProductImage[];
   category_id: number | null;
   avg_rating: number | null;
   review_count: number;

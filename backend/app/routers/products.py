@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Order, OrderItem, Product, Review, User
+from app.models import LISTED_STATUSES, Order, OrderItem, Product, Review, User
 from app.schemas import ProductListOut, ProductOut, ReviewCreate, ReviewOut
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -37,7 +37,7 @@ def list_products(
     limit: int = Query(default=12, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> ProductListOut:
-    conditions = [Product.is_active.is_(True)]
+    conditions = [Product.status.in_(LISTED_STATUSES)]
     if search:
         conditions.append(Product.name.ilike(f"%{search}%"))
     if category_id is not None:
@@ -94,7 +94,7 @@ def list_products(
 @router.get("/{product_id}", response_model=ProductOut)
 def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductOut:
     product = db.get(Product, product_id)
-    if product is None or not product.is_active:
+    if product is None or not product.is_viewable:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
     avg_rating, review_count = _rating_stats(db, product_id)
@@ -104,7 +104,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductOut:
 @router.get("/{product_id}/related", response_model=list[ProductOut])
 def list_related_products(product_id: int, db: Session = Depends(get_db)) -> list[ProductOut]:
     product = db.get(Product, product_id)
-    if product is None or not product.is_active:
+    if product is None or not product.is_viewable:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
     if product.category_id is None:
@@ -115,7 +115,7 @@ def list_related_products(product_id: int, db: Session = Depends(get_db)) -> lis
         .filter(
             Product.category_id == product.category_id,
             Product.id != product_id,
-            Product.is_active.is_(True),
+            Product.status.in_(LISTED_STATUSES),
         )
         .order_by(Product.id)
         .limit(4)
@@ -127,7 +127,7 @@ def list_related_products(product_id: int, db: Session = Depends(get_db)) -> lis
 @router.get("/{product_id}/reviews", response_model=list[ReviewOut])
 def list_reviews(product_id: int, db: Session = Depends(get_db)) -> list[ReviewOut]:
     product = db.get(Product, product_id)
-    if product is None or not product.is_active:
+    if product is None or not product.is_viewable:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
     rows = (
@@ -159,7 +159,7 @@ def create_review(
     db: Session = Depends(get_db),
 ) -> ReviewOut:
     product = db.get(Product, product_id)
-    if product is None or not product.is_active:
+    if product is None or not product.is_viewable:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
     purchased = (

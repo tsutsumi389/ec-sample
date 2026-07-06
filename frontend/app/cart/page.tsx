@@ -220,7 +220,7 @@ export default function CartPage() {
                       {item.product.name}
                     </Link>
                     <p className="mt-1 text-sm text-gray-500">
-                      ¥{item.product.price.toLocaleString()} × {item.quantity}
+                      ¥{item.product.effective_price.toLocaleString()} × {item.quantity}
                     </p>
                   </div>
                   <div className="mt-2 sm:mt-0 flex items-center gap-3">

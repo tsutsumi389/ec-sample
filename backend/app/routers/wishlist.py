@@ -37,7 +37,7 @@ def add_wishlist_item(
     db: Session = Depends(get_db),
 ) -> WishlistItemOut:
     product = db.get(Product, payload.product_id)
-    if product is None or not product.is_active:
+    if product is None or not product.is_viewable:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
     existing = (
