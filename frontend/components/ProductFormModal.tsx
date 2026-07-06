@@ -2,16 +2,20 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
-import type { Category, Product } from '@/lib/types';
+import type { Category, Product, ProductStatus } from '@/lib/types';
 import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { ADMIN_SELECTABLE_STATUSES, PRODUCT_STATUS_META } from '@/lib/productStatus';
 
 export interface ProductFormValues {
   name: string;
+  sku: string | null;
   description: string;
   price: number;
+  sale_price: number | null;
   stock: number;
+  status: ProductStatus;
   image_url: string;
-  is_active: boolean;
+  image_urls: string[];
   category_id: number | null;
 }
 
@@ -23,11 +27,14 @@ interface ProductFormModalProps {
 
 const emptyForm: ProductFormValues = {
   name: '',
+  sku: null,
   description: '',
   price: 0,
+  sale_price: null,
   stock: 0,
+  status: 'draft',
   image_url: '',
-  is_active: true,
+  image_urls: [],
   category_id: null,
 };
 
@@ -83,11 +90,15 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
     if (product) {
       setValues({
         name: product.name,
+        sku: product.sku,
         description: product.description,
         price: product.price,
+        sale_price: product.sale_price,
         stock: product.stock,
+        // archived な商品を編集する場合も、選択肢に無い値で壊れないよう draft に寄せる。
+        status: ADMIN_SELECTABLE_STATUSES.includes(product.status) ? product.status : 'draft',
         image_url: product.image_url,
-        is_active: product.is_active,
+        image_urls: product.images.map((i) => i.image_url),
         category_id: product.category_id,
       });
     } else {
@@ -100,7 +111,12 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
     setSubmitting(true);
     setError('');
     try {
-      await onSubmit(values);
+      // 追加画像は空行を除いて送る（メイン画像とは別のギャラリー用）。
+      const cleaned: ProductFormValues = {
+        ...values,
+        image_urls: values.image_urls.map((u) => u.trim()).filter(Boolean),
+      };
+      await onSubmit(cleaned);
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存に失敗しました');
     } finally {
@@ -132,6 +148,22 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
               ref={nameInputRef}
               value={values.name}
               onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
+              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="sku" className="block text-sm font-medium text-gray-700 mb-2">
+              商品コード（SKU）
+              <span className="ml-1 text-xs font-normal text-gray-600">（任意）</span>
+            </label>
+            <input
+              id="sku"
+              type="text"
+              value={values.sku ?? ''}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, sku: e.target.value ? e.target.value : null }))
+              }
               className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
             />
           </div>
@@ -211,8 +243,50 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
           </div>
 
           <div>
+            <label htmlFor="sale_price" className="block text-sm font-medium text-gray-700 mb-2">
+              セール価格（円）
+              <span className="ml-1 text-xs font-normal text-gray-600">（任意・定価より安い額）</span>
+            </label>
+            <input
+              id="sale_price"
+              type="number"
+              min={0}
+              value={values.sale_price ?? ''}
+              onChange={(e) =>
+                setValues((v) => ({
+                  ...v,
+                  sale_price: e.target.value === '' ? null : Number(e.target.value),
+                }))
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
+              販売状態
+              <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
+              <span className="sr-only">（必須）</span>
+            </label>
+            <select
+              id="status"
+              value={values.status}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, status: e.target.value as ProductStatus }))
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+            >
+              {ADMIN_SELECTABLE_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {PRODUCT_STATUS_META[s].adminLabel}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label htmlFor="image_url" className="block text-sm font-medium text-gray-700 mb-2">
-              画像URL
+              メイン画像URL
               <span className="ml-1 text-xs font-normal text-gray-600">（任意）</span>
             </label>
             <input
@@ -224,17 +298,20 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              id="is_active"
-              type="checkbox"
-              checked={values.is_active}
-              onChange={(e) => setValues((v) => ({ ...v, is_active: e.target.checked }))}
-              className="rounded border-gray-300"
-            />
-            <label htmlFor="is_active" className="text-sm text-gray-700">
-              公開する
+          <div>
+            <label htmlFor="image_urls" className="block text-sm font-medium text-gray-700 mb-2">
+              追加画像URL（ギャラリー）
+              <span className="ml-1 text-xs font-normal text-gray-600">（任意・1行に1URL）</span>
             </label>
+            <textarea
+              id="image_urls"
+              rows={3}
+              value={values.image_urls.join('\n')}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, image_urls: e.target.value.split('\n') }))
+              }
+              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+            />
           </div>
 
           {error && (

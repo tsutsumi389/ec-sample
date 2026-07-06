@@ -75,17 +75,36 @@ class CategoryUpdate(BaseModel):
 
 # ---------- Product ----------
 
+ProductStatus = Literal[
+    "draft", "coming_soon", "on_sale", "suspended", "discontinued", "archived"
+]
+
+
+class ProductImageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    image_url: str
+    sort_order: int
+
 
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
+    sku: str | None = None
     description: str | None = None
     price: int
+    sale_price: int | None = None
+    # 実売価格（sale_price があればそれ、なければ price）。表示・計算の基準。
+    effective_price: int
     stock: int
+    status: str
+    # 購入可能か（status==on_sale かつ在庫あり）。フロントの表示分岐用。
+    purchasable: bool
     image_url: str | None = None
-    is_active: bool
+    images: list[ProductImageOut] = []
     category_id: int | None = None
     avg_rating: float | None = None
     review_count: int = 0
@@ -99,21 +118,29 @@ class ProductListOut(BaseModel):
 
 class ProductCreate(BaseModel):
     name: str
+    sku: str | None = None
     description: str | None = None
     price: int = Field(ge=0)
+    sale_price: int | None = Field(default=None, ge=0)
     stock: int = Field(ge=0)
+    status: ProductStatus = "draft"
     image_url: str | None = None
-    is_active: bool = True
+    # 追加画像URL（メイン image_url とは別のギャラリー用）。表示順は配列順。
+    image_urls: list[str] = []
     category_id: int | None = None
 
 
 class ProductUpdate(BaseModel):
     name: str | None = None
+    sku: str | None = None
     description: str | None = None
     price: int | None = Field(default=None, ge=0)
+    sale_price: int | None = Field(default=None, ge=0)
     stock: int | None = Field(default=None, ge=0)
+    status: ProductStatus | None = None
     image_url: str | None = None
-    is_active: bool | None = None
+    # None は「変更しない」、[] は「全画像を削除」を意味する。
+    image_urls: list[str] | None = None
     category_id: int | None = None
 
 

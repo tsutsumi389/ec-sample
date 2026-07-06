@@ -67,10 +67,15 @@ def create_order(
 
         for cart_item in cart_items:
             product = products_by_id.get(cart_item.product_id)
-            if product is None or not product.is_active:
+            if product is None or not product.is_viewable:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"商品が見つかりません: {cart_item.product_id}",
+                )
+            if product.status != "on_sale":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"この商品は現在購入できません: {product.name}",
                 )
             if product.stock < cart_item.quantity:
                 raise HTTPException(
@@ -78,13 +83,15 @@ def create_order(
                     detail=f"在庫が不足しています: {product.name}",
                 )
 
+            # 実売価格を採用し、注文時点の価格として OrderItem にスナップショットする。
+            unit_price = product.effective_price
             product.stock -= cart_item.quantity
-            total_amount += product.price * cart_item.quantity
+            total_amount += unit_price * cart_item.quantity
             order_items.append(
                 OrderItem(
                     product_id=product.id,
                     product_name=product.name,
-                    price=product.price,
+                    price=unit_price,
                     quantity=cart_item.quantity,
                 )
             )

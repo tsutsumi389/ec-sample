@@ -10,6 +10,7 @@ import Price from '@/components/Price';
 import Badge from '@/components/Badge';
 import { PlusIcon } from '@/components/Icons';
 import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { PRODUCT_STATUS_META } from '@/lib/productStatus';
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -115,8 +116,8 @@ export default function AdminProductsPage() {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-right">{product.stock}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <Badge variant={product.is_active ? 'success' : 'neutral'}>
-                        {product.is_active ? '公開中' : '非公開'}
+                      <Badge variant={PRODUCT_STATUS_META[product.status].variant}>
+                        {PRODUCT_STATUS_META[product.status].adminLabel}
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-right space-x-1 whitespace-nowrap">

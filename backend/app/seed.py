@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.auth import hash_password
-from app.models import Category, Coupon, Order, OrderItem, Product, Review, User
+from app.models import Category, Coupon, Order, OrderItem, Product, ProductImage, Review, User
 
 
 def _product_image(slug: str) -> str:
@@ -13,29 +13,38 @@ def _product_image(slug: str) -> str:
     return f"/products/{slug}.svg"
 
 
+# 各商品に sku を付与。sale_price / status / gallery は任意（未指定時は
+# それぞれ「なし」「on_sale」「メイン画像のみ」として扱う）。
+# gallery はギャラリー表示のデモ用に既存 SVG を流用したプレースホルダ。
 SEED_PRODUCTS = [
     {
         "name": "ワイヤレスイヤホン",
         "slug": "wireless-earphone",
+        "sku": "EAR-2024-001",
         "description": "周囲の騒音をしっかり抑えるノイズキャンセリング機能を搭載した、高音質ワイヤレスイヤホン。ケース込みで最大24時間再生でき、通勤や在宅ワークでも一日中バッテリーを気にせず使えます。IPX4の生活防水に対応し、片耳わずか4.5gの軽さで長時間つけても疲れにくい設計です。",
         "price": 8980,
+        "sale_price": 6980,
         "stock": 45,
+        "gallery": ["mobile-battery", "bluetooth-speaker"],
     },
     {
         "name": "コーヒーメーカー",
         "slug": "coffee-maker",
+        "sku": "KIT-2024-002",
         "description": "豆から挽けるミル内蔵の全自動ドリップ式コーヒーメーカー。挽き目と濃さを好みに合わせて調整でき、朝のタイマー予約にも対応します。ガラスサーバーは最大5杯分。ミル部分は取り外して丸洗いできるので、毎日のお手入れも簡単です。挽きたての香りを、自宅で手軽に楽しめます。",
         "price": 12800,
         "stock": 20,
+        "gallery": ["electric-kettle", "stainless-bottle"],
     },
-    {"name": "電気ケトル", "slug": "electric-kettle", "description": "1Lの大容量で素早く沸騰する電気ケトルです。", "price": 3480, "stock": 60},
-    {"name": "モバイルバッテリー", "slug": "mobile-battery", "description": "大容量20000mAhでスマホを約5回充電可能。", "price": 2980, "stock": 80},
-    {"name": "折りたたみ傘", "slug": "folding-umbrella", "description": "軽量で持ち運びやすい自動開閉式の折りたたみ傘。", "price": 1980, "stock": 100},
-    {"name": "デスクライト", "slug": "desk-light", "description": "目に優しいLEDデスクライト。調光・調色機能付き。", "price": 4500, "stock": 35},
-    {"name": "ヨガマット", "slug": "yoga-mat", "description": "滑りにくい厚手のヨガマット。収納バッグ付き。", "price": 2500, "stock": 50},
-    {"name": "ステンレスボトル", "slug": "stainless-bottle", "description": "保温保冷に優れた真空断熱ステンレスボトル 500ml。", "price": 1500, "stock": 90},
-    {"name": "ブルートゥーススピーカー", "slug": "bluetooth-speaker", "description": "防水仕様のポータブルBluetoothスピーカー。", "price": 6980, "stock": 30},
-    {"name": "腕時計", "slug": "wrist-watch", "description": "シンプルで上品なデザインのクオーツ腕時計。", "price": 15800, "stock": 0},
+    {"name": "電気ケトル", "slug": "electric-kettle", "sku": "KIT-2024-003", "description": "1Lの大容量で素早く沸騰する電気ケトルです。", "price": 3480, "stock": 60},
+    {"name": "モバイルバッテリー", "slug": "mobile-battery", "sku": "ELC-2024-004", "description": "大容量20000mAhでスマホを約5回充電可能。", "price": 2980, "stock": 80},
+    {"name": "折りたたみ傘", "slug": "folding-umbrella", "sku": "DLY-2024-005", "description": "軽量で持ち運びやすい自動開閉式の折りたたみ傘。", "price": 1980, "stock": 100},
+    {"name": "デスクライト", "slug": "desk-light", "sku": "ELC-2024-006", "description": "目に優しいLEDデスクライト。調光・調色機能付き。", "price": 4500, "stock": 35, "status": "suspended"},
+    {"name": "ヨガマット", "slug": "yoga-mat", "sku": "OUT-2024-007", "description": "滑りにくい厚手のヨガマット。収納バッグ付き。", "price": 2500, "stock": 50},
+    {"name": "ステンレスボトル", "slug": "stainless-bottle", "sku": "DLY-2024-008", "description": "保温保冷に優れた真空断熱ステンレスボトル 500ml。", "price": 1500, "stock": 90},
+    {"name": "ブルートゥーススピーカー", "slug": "bluetooth-speaker", "sku": "ELC-2024-009", "description": "防水仕様のポータブルBluetoothスピーカー。", "price": 6980, "sale_price": 5480, "stock": 30},
+    {"name": "腕時計", "slug": "wrist-watch", "sku": "FSN-2024-010", "description": "シンプルで上品なデザインのクオーツ腕時計。", "price": 15800, "stock": 0},
+    {"name": "スマートウォッチ", "slug": "smart-watch", "sku": "FSN-2024-011", "description": "健康管理機能を搭載した次世代スマートウォッチ。近日発売予定。", "price": 19800, "stock": 30, "status": "coming_soon", "image_slug": "wrist-watch"},
 ]
 
 SEED_CATEGORIES = [
@@ -58,6 +67,7 @@ PRODUCT_CATEGORY_SLUG = {
     "stainless-bottle": "daily-goods",
     "bluetooth-speaker": "home-appliances",
     "wrist-watch": "fashion-accessories",
+    "smart-watch": "fashion-accessories",
 }
 
 SEED_COUPONS = [
@@ -110,14 +120,22 @@ def seed_data(db: Session) -> None:
     products_by_slug: dict[str, Product] = {}
     for item in SEED_PRODUCTS:
         category = categories_by_slug.get(PRODUCT_CATEGORY_SLUG.get(item["slug"], ""))
+        # 画像アセットが無い商品（smart-watch 等）は image_slug で既存 SVG を流用。
+        image_slug = item.get("image_slug", item["slug"])
         product = Product(
             name=item["name"],
+            sku=item.get("sku"),
             description=item["description"],
             price=item["price"],
+            sale_price=item.get("sale_price"),
             stock=item["stock"],
-            image_url=_product_image(item["slug"]),
-            is_active=True,
+            status=item.get("status", "on_sale"),
+            image_url=_product_image(image_slug),
             category=category,
+            images=[
+                ProductImage(image_url=_product_image(g), sort_order=index)
+                for index, g in enumerate(item.get("gallery", []))
+            ],
         )
         db.add(product)
         products_by_slug[item["slug"]] = product
@@ -135,9 +153,12 @@ def seed_data(db: Session) -> None:
     earphone.stock -= 1
     bottle.stock -= 1
 
+    # 注文時点の実売価格（セール中ならセール価格）をスナップショットする。
+    earphone_price = earphone.effective_price
+    bottle_price = bottle.effective_price
     sample_order = Order(
         user_id=user.id,
-        total_amount=earphone.price + bottle.price,
+        total_amount=earphone_price + bottle_price,
         discount_amount=0,
         coupon_code=None,
         status="delivered",
@@ -146,13 +167,13 @@ def seed_data(db: Session) -> None:
             OrderItem(
                 product_id=earphone.id,
                 product_name=earphone.name,
-                price=earphone.price,
+                price=earphone_price,
                 quantity=1,
             ),
             OrderItem(
                 product_id=bottle.id,
                 product_name=bottle.name,
-                price=bottle.price,
+                price=bottle_price,
                 quantity=1,
             ),
         ],
