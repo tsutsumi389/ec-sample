@@ -10,6 +10,7 @@ import Pagination from '@/components/Pagination';
 import Spinner from '@/components/Spinner';
 import { ArrowRightIcon } from '@/components/Icons';
 import ProductFilters, { type ProductFiltersValue, type ProductSort } from '@/components/ProductFilters';
+import RecommendationSection from '@/components/RecommendationSection';
 
 const LIMIT = 12;
 
@@ -190,6 +191,7 @@ export default function HomePage() {
   return (
     <>
       <Hero />
+      <RecommendationSection />
       <Suspense
         fallback={
           <div className="max-w-6xl mx-auto px-4 py-8 text-gray-600 flex items-center">

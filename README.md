@@ -6,7 +6,8 @@
 
 - **フロントエンド**: Next.js 14 (App Router, TypeScript, Tailwind CSS)
 - **バックエンド**: Python 3.12 + FastAPI + SQLAlchemy 2.0 + Pydantic v2
-- **データベース**: PostgreSQL 16
+- **データベース**: PostgreSQL 16（pgvector 拡張）
+- **AIレコメンド**: Ollama + pgvector + セマンティックID（商品埋め込みの残差量子化）
 - すべて Docker コンテナ上で動作します。
 
 ## 起動方法
@@ -18,6 +19,25 @@ docker compose up --build
 ```
 
 初回起動時に PostgreSQL のテーブル作成と初期データ（管理者/一般ユーザー、商品10件）の投入が自動的に行われます。
+
+### 既存環境からの更新時（DBイメージの変更に注意）
+
+AIレコメンド機能の追加に伴い、DB イメージを `postgres:16-alpine` から `pgvector/pgvector:pg16` に変更しました。alpine 系から debian 系への切り替えでデータボリュームに互換性がないため、既存環境から更新する場合は一度 DB を作り直す必要があります。
+
+```bash
+make reset
+```
+
+### AIレコメンド（LLM機能）の有効化
+
+トップページのおすすめ理由などの LLM 生成機能は、**ホストPCで Ollama が稼働しており、`nomic-embed-text:latest` / `gemma4:latest` が pull 済みであること**を前提とします。コンテナ内のバックエンドは `http://host.docker.internal:11434` 経由でホストの Ollama に接続します。
+
+```bash
+ollama pull nomic-embed-text
+ollama pull gemma4
+```
+
+Ollama が未稼働でも人気順フォールバックで動作するため、サイトの全機能はモデル未取得のままでも利用できます。
 
 ## アクセスURL
 
@@ -45,6 +65,7 @@ docker compose up --build
 - 商品レビュー・星評価（購入者のみ投稿可）／平均評価表示
 - 関連商品の表示
 - お気に入り（ウィッシュリスト）登録・一覧
+- AIレコメンド（トップページのおすすめ・類似商品。Ollama + pgvector + セマンティックID）
 - カートへの追加・数量変更・削除
 - 配送先住所帳（登録・編集・既定設定）
 - クーポン・割引コードの適用

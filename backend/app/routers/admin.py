@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.models import Category, Coupon, Order, Product, ProductImage, User
 from app.schemas import (
     AdminOrderOut,
@@ -18,10 +18,32 @@ from app.schemas import (
     ProductOut,
     ProductUpdate,
 )
+from app.services import embedding
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
 
 VALID_ORDER_STATUSES = {"pending", "paid", "shipped", "delivered", "cancelled"}
+
+
+def _refresh_embedding_task(product_id: int) -> None:
+    """商品作成/更新後に単一商品の埋め込みを更新する（自前セッションで開閉）。
+
+    失敗しても本体処理には影響させない（embedding 側で例外を握って警告ログ化する）。
+    """
+    db = SessionLocal()
+    try:
+        embedding.refresh_product_embedding(db, product_id)
+    finally:
+        db.close()
+
+
+def _rebuild_embeddings_task() -> None:
+    """全商品の埋め込み + セマンティックID を強制再構築する（rebuild 用）。"""
+    db = SessionLocal()
+    try:
+        embedding.sync_embeddings(db, force=True)
+    finally:
+        db.close()
 
 
 # ---------- Products ----------
@@ -42,7 +64,11 @@ def _sync_images(product: Product, image_urls: list[str]) -> None:
 
 
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
-def create_product(payload: ProductCreate, db: Session = Depends(get_db)) -> Product:
+def create_product(
+    payload: ProductCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> Product:
     data = payload.model_dump()
     image_urls = data.pop("image_urls", [])
     product = Product(**data)
@@ -50,12 +76,17 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db)) -> Pro
     db.add(product)
     db.commit()
     db.refresh(product)
+    # 埋め込み更新は本体処理と切り離して非同期実行（失敗しても作成は成立済み）。
+    background_tasks.add_task(_refresh_embedding_task, product.id)
     return product
 
 
 @router.put("/products/{product_id}", response_model=ProductOut)
 def update_product(
-    product_id: int, payload: ProductUpdate, db: Session = Depends(get_db)
+    product_id: int,
+    payload: ProductUpdate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
 ) -> Product:
     product = db.get(Product, product_id)
     if product is None:
@@ -71,6 +102,8 @@ def update_product(
 
     db.commit()
     db.refresh(product)
+    # 商品テキストが変わった可能性があるので埋め込みを非同期で更新する。
+    background_tasks.add_task(_refresh_embedding_task, product.id)
     return product
 
 
@@ -85,6 +118,19 @@ def delete_product(product_id: int, db: Session = Depends(get_db)) -> Product:
     db.commit()
     db.refresh(product)
     return product
+
+
+# ---------- Recommendations ----------
+
+
+@router.post("/recommendations/rebuild", status_code=status.HTTP_202_ACCEPTED)
+def rebuild_recommendations(background_tasks: BackgroundTasks) -> dict[str, str]:
+    """全商品の埋め込み + セマンティックID を再構築する（source_hash 無視の強制再計算）。
+
+    重い処理なので BackgroundTasks で非同期実行し、即 202 を返す。
+    """
+    background_tasks.add_task(_rebuild_embeddings_task)
+    return {"status": "started"}
 
 
 # ---------- Orders ----------

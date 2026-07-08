@@ -4,7 +4,15 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import LISTED_STATUSES, Order, OrderItem, Product, Review, User
+from app.models import (
+    LISTED_STATUSES,
+    Order,
+    OrderItem,
+    Product,
+    ProductEmbedding,
+    Review,
+    User,
+)
 from app.schemas import ProductListOut, ProductOut, ReviewCreate, ReviewOut
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -119,6 +127,54 @@ def list_related_products(product_id: int, db: Session = Depends(get_db)) -> lis
         )
         .order_by(Product.id)
         .limit(4)
+        .all()
+    )
+    return [_to_product_out(p, *_rating_stats(db, p.id)) for p in related]
+
+
+@router.get("/{product_id}/recommendations", response_model=list[ProductOut])
+def list_product_recommendations(
+    product_id: int,
+    limit: int = Query(default=4, ge=1, le=20),
+    db: Session = Depends(get_db),
+) -> list[ProductOut]:
+    """商品ページ用の関連おすすめ（LLM 不使用・同期）。
+
+    対象商品の埋め込みの pgvector コサイン近傍を返す（自分自身除外・LISTED のみ）。
+    埋め込み未生成なら既存 /related と同じ同カテゴリフォールバックに落とす。
+    """
+    product = db.get(Product, product_id)
+    if product is None or not product.is_viewable:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    target_emb = db.get(ProductEmbedding, product_id)
+    if target_emb is not None:
+        stmt = (
+            select(Product)
+            .join(ProductEmbedding, ProductEmbedding.product_id == Product.id)
+            .where(
+                Product.status.in_(LISTED_STATUSES),
+                Product.id != product_id,
+            )
+            .order_by(ProductEmbedding.embedding.cosine_distance(target_emb.embedding))
+            .limit(limit)
+        )
+        neighbors = list(db.execute(stmt).scalars().all())
+        if neighbors:
+            return [_to_product_out(p, *_rating_stats(db, p.id)) for p in neighbors]
+
+    # 埋め込みが無い（または近傍ゼロ）→ /related と同じ同カテゴリフォールバック。
+    if product.category_id is None:
+        return []
+    related = (
+        db.query(Product)
+        .filter(
+            Product.category_id == product.category_id,
+            Product.id != product_id,
+            Product.status.in_(LISTED_STATUSES),
+        )
+        .order_by(Product.id)
+        .limit(limit)
         .all()
     )
     return [_to_product_out(p, *_rating_stats(db, p.id)) for p in related]
