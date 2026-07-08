@@ -151,3 +151,13 @@ export interface AuthResponse {
   access_token: string;
   token_type: string;
 }
+
+export interface RecommendationItem {
+  product: Product;
+  reason: string | null;
+}
+
+export interface RecommendationResponse {
+  source: 'llm' | 'fallback';
+  items: RecommendationItem[];
+}

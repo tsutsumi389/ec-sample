@@ -321,3 +321,19 @@ class OrderStatusUpdate(BaseModel):
 
 class AdminOrderOut(OrderDetailOut):
     user: UserOut
+
+
+# ---------- Recommendations ----------
+
+
+class RecommendationItemOut(BaseModel):
+    # 商品は既存 ProductOut を再利用する（独自の商品スキーマは作らない）。
+    product: ProductOut
+    # LLM が付けたおすすめ理由。フォールバック時は None。
+    reason: str | None = None
+
+
+class RecommendationListOut(BaseModel):
+    # "llm"（キャッシュ利用）か "fallback"（人気順）か。
+    source: str
+    items: list[RecommendationItemOut]

@@ -14,6 +14,7 @@ import { ArrowLeftIcon } from '@/components/Icons';
 import RatingStars from '@/components/RatingStars';
 import WishlistButton from '@/components/WishlistButton';
 import RelatedProducts from '@/components/RelatedProducts';
+import ProductRecommendations from '@/components/ProductRecommendations';
 import ReviewSection from '@/components/ReviewSection';
 import { PRODUCT_STATUS_META } from '@/lib/productStatus';
 
@@ -256,6 +257,8 @@ export default function ProductDetailPage() {
           )}
         </div>
       </div>
+
+      <ProductRecommendations productId={product.id} />
 
       <RelatedProducts productId={product.id} />
 

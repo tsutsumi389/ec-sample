@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -10,8 +11,10 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.config import EMBED_DIM
 from app.database import Base
 
 
@@ -255,3 +258,98 @@ class OrderItem(Base):
 
     order: Mapped["Order"] = relationship(back_populates="items")
     product: Mapped["Product"] = relationship()
+
+
+# ---------- レコメンド（セマンティックID / 埋め込み / LLM生成キャッシュ）----------
+#
+# 以下 4 テーブルはレコメンド機能専用。既存テーブルには一切カラムを足さず、
+# 商品埋め込みやユーザ推薦結果はここに分離して持つ（マイグレーションツール未導入のため、
+# 既存テーブルへの追加はできず新規テーブルの追加のみ許容される運用に合わせる）。
+
+
+class ProductEmbedding(Base):
+    """商品テキストの埋め込みベクトルとセマンティックID。
+
+    product_id を主キー兼 FK にして 1 商品 1 行で持つ。source_hash / embed_model が
+    現在の商品テキスト・モデルと一致していれば再埋め込みをスキップする差分同期に使う。
+    """
+
+    __tablename__ = "product_embeddings"
+
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id"), primary_key=True
+    )
+    # 埋め込みベクトル本体（pgvector）。次元は EMBED_DIM に固定。
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBED_DIM), nullable=False)
+    # 残差量子化で割り当てた "a-b-c" 形式のセマンティックID（衝突時はサフィックス付き）。
+    semantic_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    # semantic_id を割り当てたコードブックの世代（SemanticIdCodebook.generation）。
+    codebook_generation: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 埋め込み元テキストの sha256。商品編集で本文が変われば不一致になり再埋め込みされる。
+    source_hash: Mapped[str] = mapped_column(String, nullable=False)
+    # 生成時に使った埋め込みモデル名。モデル差し替え時の再生成判定に使う。
+    embed_model: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    product: Mapped["Product"] = relationship()
+
+
+class SemanticIdCodebook(Base):
+    """残差量子化のセントロイド（コードブック）を世代管理する。
+
+    再構築のたびに generation をインクリメントして新しい行を追加する。
+    centroids は 3 階層分のセントロイド配列を JSON で保持する。
+    """
+
+    __tablename__ = "semantic_id_codebooks"
+
+    generation: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # [階層0のセントロイド配列, 階層1..., 階層2...] の 3 要素。各要素は K×EMBED_DIM。
+    centroids: Mapped[list] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class UserRecommendation(Base):
+    """LLM が生成したユーザ別のおすすめ商品キャッシュ（rank 順に返す）。
+
+    生成のたびに当該ユーザの行を丸ごと入れ替える。reason は店員ペルソナの一言。
+    """
+
+    __tablename__ = "user_recommendations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    product: Mapped["Product"] = relationship()
+
+
+class RecommendationState(Base):
+    """ユーザ別のレコメンド生成状態。多重起動防止とキャッシュ陳腐化判定に使う。
+
+    profile_hash が現在の行動ハッシュと一致し status=ready ならキャッシュを返せる。
+    status=generating かつ generated_at が新しければ二重生成をスキップする。
+    """
+
+    __tablename__ = "recommendation_states"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    # 生成時点のユーザ行動（購入・カート・お気に入り・高評価）から作ったハッシュ。
+    profile_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # generating / ready / failed のいずれか。
+    status: Mapped[str] = mapped_column(String, nullable=False, default="generating")
+    generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
