@@ -12,6 +12,7 @@ from app.database import Base, SessionLocal, engine
 from app.routers import (
     addresses,
     admin,
+    assistant,
     auth,
     cart,
     categories,
@@ -155,3 +156,4 @@ app.include_router(addresses.router, prefix="/api")
 app.include_router(coupons.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(recommendations.router, prefix="/api")
+app.include_router(assistant.router, prefix="/api")

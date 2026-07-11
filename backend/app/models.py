@@ -353,3 +353,70 @@ class RecommendationState(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+# ---------- AIショッピングアシスタント（チャット会話）----------
+#
+# レコメンドとは別の同期チャット機能。会話単位でメッセージを永続化し、未ログインでも
+# 端末の localStorage に UUID を保持して継続できるようにする（下記 AssistantConversation
+# 参照）。既存テーブルには一切カラムを足さず新規テーブルのみ追加する運用に合わせる。
+
+
+class AssistantConversation(Base):
+    """チャットアシスタントの会話。1 会話 = 複数メッセージ。
+
+    id は推測困難な UUID（文字列 PK）。未ログインでもフロントの localStorage に UUID を
+    保持することでパネル再オープン時に会話を継続できる。ゲスト会話は user_id が NULL で、
+    UUID を知っていること自体が認可になる（サンプルアプリとして許容。routers 参照）。
+    ゲスト会話中にログインした場合は以降のリクエストで user_id を紐付ける。
+    """
+
+    __tablename__ = "assistant_conversations"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    # ログインユーザーの会話なら本人ID。ゲスト会話は NULL。
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    messages: Mapped[list["AssistantMessage"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="AssistantMessage.id",
+    )
+
+
+class AssistantMessage(Base):
+    """会話内の 1 メッセージ（user / assistant）。
+
+    assistant 行は提案商品IDの配列（product_ids）と生成元（source: llm / fallback）を
+    保持する。product_ids は履歴復元時にカードを引き直すためのもので、復元時に
+    LISTED_STATUSES を再確認して非公開化された商品は落とす。
+    """
+
+    __tablename__ = "assistant_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("assistant_conversations.id"), nullable=False, index=True
+    )
+    # "user" | "assistant"
+    role: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    # assistant メッセージが提案した商品IDの配列（カード再描画用）。user 行では空配列。
+    product_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # "llm" | "fallback"（assistant 行のみ。user 行では NULL）。
+    source: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    conversation: Mapped["AssistantConversation"] = relationship(
+        back_populates="messages"
+    )

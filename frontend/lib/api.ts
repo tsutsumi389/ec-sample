@@ -1,3 +1,5 @@
+import type { AssistantChatResponse, AssistantMessage } from './types';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 const TOKEN_KEY = 'token';
@@ -153,4 +155,19 @@ export const api = {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
   delete: <T>(path: string): Promise<T> => request<T>(path, { method: 'DELETE' }),
+
+  // AIショッピングアシスタント。未ログインでも呼べる（会話は端末の localStorage で継続）。
+  assistant: {
+    // conversation_id が null なら新規会話を作成して返す。
+    chat: (conversationId: string | null, message: string): Promise<AssistantChatResponse> =>
+      request<AssistantChatResponse>('/assistant/chat', {
+        method: 'POST',
+        body: JSON.stringify({ conversation_id: conversationId, message }),
+      }),
+    // ウィジェット再オープン時の履歴復元用。会話が無効なら 404。
+    messages: (conversationId: string): Promise<AssistantMessage[]> =>
+      request<AssistantMessage[]>(`/assistant/conversations/${encodeURIComponent(conversationId)}/messages`, {
+        method: 'GET',
+      }),
+  },
 };

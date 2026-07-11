@@ -337,3 +337,32 @@ class RecommendationListOut(BaseModel):
     # "llm"（キャッシュ利用）か "fallback"（人気順）か。
     source: str
     items: list[RecommendationItemOut]
+
+
+# ---------- AIショッピングアシスタント ----------
+
+
+class AssistantChatIn(BaseModel):
+    # null なら新規会話を作成。既存 UUID なら所有チェックのうえ継続する。
+    conversation_id: str | None = None
+    # ユーザーの相談文。1〜500 文字（コンテキスト溢れ・空送信の防止）。
+    message: str = Field(min_length=1, max_length=500)
+
+
+class AssistantChatOut(BaseModel):
+    conversation_id: str
+    # "llm"（LLM 応答）か "fallback"（キーワード検索）か。
+    source: str
+    # チャット本文。
+    reply: str
+    # 提案商品（既存 RecommendationItemOut と同型: product + reason）。
+    products: list[RecommendationItemOut]
+
+
+class AssistantMessageOut(BaseModel):
+    # 履歴復元用の 1 メッセージ。role="assistant" の行のみ products を持つ。
+    role: str
+    content: str
+    source: str | None = None
+    products: list[RecommendationItemOut] = []
+    created_at: datetime
