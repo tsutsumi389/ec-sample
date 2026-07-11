@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Product } from '@/lib/types';
 import ProductCard from '@/components/ProductCard';
+import { ProductGridSkeleton } from '@/components/Skeleton';
 
 interface ProductRecommendationsProps {
   productId: number;
@@ -36,11 +37,23 @@ export default function ProductRecommendations({ productId }: ProductRecommendat
     };
   }, [productId]);
 
-  if (loading || products.length === 0) return null;
+  // 読み込み中は見出し＋スケルトンで高さを確保する。0件が確定したときのみ非表示にする。
+  if (loading) {
+    return (
+      <section className="mt-12">
+        <h2 className="text-xl font-bold text-gray-900">合わせておすすめ</h2>
+        <div className="mt-4">
+          <ProductGridSkeleton count={4} />
+        </div>
+      </section>
+    );
+  }
+
+  if (products.length === 0) return null;
 
   return (
     <section className="mt-12">
-      <h2 className="text-lg font-bold text-gray-900">合わせておすすめ</h2>
+      <h2 className="text-xl font-bold text-gray-900">合わせておすすめ</h2>
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
         {products.map((product) => (
           <ProductCard key={product.id} product={product} />

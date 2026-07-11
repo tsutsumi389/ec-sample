@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import type { Review } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
+import { useToast } from '@/lib/toast-context';
 import RatingStars from '@/components/RatingStars';
-import Spinner from '@/components/Spinner';
+import { Skeleton } from '@/components/Skeleton';
 
 interface ReviewSectionProps {
   productId: number;
@@ -21,6 +22,7 @@ interface ReviewSectionProps {
  */
 export default function ReviewSection({ productId, avgRating, reviewCount }: ReviewSectionProps) {
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,9 +65,12 @@ export default function ReviewSection({ productId, avgRating, reviewCount }: Rev
       });
       setRating(0);
       setComment('');
+      showToast('レビューを投稿しました', { type: 'success' });
       fetchReviews();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : 'レビューの投稿に失敗しました');
+      const msg = err instanceof ApiError ? err.message : 'レビューの投稿に失敗しました';
+      setFormError(msg);
+      showToast(msg, { type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -73,15 +78,28 @@ export default function ReviewSection({ productId, avgRating, reviewCount }: Rev
 
   return (
     <section className="mt-12">
-      <h2 className="text-lg font-bold text-gray-900">レビュー</h2>
-      <div className="mt-2">
-        <RatingStars value={avgRating} count={reviewCount} size="md" />
+      <h2 className="text-xl font-bold text-gray-900">レビュー</h2>
+
+      {/* サマリーヘッダ: 平均点の大きな表示 + 星 + 件数 */}
+      <div className="mt-4 flex items-center gap-4">
+        <div className="flex items-baseline gap-1">
+          <span className="text-4xl font-bold tabular-nums text-gray-900">
+            {avgRating != null ? avgRating.toFixed(1) : '—'}
+          </span>
+          <span className="text-sm text-gray-400">/ 5</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <RatingStars value={avgRating} size="md" showValue={false} />
+          <span className="text-xs text-gray-500">
+            {reviewCount > 0 ? `${reviewCount}件のレビュー` : 'まだレビューはありません'}
+          </span>
+        </div>
       </div>
 
       {canShowForm && (
         <form
           onSubmit={handleSubmit}
-          className="mt-4 border border-gray-200 bg-gray-50 rounded-lg p-4 md:p-5"
+          className="mt-6 rounded-lg border border-gray-200 p-4 md:p-5"
         >
           <p className="text-sm font-medium text-gray-700">レビューを投稿する</p>
           <div className="mt-2">
@@ -111,22 +129,27 @@ export default function ReviewSection({ productId, avgRating, reviewCount }: Rev
 
       <div className="mt-6">
         {loading ? (
-          <div className="flex items-center text-gray-600">
-            <Spinner className="mr-2" />
-            読み込み中...
-          </div>
+          <ul className="divide-y divide-gray-200" aria-hidden="true">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <li key={i} className="py-4 first:pt-0">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="mt-2 h-4 w-full" />
+                <Skeleton className="mt-1.5 h-4 w-2/3" />
+              </li>
+            ))}
+          </ul>
         ) : listError ? (
           <p role="alert" className="text-red-600 text-sm">
             {listError}
           </p>
         ) : reviews.length === 0 ? (
-          <p className="text-sm text-gray-500">まだレビューはありません。</p>
+          <p className="text-sm text-gray-500">最初のレビューをお寄せください。</p>
         ) : (
-          <ul className="space-y-4">
+          <ul className="divide-y divide-gray-200">
             {reviews.map((review) => (
-              <li key={review.id} className="border-b border-gray-200 pb-4 last:border-0">
+              <li key={review.id} className="py-4 first:pt-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <RatingStars value={review.rating} size="sm" />
+                  <RatingStars value={review.rating} size="sm" showValue={false} />
                   <span className="text-sm font-medium text-gray-900">{review.user_name}</span>
                   <span className="text-xs text-gray-400">
                     {new Date(review.created_at).toLocaleString('ja-JP')}
