@@ -7,6 +7,7 @@ import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import AssistantWidget from '@/components/assistant/AssistantWidget';
 
 const notoSansJP = Noto_Sans_JP({
   weight: ['400', '500', '700'],
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Header />
           <main className="flex-1">{children}</main>
           <Footer />
+          <AssistantWidget />
         </AuthProvider>
       </body>
     </html>

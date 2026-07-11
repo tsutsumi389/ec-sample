@@ -28,6 +28,7 @@ from app.models import (
     UserRecommendation,
     WishlistItem,
 )
+from app.services import llm_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +40,8 @@ _BEHAVIOR_WEIGHTS = {
     "review": 1.0,
 }
 
-# LLM に渡す候補件数と保存する reason の最大長。
+# LLM に渡す候補件数。reason の最大長・カタログ整形・SID 照合は llm_catalog に集約。
 _CANDIDATE_LIMIT = 20
-_REASON_MAX_LEN = 200
 
 
 @dataclass
@@ -235,32 +235,6 @@ def get_popular_products(
     return list(db.execute(stmt).scalars().all())
 
 
-def _format_price(price: int) -> str:
-    return f"¥{price:,}"
-
-
-def _catalog_line(product: Product, sid: str, avg_rating: float | None) -> str:
-    """候補・履歴を LLM に渡す 1 行表現。PII は一切含めない。"""
-    category = product.category.name if product.category is not None else "その他"
-    rating = f"★{avg_rating:.1f}" if avg_rating is not None else "★-"
-    return (
-        f"SID {sid}: {product.name} / {category} / "
-        f"{_format_price(product.effective_price)} / {rating}"
-    )
-
-
-def _avg_ratings(db: Session, product_ids: set[int]) -> dict[int, float]:
-    if not product_ids:
-        return {}
-    rows = (
-        db.query(Review.product_id, func.avg(Review.rating))
-        .filter(Review.product_id.in_(product_ids))
-        .group_by(Review.product_id)
-        .all()
-    )
-    return {pid: float(avg) for pid, avg in rows if avg is not None}
-
-
 def _build_messages(
     db: Session,
     profile: Profile,
@@ -269,7 +243,7 @@ def _build_messages(
     """chat 用メッセージと SID→Product の候補マップを組み立てる。"""
     candidate_ids = {p.id for p, _ in candidates}
     history_ids = {pid for _, pid, _ in profile.behaviors}
-    avg_map = _avg_ratings(db, candidate_ids | history_ids)
+    avg_map = llm_catalog.avg_ratings(db, candidate_ids | history_ids)
 
     # 候補カタログ（SID で列挙）。SID→Product を採用判定に使う。
     sid_to_product: dict[str, Product] = {}
@@ -277,7 +251,7 @@ def _build_messages(
     for product, emb in candidates:
         sid = emb.semantic_id or f"p{product.id}"
         sid_to_product[sid] = product
-        catalog_lines.append(_catalog_line(product, sid, avg_map.get(product.id)))
+        catalog_lines.append(llm_catalog.catalog_line(product, sid, avg_map.get(product.id)))
 
     # 顧客履歴も SID 列で表現する（埋め込みのある商品のみ）。
     hist_embeddings = {
@@ -303,7 +277,9 @@ def _build_messages(
             "review": "高評価",
         }.get(kind, kind)
         sid = emb.semantic_id or f"p{pid}"
-        history_lines.append(f"[{label}] {_catalog_line(prod, sid, avg_map.get(pid))}")
+        history_lines.append(
+            f"[{label}] {llm_catalog.catalog_line(prod, sid, avg_map.get(pid))}"
+        )
 
     system = (
         "あなたは生活道具店『Hibino』のベテラン店員です。"
@@ -368,23 +344,10 @@ def generate_for_user(db_session_factory: sessionmaker, user_id: int) -> None:
             content = message["content"]
         parsed = _LLMRecResponse.model_validate_json(content)
 
-        # ハルシネーション対策: 候補集合に存在する SID のものだけ採用。
-        adopted: list[tuple[Product, str]] = []
-        seen_products: set[int] = set()
-        for item in parsed.items:
-            # モデルがカタログの "SID 4-0-2:" 表記を真似て "SID 4-0-2" のように
-            # ラベル付きで返すことがあるため、先頭の "SID " を除去して照合する。
-            raw_sid = (item.sid or "").strip()
-            if raw_sid[:4].upper() == "SID ":
-                raw_sid = raw_sid[4:].strip()
-            product = sid_to_product.get(raw_sid) or sid_to_product.get(item.sid)
-            if product is None or product.id in seen_products:
-                continue
-            seen_products.add(product.id)
-            reason = (item.reason or "").strip()[:_REASON_MAX_LEN] or None
-            adopted.append((product, reason))
-            if len(adopted) >= 8:
-                break
+        # ハルシネーション対策: 候補集合に存在する SID のものだけ採用（共通ロジック）。
+        adopted = llm_catalog.match_products(
+            parsed.items, sid_to_product, max_items=8
+        )
 
         if not adopted:
             # 採用ゼロ。failed 扱いでフォールバックを継続させる。

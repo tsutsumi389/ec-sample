@@ -161,3 +161,34 @@ export interface RecommendationResponse {
   source: 'llm' | 'fallback';
   items: RecommendationItem[];
 }
+
+export type AssistantSource = 'llm' | 'fallback';
+
+export type AssistantRole = 'user' | 'assistant';
+
+/**
+ * チャット内で提案される商品。既存レコメンドの item 型（product + reason）と同型。
+ */
+export type AssistantProduct = RecommendationItem;
+
+/**
+ * POST /assistant/chat のレスポンス。
+ * source==='fallback' はキーワード検索フォールバックの応答。
+ */
+export interface AssistantChatResponse {
+  conversation_id: string;
+  source: AssistantSource;
+  reply: string;
+  products: AssistantProduct[];
+}
+
+/**
+ * GET /assistant/conversations/{id}/messages の1メッセージ。
+ * 履歴復元用。バックエンドの追加フィールドを許容するため型は緩めに受ける。
+ */
+export interface AssistantMessage {
+  role: AssistantRole;
+  content: string;
+  source?: AssistantSource | null;
+  products?: AssistantProduct[] | null;
+}
