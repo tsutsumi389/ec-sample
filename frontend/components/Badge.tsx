@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 
-export type BadgeVariant = 'success' | 'warning' | 'info' | 'neutral';
+export type BadgeVariant = 'success' | 'warning' | 'info' | 'purple' | 'neutral';
 
 const VARIANT_CLASSES: Record<BadgeVariant, string> = {
   success: 'bg-green-100 text-green-800',
   warning: 'bg-amber-100 text-amber-800',
   info: 'bg-brand-100 text-brand-800',
+  purple: 'bg-purple-100 text-purple-800',
   neutral: 'bg-gray-100 text-gray-800',
 };
 

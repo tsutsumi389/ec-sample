@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import type { RecommendationItem, RecommendationResponse } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import ProductCard from '@/components/ProductCard';
+import { ProductGridSkeleton } from '@/components/Skeleton';
 
 /**
  * トップページに表示するおすすめ商品セクション。
@@ -41,25 +42,33 @@ export default function RecommendationSection() {
     };
   }, [user]);
 
-  if (loading || items.length === 0) return null;
+  // 読み込み中は見出し＋スケルトンで高さを予約し、レイアウトのがたつきを防ぐ。
+  // 取得結果が0件のときだけセクションごと非表示にする。
+  if (!loading && items.length === 0) return null;
 
   const heading = source === 'llm' ? 'あなたへのおすすめ' : '人気の商品';
 
   return (
     <section className="max-w-6xl mx-auto px-4 pt-8">
-      <h2 className="text-lg font-bold text-gray-900">{heading}</h2>
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-        {items.map((item) => (
-          <div key={item.product.id} className="flex flex-col">
-            <ProductCard product={item.product} />
-            {source === 'llm' && item.reason && (
-              <p className="mt-2 text-xs text-gray-500 leading-relaxed line-clamp-2">
-                {item.reason}
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
+      <h2 className="text-xl font-bold text-gray-900">{heading}</h2>
+      {loading ? (
+        <div className="mt-4">
+          <ProductGridSkeleton count={8} />
+        </div>
+      ) : (
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {items.map((item) => (
+            <div key={item.product.id} className="flex flex-col">
+              <ProductCard product={item.product} />
+              {source === 'llm' && item.reason && (
+                <p className="mt-2 text-xs text-gray-500 leading-relaxed line-clamp-2">
+                  {item.reason}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

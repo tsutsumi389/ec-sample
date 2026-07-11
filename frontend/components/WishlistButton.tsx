@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useToast } from '@/lib/toast-context';
 import { api, ApiError } from '@/lib/api';
 import type { WishlistItem } from '@/lib/types';
 
@@ -22,6 +23,7 @@ interface WishlistButtonProps {
 export default function WishlistButton({ productId, initialFavorited = false, className = '' }: WishlistButtonProps) {
   const { user } = useAuth();
   const router = useRouter();
+  const { showToast } = useToast();
   const [favorited, setFavorited] = useState(initialFavorited);
   const [pending, setPending] = useState(false);
 
@@ -43,11 +45,17 @@ export default function WishlistButton({ productId, initialFavorited = false, cl
     try {
       if (nextFavorited) {
         await api.post<WishlistItem>('/wishlist/items', { product_id: productId });
+        showToast('お気に入りに追加しました', {
+          type: 'success',
+          action: { label: 'お気に入りを見る', href: '/wishlist' },
+        });
       } else {
         await api.delete(`/wishlist/items/${productId}`);
+        showToast('お気に入りから削除しました', { type: 'success' });
       }
     } catch (err) {
       setFavorited(!nextFavorited);
+      showToast('お気に入りの更新に失敗しました。時間をおいてお試しください。', { type: 'error' });
       if (!(err instanceof ApiError)) {
         throw err;
       }

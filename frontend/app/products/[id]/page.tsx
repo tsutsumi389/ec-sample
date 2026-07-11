@@ -4,35 +4,40 @@ import { useEffect, useState, type SyntheticEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
-import type { Product } from '@/lib/types';
+import type { Category, Product } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
-import Spinner from '@/components/Spinner';
+import { useToast } from '@/lib/toast-context';
+import { useCart } from '@/lib/cart-context';
 import Badge from '@/components/Badge';
 import ProductPrice from '@/components/ProductPrice';
 import StockLabel from '@/components/StockLabel';
-import { ArrowLeftIcon } from '@/components/Icons';
+import { ArrowLeftIcon, PlusIcon, BoxIcon, ArrowPathIcon } from '@/components/Icons';
 import RatingStars from '@/components/RatingStars';
 import WishlistButton from '@/components/WishlistButton';
 import RelatedProducts from '@/components/RelatedProducts';
 import ProductRecommendations from '@/components/ProductRecommendations';
 import ReviewSection from '@/components/ReviewSection';
+import RecentlyViewed from '@/components/RecentlyViewed';
+import Breadcrumbs, { type BreadcrumbItem } from '@/components/Breadcrumbs';
+import { Skeleton } from '@/components/Skeleton';
+import { iconButton } from '@/lib/buttonStyles';
+import { recordRecentlyViewed } from '@/lib/recentlyViewed';
 import { PRODUCT_STATUS_META } from '@/lib/productStatus';
-
-const SELECT_CHEVRON =
-  "url(\"data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")";
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { showToast } = useToast();
+  const { refresh } = useCart();
   const id = params?.id;
 
   const [product, setProduct] = useState<Product | null>(null);
+  const [categoryName, setCategoryName] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
 
@@ -46,6 +51,9 @@ export default function ProductDetailPage() {
       .then((p) => {
         setProduct(p);
         setSelectedImage(0);
+        setQuantity(1);
+        // 取得に成功した商品だけを閲覧履歴に残す。
+        recordRecentlyViewed(p.id);
       })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 404) {
@@ -57,19 +65,45 @@ export default function ProductDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  // パンくず用にカテゴリ名を解決する（category_id があるときのみ）。
+  useEffect(() => {
+    const categoryId = product?.category_id;
+    if (!categoryId) {
+      setCategoryName(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<Category[]>('/categories')
+      .then((cats) => {
+        if (!cancelled) setCategoryName(cats.find((c) => c.id === categoryId)?.name ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setCategoryName(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.category_id]);
+
   const handleAddToCart = async () => {
     if (!user) {
       router.push('/login');
       return;
     }
     setAdding(true);
-    setMessage('');
     setError('');
     try {
       await api.post('/cart/items', { product_id: Number(id), quantity });
-      setMessage('カートに追加しました');
+      await refresh();
+      showToast('カートに追加しました', {
+        type: 'success',
+        action: { label: 'カートを見る', href: '/cart' },
+      });
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'カートへの追加に失敗しました');
+      const msg = e instanceof ApiError ? e.message : 'カートへの追加に失敗しました';
+      setError(msg);
+      showToast(msg, { type: 'error' });
     } finally {
       setAdding(false);
     }
@@ -77,9 +111,29 @@ export default function ProductDetailPage() {
 
   if (loading) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-8 text-gray-600 flex items-center">
-        <Spinner className="mr-2" />
-        読み込み中...
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <Skeleton className="h-4 w-56" />
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="self-start">
+            <Skeleton className="aspect-[4/3] w-full" />
+            <div className="mt-3 flex gap-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-16" />
+              ))}
+            </div>
+          </div>
+          <div>
+            <Skeleton className="h-8 w-3/4" />
+            <Skeleton className="mt-3 h-4 w-32" />
+            <Skeleton className="mt-4 h-10 w-44" />
+            <div className="mt-8 space-y-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+            <Skeleton className="mt-8 h-44 w-full" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -104,6 +158,9 @@ export default function ProductDetailPage() {
   const statusMeta = PRODUCT_STATUS_META[product.status];
   const isOnSale = product.status === 'on_sale';
   const soldOut = isOnSale && product.stock <= 0;
+  const maxQty = Math.max(1, Math.min(product.stock, 10));
+  const decQty = () => setQuantity((q) => Math.max(1, q - 1));
+  const incQty = () => setQuantity((q) => Math.min(maxQty, q + 1));
   // メイン画像を先頭に、ギャラリー画像を続けて並べる。
   const gallery = [product.image_url, ...product.images.map((i) => i.image_url)].filter(Boolean);
   const activeImage = gallery[selectedImage] ?? product.image_url;
@@ -114,6 +171,14 @@ export default function ProductDetailPage() {
     discontinued: 'この商品は販売を終了しました。',
   };
 
+  const breadcrumbItems: BreadcrumbItem[] = [
+    { label: 'ホーム', href: '/' },
+    ...(product.category_id && categoryName
+      ? [{ label: categoryName, href: `/?category_id=${product.category_id}` }]
+      : []),
+    { label: product.name },
+  ];
+
   const onImageError = (e: SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
     if (img.src.endsWith('/no-image.svg')) return;
@@ -123,13 +188,7 @@ export default function ProductDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <Link
-        href="/"
-        className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline"
-      >
-        <ArrowLeftIcon className="w-4 h-4" />
-        商品一覧に戻る
-      </Link>
+      <Breadcrumbs items={breadcrumbItems} />
 
       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="self-start">
@@ -144,7 +203,7 @@ export default function ProductDetailPage() {
                 src={activeImage}
                 alt={product.name}
                 onError={onImageError}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover transition-transform duration-300 ease-out hover:scale-105"
               />
             </div>
           </div>
@@ -189,40 +248,57 @@ export default function ProductDetailPage() {
           </div>
 
           {/* グループ2: 説明文 */}
-          <p className="mt-8 text-gray-700 leading-relaxed whitespace-pre-wrap">
-            {product.description}
-          </p>
+          <div className="mt-8">
+            <h2 className="text-sm font-semibold text-gray-900">この道具について</h2>
+            <p className="mt-2 text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {product.description}
+            </p>
+          </div>
 
           {/* グループ3: 購入パネル（on_sale のみ。その他は理由を表示） */}
           {isOnSale ? (
-            <div className="mt-8 border border-gray-200 bg-gray-50 rounded-lg p-4 md:p-5">
-              <div>
-                <label htmlFor="quantity" className="block text-sm font-medium text-gray-700">
-                  数量
-                </label>
-                <select
-                  id="quantity"
-                  value={quantity}
-                  onChange={(e) => setQuantity(Number(e.target.value))}
-                  disabled={soldOut}
-                  className="mt-1 w-24 appearance-none border border-gray-300 rounded-md bg-white px-3 py-2.5 pr-9 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{
-                    backgroundImage: SELECT_CHEVRON,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 0.625rem center',
-                    backgroundSize: '1rem 1rem',
-                  }}
-                >
-                  {soldOut ? (
-                    <option value={1}>-</option>
-                  ) : (
-                    Array.from({ length: Math.min(product.stock, 10) }, (_, i) => i + 1).map((q) => (
-                      <option key={q} value={q}>
-                        {q}
-                      </option>
-                    ))
-                  )}
-                </select>
+            <div className="mt-8 rounded-lg border border-gray-200 border-t-2 border-t-brand-600 bg-white p-4 md:p-5">
+              <div role="group" aria-label="数量">
+                <span className="block text-sm font-medium text-gray-700">数量</span>
+                <div className="mt-2 inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={decQty}
+                    disabled={soldOut || quantity <= 1}
+                    aria-label="数量を1つ減らす"
+                    className={iconButton}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                      className="w-4 h-4"
+                    >
+                      <path d="M5 12h14" />
+                    </svg>
+                  </button>
+                  <span
+                    aria-live="polite"
+                    aria-label={`数量 ${quantity}`}
+                    className="w-10 text-center text-base font-medium tabular-nums text-gray-900"
+                  >
+                    {quantity}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={incQty}
+                    disabled={soldOut || quantity >= maxQty}
+                    aria-label="数量を1つ増やす"
+                    className={iconButton}
+                  >
+                    <PlusIcon className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               <button
                 type="button"
@@ -232,24 +308,27 @@ export default function ProductDetailPage() {
               >
                 {soldOut ? '在庫切れ' : adding ? '追加中...' : 'カートに追加'}
               </button>
+
+              {/* 配送・返品の安心情報 */}
+              <div className="mt-4 space-y-2 border-t border-gray-100 pt-4">
+                <p className="flex items-center gap-2 text-xs text-gray-600">
+                  <BoxIcon className="w-4 h-4 shrink-0 text-brand-600" />
+                  14時までのご注文で翌営業日に出荷いたします
+                </p>
+                <p className="flex items-center gap-2 text-xs text-gray-600">
+                  <ArrowPathIcon className="w-4 h-4 shrink-0 text-brand-600" />
+                  お届けから30日間の返品保証つき
+                </p>
+              </div>
             </div>
           ) : (
-            <div className="mt-8 border border-gray-200 bg-gray-50 rounded-lg p-4 md:p-5">
+            <div className="mt-8 rounded-lg border border-gray-200 bg-gray-50 p-4 md:p-5">
               <p className="text-sm text-gray-700">
                 {purchaseNotice[product.status] ?? 'この商品は現在購入いただけません。'}
               </p>
             </div>
           )}
 
-          {message && (
-            <p
-              role="status"
-              aria-live="polite"
-              className="mt-3 bg-green-50 border border-green-200 text-green-700 rounded-md px-4 py-3 text-sm"
-            >
-              {message}
-            </p>
-          )}
           {error && (
             <p role="alert" className="mt-3 text-red-600">
               {error}
@@ -267,6 +346,8 @@ export default function ProductDetailPage() {
         avgRating={product.avg_rating}
         reviewCount={product.review_count}
       />
+
+      <RecentlyViewed excludeId={product.id} />
     </div>
   );
 }

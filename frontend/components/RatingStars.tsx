@@ -41,6 +41,8 @@ interface RatingStarsDisplayProps {
   value: number | null;
   /** レビュー件数。指定すると "(件数)" を併記する。 */
   count?: number;
+  /** 星の右側に数値・件数テキストを併記するか（デフォルト true）。星だけ出したい場合は false。 */
+  showValue?: boolean;
   size?: RatingStarsSize;
   className?: string;
   interactive?: false;
@@ -92,7 +94,7 @@ export default function RatingStars(props: RatingStarsProps) {
     );
   }
 
-  const { value, count } = props;
+  const { value, count, showValue = true } = props;
 
   return (
     <div className={`inline-flex items-center gap-1 ${className}`}>
@@ -101,14 +103,15 @@ export default function RatingStars(props: RatingStarsProps) {
           <Star key={star} fillRatio={value != null ? value - (star - 1) : 0} sizeClass={sizeClass} />
         ))}
       </div>
-      {value != null ? (
-        <span className="text-xs text-gray-500">
-          {value.toFixed(1)}
-          {typeof count === 'number' ? `（${count}件）` : ''}
-        </span>
-      ) : (
-        <span className="text-xs text-gray-400">レビューなし</span>
-      )}
+      {showValue &&
+        (value != null ? (
+          <span className="text-xs text-gray-500">
+            {value.toFixed(1)}
+            {typeof count === 'number' ? `（${count}件）` : ''}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">レビューなし</span>
+        ))}
     </div>
   );
 }

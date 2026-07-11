@@ -4,19 +4,45 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
-import type { Address, Cart, CouponValidation } from '@/lib/types';
+import type { Address, Cart, CartItem, CouponValidation } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
+import { useCart } from '@/lib/cart-context';
+import { useToast } from '@/lib/toast-context';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
+import Breadcrumbs from '@/components/Breadcrumbs';
+import EmptyState from '@/components/EmptyState';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { Skeleton } from '@/components/Skeleton';
+import { CartIcon, TrashIcon, ChevronRightIcon } from '@/components/Icons';
 import { btnPrimary } from '@/lib/buttonStyles';
 
 /** 数量セレクト用の自前シェブロン（appearance-none と組で使う） */
 const SELECT_CHEVRON =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m19.5 8.25-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E";
 
+/** 読み込み中のカート行スケルトン（実際の行レイアウトに合わせる）。 */
+function CartRowSkeleton() {
+  return (
+    <div className="flex gap-4 p-4">
+      <Skeleton className="w-20 h-20 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <Skeleton className="h-5 w-1/2" />
+        <Skeleton className="mt-2 h-4 w-1/4" />
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <Skeleton className="h-10 w-20" />
+          <Skeleton className="h-5 w-20" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CartPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const { refresh } = useCart();
+  const { showToast } = useToast();
 
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,12 +52,17 @@ export default function CartPage() {
   const [submitting, setSubmitting] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
+  // 削除確認ダイアログ
+  const [removeTarget, setRemoveTarget] = useState<CartItem | null>(null);
+  const [removing, setRemoving] = useState(false);
+
   // 住所帳
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addressesLoaded, setAddressesLoaded] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<number | 'manual'>('manual');
 
   // クーポン
+  const [couponOpen, setCouponOpen] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [couponValidating, setCouponValidating] = useState(false);
   const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
@@ -52,6 +83,41 @@ export default function CartPage() {
       .then(setCart)
       .catch((e) => setError(e instanceof ApiError ? e.message : 'カートの取得に失敗しました'))
       .finally(() => setLoading(false));
+  };
+
+  // 数量変更・削除の後にスケルトンを出さず静かに取り直す。
+  const refreshCart = async () => {
+    const data = await api.get<Cart>('/cart');
+    setCart(data);
+    return data;
+  };
+
+  // 数量変更・削除でカート合計が変わったら、適用中クーポンを新しい小計で再検証する。
+  // 無効になった（最低購入額割れなど）場合はクーポンを解除して通知する。
+  const revalidateAppliedCoupon = async (nextCart: Cart) => {
+    if (!appliedCoupon) return;
+    const removeStaleCoupon = () => {
+      setAppliedCoupon(null);
+      setCouponResult(null);
+      showToast('カート内容が変わったためクーポンを解除しました。再度ご確認ください', {
+        type: 'info',
+      });
+    };
+    try {
+      const result = await api.post<CouponValidation>('/coupons/validate', {
+        code: appliedCoupon.code,
+        subtotal: nextCart.total_amount,
+      });
+      if (result.valid) {
+        setAppliedCoupon({ code: appliedCoupon.code, discount_amount: result.discount_amount });
+        setCouponResult(result);
+      } else {
+        removeStaleCoupon();
+      }
+    } catch {
+      // 再検証できない場合は割引額が古いまま残るのを避けるためクーポンを解除する
+      removeStaleCoupon();
+    }
   };
 
   useEffect(() => {
@@ -76,28 +142,33 @@ export default function CartPage() {
   const handleQuantityChange = async (itemId: number, quantity: number) => {
     if (quantity < 1) return;
     setUpdatingId(itemId);
-    setError('');
     try {
       await api.put(`/cart/items/${itemId}`, { quantity });
-      loadCart();
+      const nextCart = await refreshCart();
+      await refresh();
+      showToast('数量を変更しました');
+      await revalidateAppliedCoupon(nextCart);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : '更新に失敗しました');
+      showToast(e instanceof ApiError ? e.message : '更新に失敗しました', { type: 'error' });
     } finally {
       setUpdatingId(null);
     }
   };
 
-  const handleRemove = async (itemId: number) => {
-    if (!window.confirm('カートから削除しますか？')) return;
-    setUpdatingId(itemId);
-    setError('');
+  const confirmRemove = async () => {
+    if (!removeTarget) return;
+    setRemoving(true);
     try {
-      await api.delete(`/cart/items/${itemId}`);
-      loadCart();
+      await api.delete(`/cart/items/${removeTarget.id}`);
+      const nextCart = await refreshCart();
+      await refresh();
+      showToast('カートから削除しました');
+      setRemoveTarget(null);
+      await revalidateAppliedCoupon(nextCart);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : '削除に失敗しました');
+      showToast(e instanceof ApiError ? e.message : '削除に失敗しました', { type: 'error' });
     } finally {
-      setUpdatingId(null);
+      setRemoving(false);
     }
   };
 
@@ -114,6 +185,8 @@ export default function CartPage() {
       setCouponResult(result);
       if (result.valid) {
         setAppliedCoupon({ code, discount_amount: result.discount_amount });
+        await refresh();
+        showToast('クーポンを適用しました');
       } else {
         setAppliedCoupon(null);
       }
@@ -155,10 +228,15 @@ export default function CartPage() {
         payload.coupon_code = appliedCoupon.code;
       }
       const order = await api.post<{ id: number }>('/orders', payload);
-      router.push(`/orders/${order.id}?justOrdered=1`);
+      await refresh();
+      showToast('ご注文ありがとうございます');
+      if (order?.id) {
+        router.push(`/orders/${order.id}?thanks=1`);
+      } else {
+        router.push('/orders');
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '注文に失敗しました');
-    } finally {
       setSubmitting(false);
     }
   };
@@ -172,29 +250,41 @@ export default function CartPage() {
     );
   }
 
+  const subtotal = cart?.total_amount ?? 0;
+  const discount = appliedCoupon?.discount_amount ?? 0;
+  const total = Math.max(subtotal - discount, 0);
+  const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">カート</h1>
+      <Breadcrumbs items={[{ label: 'ホーム', href: '/' }, { label: 'カート' }]} />
+      <h1 className="text-2xl font-bold mt-4 mb-6">カート</h1>
 
-      {loading && (
-        <p className="text-gray-600 flex items-center">
-          <Spinner className="mr-2" />
-          読み込み中...
-        </p>
-      )}
       {error && (
         <p role="alert" className="text-red-600 mb-4">
           {error}
         </p>
       )}
 
-      {!loading && cart && cart.items.length === 0 && (
-        <div>
-          <p className="text-gray-600 mb-2">カートは空です。</p>
-          <Link href="/" className="text-brand-600 hover:underline">
-            商品を見る
-          </Link>
+      {loading && (
+        <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
+          <CartRowSkeleton />
+          <CartRowSkeleton />
+          <CartRowSkeleton />
         </div>
+      )}
+
+      {!loading && cart && cart.items.length === 0 && (
+        <EmptyState
+          icon={<CartIcon />}
+          title="カートは空です"
+          description="気になる道具を見つけて、カートに入れてみてください。"
+          action={
+            <Link href="/" className={btnPrimary}>
+              商品を見る
+            </Link>
+          }
+        />
       )}
 
       {!loading && cart && cart.items.length > 0 && (
@@ -214,123 +304,163 @@ export default function CartPage() {
                   }}
                   className="w-20 h-20 object-cover rounded-md bg-gray-100 shrink-0"
                 />
-                <div className="flex-1 min-w-0 sm:flex sm:items-center sm:gap-4">
-                  <div className="min-w-0 sm:flex-1">
-                    <Link href={`/products/${item.product.id}`} className="font-medium hover:underline">
-                      {item.product.name}
-                    </Link>
-                    <p className="mt-1 text-sm text-gray-500">
-                      ¥{item.product.effective_price.toLocaleString()} × {item.quantity}
-                    </p>
-                  </div>
-                  <div className="mt-2 sm:mt-0 flex items-center gap-3">
-                    <select
-                      value={item.quantity}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <Link href={`/products/${item.product.id}`} className="font-medium hover:underline">
+                        {item.product.name}
+                      </Link>
+                      <p className="mt-1 text-sm text-gray-500">
+                        ¥{item.product.effective_price.toLocaleString()} × {item.quantity}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRemoveTarget(item)}
                       disabled={updatingId === item.id}
-                      onChange={(e) => handleQuantityChange(item.id, Number(e.target.value))}
-                      aria-label={`${item.product.name}の数量`}
-                      style={{ backgroundImage: `url("${SELECT_CHEVRON}")` }}
-                      className="appearance-none bg-white border border-gray-300 rounded-md pl-3 pr-8 py-2.5 text-sm bg-no-repeat bg-[right_0.5rem_center] bg-[length:1rem_1rem] disabled:opacity-50"
+                      aria-label={`${item.product.name}を削除`}
+                      className="shrink-0 -m-1.5 rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 disabled:opacity-50"
                     >
-                      {Array.from(
-                        { length: Math.max(item.product.stock, item.quantity, 1) },
-                        (_, i) => i + 1
-                      ).map((q) => (
-                        <option key={q} value={q}>
-                          {q}
-                        </option>
-                      ))}
-                    </select>
+                      <TrashIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex items-center gap-2">
+                      <label htmlFor={`qty-${item.id}`} className="text-sm text-gray-500">
+                        数量
+                      </label>
+                      <select
+                        id={`qty-${item.id}`}
+                        value={item.quantity}
+                        disabled={updatingId === item.id}
+                        onChange={(e) => handleQuantityChange(item.id, Number(e.target.value))}
+                        aria-label={`${item.product.name}の数量`}
+                        style={{ backgroundImage: `url("${SELECT_CHEVRON}")` }}
+                        className="appearance-none bg-white border border-gray-300 rounded-md pl-3 pr-8 py-2.5 text-sm bg-no-repeat bg-[right_0.5rem_center] bg-[length:1rem_1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:border-brand-400 disabled:opacity-50"
+                      >
+                        {Array.from(
+                          { length: Math.max(item.product.stock, item.quantity, 1) },
+                          (_, i) => i + 1
+                        ).map((q) => (
+                          <option key={q} value={q}>
+                            {q}
+                          </option>
+                        ))}
+                      </select>
+                      {updatingId === item.id && <Spinner className="w-4 h-4 text-gray-400" />}
+                    </div>
                     <Price
                       value={item.subtotal}
                       size="base"
                       as="p"
-                      className="flex-1 text-right sm:flex-none sm:w-24"
+                      className="sm:ml-auto sm:text-right"
                     />
-                    <button
-                      type="button"
-                      onClick={() => handleRemove(item.id)}
-                      disabled={updatingId === item.id}
-                      aria-label={`${item.product.name}を削除`}
-                      className="shrink-0 text-sm text-red-600 hover:text-red-700 hover:underline transition-colors duration-150 disabled:opacity-50 px-2 py-2 -m-2"
-                    >
-                      {updatingId === item.id ? '削除中...' : '削除'}
-                    </button>
                   </div>
                 </div>
               </div>
             ))}
-            <div className="px-4 py-4 bg-gray-50 rounded-b-lg space-y-1">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm font-medium text-gray-700">
-                  小計（{cart.items.reduce((sum, item) => sum + item.quantity, 0)}点）
-                </span>
-                <Price value={cart.total_amount} size="base" as="p" />
-              </div>
-              {appliedCoupon && (
-                <div className="flex items-center justify-between gap-4 text-brand-700">
-                  <span className="text-sm font-medium">クーポン割引（{appliedCoupon.code}）</span>
-                  <p className="text-sm font-medium">-¥{appliedCoupon.discount_amount.toLocaleString()}</p>
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-4 pt-1">
-                <span className="text-sm font-medium text-gray-700">合計</span>
-                <Price
-                  value={Math.max(cart.total_amount - (appliedCoupon?.discount_amount ?? 0), 0)}
-                  size="2xl"
-                  strong
-                  as="p"
-                />
-              </div>
-            </div>
           </div>
 
-          <div className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
-            <label htmlFor="coupon" className="block text-sm font-medium text-gray-700 mb-2">
-              クーポンコード
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="coupon"
-                type="text"
-                value={couponCode}
-                onChange={(e) => {
-                  setCouponCode(e.target.value);
-                  setCouponResult(null);
-                }}
-                placeholder="例）WELCOME10"
-                disabled={Boolean(appliedCoupon)}
-                className="flex-1 border border-gray-300 rounded-md px-3 py-2.5 text-sm disabled:opacity-50 disabled:bg-gray-50"
+          {/* クーポン（折りたたみ） */}
+          <div className="mt-6 bg-white rounded-lg border border-gray-200">
+            <button
+              type="button"
+              onClick={() => setCouponOpen((o) => !o)}
+              aria-expanded={couponOpen}
+              aria-controls="coupon-panel"
+              className="flex w-full items-center justify-between px-4 py-3.5 text-sm font-medium text-gray-700 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+            >
+              <span>
+                クーポンをお持ちの方
+                {appliedCoupon && (
+                  <span className="ml-2 text-xs text-brand-700">適用中: {appliedCoupon.code}</span>
+                )}
+              </span>
+              <ChevronRightIcon
+                className={`h-4 w-4 shrink-0 text-gray-400 transition-transform duration-150 ${
+                  couponOpen ? 'rotate-90' : ''
+                }`}
               />
-              {appliedCoupon ? (
-                <button
-                  type="button"
-                  onClick={handleRemoveCoupon}
-                  className="shrink-0 rounded-md border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  解除
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleValidateCoupon}
-                  disabled={couponValidating || !couponCode.trim()}
-                  className="shrink-0 rounded-md border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {couponValidating ? '確認中...' : '適用する'}
-                </button>
-              )}
-            </div>
-            {couponResult && (
-              <p
-                role={couponResult.valid ? undefined : 'alert'}
-                className={`mt-2 text-sm ${couponResult.valid ? 'text-brand-700' : 'text-red-600'}`}
-              >
-                {couponResult.valid ? 'クーポンを適用しました。' : couponResult.message}
-              </p>
+            </button>
+            {couponOpen && (
+              <div id="coupon-panel" className="px-4 pb-4">
+                <label htmlFor="coupon" className="sr-only">
+                  クーポンコード
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="coupon"
+                    type="text"
+                    value={couponCode}
+                    onChange={(e) => {
+                      setCouponCode(e.target.value);
+                      setCouponResult(null);
+                    }}
+                    placeholder="例）WELCOME10"
+                    disabled={Boolean(appliedCoupon)}
+                    className="flex-1 border border-gray-300 rounded-md px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:border-brand-400 disabled:opacity-50 disabled:bg-gray-50"
+                  />
+                  {appliedCoupon ? (
+                    <button
+                      type="button"
+                      onClick={handleRemoveCoupon}
+                      className="shrink-0 rounded-md border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+                    >
+                      解除
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleValidateCoupon}
+                      disabled={couponValidating || !couponCode.trim()}
+                      className="shrink-0 rounded-md border border-gray-300 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+                    >
+                      {couponValidating ? '確認中...' : '適用する'}
+                    </button>
+                  )}
+                </div>
+                {couponResult && (
+                  <p
+                    role={couponResult.valid ? 'status' : 'alert'}
+                    className={`mt-2 text-sm ${couponResult.valid ? 'text-brand-700' : 'text-red-600'}`}
+                  >
+                    {couponResult.valid ? 'クーポンを適用しました。' : couponResult.message}
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
+          {/* お支払い金額の内訳 */}
+          <div className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
+            <dl className="space-y-2">
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-sm text-gray-600">小計（{itemCount}点）</dt>
+                <dd>
+                  <Price value={subtotal} size="base" as="span" />
+                </dd>
+              </div>
+              {appliedCoupon && (
+                <div className="flex items-center justify-between gap-4 text-brand-700">
+                  <dt className="text-sm font-medium">クーポン割引（{appliedCoupon.code}）</dt>
+                  <dd className="text-sm font-medium">-¥{discount.toLocaleString()}</dd>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-sm text-gray-600">送料</dt>
+                <dd className="text-sm font-medium text-gray-900">無料</dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 border-t border-gray-200 pt-3">
+                <dt className="text-sm font-medium text-gray-700">合計</dt>
+                <dd>
+                  <Price value={total} size="2xl" strong as="span" />
+                </dd>
+              </div>
+            </dl>
+            <p className="mt-2 text-xs text-gray-400">送料は全国一律無料です。</p>
+          </div>
+
+          {/* 配送先住所 */}
           <div className="mt-6 bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="block text-sm font-medium text-gray-700">
@@ -357,7 +487,7 @@ export default function CartPage() {
                     <input
                       type="radio"
                       name="address-choice"
-                      className="mt-0.5"
+                      className="mt-0.5 accent-brand-600"
                       checked={selectedAddressId === a.id}
                       onChange={() => {
                         setSelectedAddressId(a.id);
@@ -386,7 +516,7 @@ export default function CartPage() {
                   <input
                     type="radio"
                     name="address-choice"
-                    className="mt-0.5"
+                    className="mt-0.5 accent-brand-600"
                     checked={selectedAddressId === 'manual'}
                     onChange={() => setSelectedAddressId('manual')}
                   />
@@ -408,7 +538,7 @@ export default function CartPage() {
                   placeholder="例）東京都渋谷区〇〇1-2-3"
                   aria-invalid={Boolean(addressError)}
                   aria-describedby={addressError ? 'address-error' : undefined}
-                  className={`w-full border rounded-md px-3 py-2.5 text-sm ${
+                  className={`w-full border rounded-md px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:border-brand-400 ${
                     addressError ? 'border-red-400' : 'border-gray-300'
                   }`}
                 />
@@ -430,6 +560,19 @@ export default function CartPage() {
           </div>
         </>
       )}
+
+      <ConfirmDialog
+        open={removeTarget !== null}
+        title={removeTarget ? `「${removeTarget.product.name}」を削除しますか？` : ''}
+        description="この商品をカートから取り除きます。"
+        confirmLabel="削除する"
+        danger
+        busy={removing}
+        onConfirm={confirmRemove}
+        onCancel={() => {
+          if (!removing) setRemoveTarget(null);
+        }}
+      />
     </div>
   );
 }
