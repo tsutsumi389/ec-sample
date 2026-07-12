@@ -137,7 +137,13 @@ def chat(
     )
 
     # LLM 応答（失敗時はフォールバック）を生成する。ここは 500 を出さない。
-    result = assistant.generate_reply(db, payload.message, history)
+    # ログインユーザーは行動履歴をプロンプトに注入する。ゲストは None で従来どおり。
+    result = assistant.generate_reply(
+        db,
+        payload.message,
+        history,
+        user_id=current_user.id if current_user is not None else None,
+    )
 
     # assistant メッセージを永続化する（提案商品IDと生成元を保存）。
     product_ids = [p.id for p, _ in result.products]

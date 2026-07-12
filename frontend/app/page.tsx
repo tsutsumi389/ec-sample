@@ -18,6 +18,7 @@ import { btnPrimary } from '@/lib/buttonStyles';
 const LIMIT = 12;
 
 const SORT_LABELS: Record<ProductSort, string> = {
+  recommended: 'おすすめ順',
   newest: '新着順',
   price_asc: '価格が安い順',
   price_desc: '価格が高い順',

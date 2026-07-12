@@ -355,6 +355,35 @@ class RecommendationState(Base):
     )
 
 
+class ProductView(Base):
+    """ログインユーザーの商品閲覧履歴。パーソナライズのシグナル用。
+
+    1 ユーザー × 1 商品で 1 行だけ持ち、再閲覧時は viewed_at を更新して
+    view_count をインクリメントする（閲覧のたびに行を増やすとテーブルが
+    肥大化するため。購入・お気に入りと同様に「関心のある商品」を表す軽い信号）。
+    """
+
+    __tablename__ = "product_views"
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_id", name="uq_product_view_user_product"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False, index=True
+    )
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
+    # 同一商品を何度見たか。再閲覧のたびに +1 して関心の強さの目安にする。
+    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # 最終閲覧時刻。時間減衰（新しい閲覧ほど重い）の基準に使う。
+    viewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped["User"] = relationship()
+    product: Mapped["Product"] = relationship()
+
+
 # ---------- AIショッピングアシスタント（チャット会話）----------
 #
 # レコメンドとは別の同期チャット機能。会話単位でメッセージを永続化し、未ログインでも

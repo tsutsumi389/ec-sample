@@ -274,7 +274,7 @@
         <tbody>
           <tr><td>フロントエンド</td><td>Next.js 14（App Router）/ React / TypeScript / Tailwind CSS</td><td>全ページ <code>'use client'</code> の SPA 的構成。共通レイアウト＋認証 Context。</td></tr>
           <tr><td>バックエンド</td><td>FastAPI / SQLAlchemy 2.0（<code>Mapped</code>/<code>mapped_column</code>）/ Pydantic</td><td>全ルートは <code>/api</code> プレフィックス配下。依存注入で認証・DB セッションを供給。</td></tr>
-          <tr><td>データベース</td><td>PostgreSQL 16 + pgvector 拡張</td><td>16 モデル。ベクトル検索（コサイン距離）に pgvector を利用。</td></tr>
+          <tr><td>データベース</td><td>PostgreSQL 16 + pgvector 拡張</td><td>17 モデル。ベクトル検索（コサイン距離）に pgvector を利用。</td></tr>
           <tr><td>AI / 埋め込み</td><td>Ollama（埋め込み + チャット）</td><td>埋め込み <code>nomic-embed-text</code>（768 次元）、チャットモデルで理由生成。</td></tr>
           <tr><td>認証</td><td>JWT（HS256, PyJWT）/ passlib bcrypt</td><td>Bearer トークン、有効期限 24h、パスワードは bcrypt ハッシュ。</td></tr>
           <tr><td>実行基盤</td><td>Docker / docker-compose / Makefile</td><td>開発操作は <code>Makefile</code> に集約（<code>make up</code> / <code>make reset</code> 等）。</td></tr>
@@ -341,7 +341,7 @@
   <!-- ============ 5 ============ -->
   <section id="s5">
     <h2><span class="num">05</span>データモデル設計</h2>
-    <p><code>backend/app/models.py</code> に全 16 モデル（EC 中核 10 + レコメンド専用 4 + アシスタント会話 2）を定義する。<code>database.py</code> が <code>Base</code> / <code>engine</code> / <code>SessionLocal</code> / <code>get_db</code> を提供し、<code>seed.py</code> が初期データを冪等投入する。全テーブルは <code>main.py</code> の lifespan 内 <code>Base.metadata.create_all</code> で自動生成される（マイグレーションツール未導入）。</p>
+    <p><code>backend/app/models.py</code> に全 17 モデル（EC 中核 10 + レコメンド・パーソナライズ 5 + アシスタント会話 2）を定義する。<code>database.py</code> が <code>Base</code> / <code>engine</code> / <code>SessionLocal</code> / <code>get_db</code> を提供し、<code>seed.py</code> が初期データを冪等投入する。全テーブルは <code>main.py</code> の lifespan 内 <code>Base.metadata.create_all</code> で自動生成される（マイグレーションツール未導入）。</p>
 
     <h3><span class="num">5.1</span>Product 状態機械（可視性・購入可否の唯一の源）</h3>
     <p>商品の一覧表示・商品ページ表示・購入可否はすべて <code>Product.status</code> の 6 状態から導出する。個別の真偽フラグは持たない（旧 <code>is_active</code> は <code>archived</code> に統合し廃止）。判定は <code>is_listed</code> / <code>is_viewable</code> / <code>purchasable</code> プロパティと <code>LISTED_STATUSES</code> / <code>VIEWABLE_STATUSES</code> 定数に集約される。</p>
@@ -391,8 +391,8 @@
       </table>
     </div>
 
-    <h3><span class="num">5.4</span>レコメンド専用テーブル</h3>
-    <p>既存テーブルにカラムを足さず新規 4 テーブルに分離している（マイグレーション未導入のため既存テーブルへの追加ができず、新規テーブル追加のみ許容される運用に合わせた設計）。</p>
+    <h3><span class="num">5.4</span>レコメンド・パーソナライズ用テーブル</h3>
+    <p>既存テーブルにカラムを足さず新規 5 テーブルに分離している（マイグレーション未導入のため既存テーブルへの追加ができず、新規テーブル追加のみ許容される運用に合わせた設計）。うち <code>product_views</code> は購入・お気に入りと並ぶパーソナライズの行動シグナルで、他 4 テーブルは埋め込み・SID・生成キャッシュを担う。</p>
     <div class="tw">
       <table class="col-mono">
         <thead><tr><th>テーブル</th><th>主なカラム</th><th>役割</th></tr></thead>
@@ -401,6 +401,7 @@
           <tr><td><code>semantic_id_codebooks</code><br>SemanticIdCodebook</td><td><code>generation</code> PK（再構築でインクリメント）/ <code>centroids</code> JSONB（3 階層分、各 K×768）/ <code>created_at</code></td><td>残差量子化のセントロイド世代管理。最新以外は削除</td></tr>
           <tr><td><code>user_recommendations</code><br>UserRecommendation</td><td><code>id</code> PK / <code>user_id</code> FK,index / <code>product_id</code> FK / <code>reason</code>（LLM 生成の理由文）/ <code>rank</code>（default 0）/ <code>created_at</code></td><td>ユーザー別おすすめキャッシュ。生成のたび当該ユーザーの行を丸ごと入れ替え</td></tr>
           <tr><td><code>recommendation_states</code><br>RecommendationState</td><td><code>user_id</code> PK 兼 FK / <code>profile_hash</code> nullable / <code>status</code>（generating / ready / failed）/ <code>generated_at</code> / <code>updated_at</code></td><td>多重起動防止・キャッシュ陳腐化判定。<code>profile_hash</code> 一致かつ ready でキャッシュ返却</td></tr>
+          <tr><td><code>product_views</code><br>ProductView</td><td><code>id</code> PK / <code>user_id</code> FK,index / <code>product_id</code> FK / <code>view_count</code>（default 1）/ <code>viewed_at</code>（timestamptz）</td><td>ログインユーザーの閲覧履歴（パーソナライズの弱いシグナル、view 重み 0.5）。複合 unique <code>uq_product_view_user_product</code> で 1 ユーザー×1 商品 1 行に保ち、再閲覧は viewed_at 更新＋view_count+1 で upsert（履歴の肥大化防止）</td></tr>
         </tbody>
       </table>
     </div>
@@ -448,8 +449,9 @@
     <div class="tw"><table>
       <thead><tr><th>Method</th><th>Path</th><th>認証</th><th>概要</th></tr></thead>
       <tbody>
-        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products</code></td><td><span class="badge a-none">none</span></td><td>商品一覧。search / category_id / sort / min_price / max_price / page（既定 1）/ limit（既定 12, 1-100）。LISTED_STATUSES のみ、平均評価・件数・total 付き</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products</code></td><td><span class="badge a-none">任意</span></td><td>商品一覧。search / category_id / sort（newest / price_asc / price_desc / rating / recommended）/ min_price / max_price / page（既定 1）/ limit（既定 12, 1-100）。LISTED_STATUSES のみ、平均評価・件数・total 付き。<code>sort=recommended</code> はログイン時プロフィール近傍、非ログイン・不能時は人気順（任意認証・詳細は §8.6）</td></tr>
         <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products/{id}</code></td><td><span class="badge a-none">none</span></td><td>商品詳細。viewable でなければ 404。平均評価・件数付き</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/products/{id}/view</code></td><td><span class="badge a-none">任意</span></td><td>閲覧記録（パーソナライズのシグナル収集）。ゲストは no-op で 204、viewable でなければ 404。<code>INSERT … ON CONFLICT DO UPDATE</code> で view_count+1／viewed_at 更新の upsert（並行初回閲覧の競合を吸収）。204</td></tr>
         <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products/{id}/related</code></td><td><span class="badge a-none">none</span></td><td>関連商品。同カテゴリの LISTED を自身除外・id 昇順で最大 4 件</td></tr>
         <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products/{id}/recommendations</code></td><td><span class="badge a-none">none</span></td><td>類似おすすめ。pgvector コサイン近傍、無ければ同カテゴリフォールバック。limit 既定 4（1-20）</td></tr>
         <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products/{id}/reviews</code></td><td><span class="badge a-none">none</span></td><td>レビュー一覧。投稿者名付き、created_at 降順・id 降順</td></tr>
@@ -607,7 +609,7 @@
       <li>ユーザーメッセージを AssistantMessage（role=user、product_ids=[]）として add（未 commit）</li>
       <li><code>generate_reply</code> を呼ぶ。ここは例外を握って必ず結果を返す（500 を出さない）</li>
       <li>候補抽出（ハイブリッド）: <code>build_query_text</code> で直近 3 ユーザー発話を改行連結して埋め込み（<code>nomic-embed-text</code>）→ pgvector コサイン近傍 top-20（LISTED のみ）。加えて新メッセージをトークン分割した ILIKE キーワード検索 top-10。重複除去してベクトル優先でマージ。候補ゼロならフォールバックへ</li>
-      <li>プロンプト構築: 候補を <code>llm_catalog.catalog_line</code>（SID / 商品名 / カテゴリ / effective_price / 平均★）で列挙し、履歴（直近 6 ターン・各 200 字）と <code>&lt;message&gt;</code> で囲んだ新メッセージを付す。PII は入れない</li>
+      <li>プロンプト構築: 候補を <code>llm_catalog.catalog_line</code>（SID / 商品名 / カテゴリ / effective_price / 平均★）で列挙し、履歴（直近 6 ターン・各 200 字）と <code>&lt;message&gt;</code> で囲んだ新メッセージを付す。ログインユーザーは行動履歴（weight 上位 10 件、§8.5）を【お客様のこれまでの行動】として前置きする。PII は入れない</li>
       <li>Ollama chat（<code>format=</code> JSON schema, temperature=0.3, timeout 60 秒）で構造化出力 <code>{reply, items:[{sid, reason}]}</code> を取得・pydantic 検証</li>
       <li>SID 検証: <code>llm_catalog.match_products</code> で候補マップに実在する SID のものだけ採用（正規化・重複除去・最大 4 件）。<code>strip_sids_from_reply</code> で reply 本文の SID 表記を正規表現で除去。本文が空なら定型文に落とす。source=llm で返す</li>
       <li>フォールバック分岐: Ollama 接続不可・タイムアウト・parse 失敗・候補ゼロのいずれでも、キーワード検索 top-4 + 定型文を source=fallback で返す。キーワード 0 件なら <code>get_popular_products</code> top-4（人気順）で必ず商品を出す。Ollama 例外は DB を汚さないため rollback しない</li>
@@ -618,7 +620,7 @@
   <!-- ============ 8 ============ -->
   <section id="s8">
     <h2><span class="num">08</span>AI レコメンド・アシスタント設計</h2>
-    <p>ユーザー行動（購入・カート・お気に入り・高評価レビュー）から商品埋め込みの加重平均でプロフィールベクトルを作り、pgvector のコサイン近傍で候補を絞り、Ollama のチャットモデルにカタログを渡しておすすめ商品と理由を LLM 生成するサブシステム。全体が「Ollama が無くても動く」フォールバック前提で設計されている。§8.5 では、この基盤を再利用したチャット型ショッピングアシスタントを扱う。</p>
+    <p>ユーザー行動（購入・カート・お気に入り・高評価レビュー・閲覧）から商品埋め込みの加重平均でプロフィールベクトルを作り、pgvector のコサイン近傍で候補を絞り、Ollama のチャットモデルにカタログを渡しておすすめ商品と理由を LLM 生成するサブシステム。行動重みには時間減衰を掛けて「今の好み」を優先する。全体が「Ollama が無くても動く」フォールバック前提で設計されている。§8.5 では、この基盤を再利用したチャット型ショッピングアシスタントを、§8.6 ではパーソナライズ信号（閲覧履歴・時間減衰・おすすめ順ソート）を扱う。</p>
 
     <h3><span class="num">8.1</span>パイプライン概観</h3>
     <div class="arch">
@@ -633,7 +635,7 @@
       </div></div>
       <div class="flowdown">▼</div>
       <div class="tier"><span class="tlabel">③ 候補抽出</span><div class="row">
-        <div class="box"><b>build_profile</b><span>行動の加重平均ベクトル。purchase=3.0 / cart=2.0 / wishlist=2.0 / review(≥4)=1.0</span></div>
+        <div class="box"><b>build_profile</b><span>行動の加重平均ベクトル。purchase=3.0 / cart=2.0 / wishlist=2.0 / review(≥4)=1.0 / view=0.5。各重みに半減期30日の時間減衰を乗算（§8.6）</span></div>
         <div class="box"><b>get_candidates</b><span>pgvector コサイン近傍、LISTED のみ・除外適用・上位 20 件</span></div>
       </div></div>
       <div class="flowdown">▼</div>
@@ -657,7 +659,7 @@
       <li>LLM 生成はリクエストの同期パスに置かず必ず <code>BackgroundTasks</code> で非同期実行。バックグラウンドタスクは自前で DB セッションを開閉する</li>
       <li>生成起動前に <code>pg_try_advisory_xact_lock(user_id)</code> で直列化し、mark_generating でレスポンス返却前に generating を同期確定して TOCTOU 競合と二重生成を防ぐ</li>
       <li>失敗クールダウン: state=generating/failed は更新時刻から 10 分以内なら再起動しない（障害時の空回り防止）</li>
-      <li>キャッシュ有効性: state=ready かつ profile_hash（行動の種別:product_id をソート連結した sha256）が現在の行動ハッシュと一致することで判定。行動が変わればキャッシュ失効</li>
+      <li>キャッシュ有効性: state=ready かつ profile_hash（行動の種別:product_id をソート連結した sha256。重み・時刻は含めない、§8.6）が現在の行動ハッシュと一致することで判定。行動が変わればキャッシュ失効（新規閲覧も失効の契機になる）</li>
       <li>行動ゼロまたは対象商品の埋め込み欠損時は profile=None で生成不能とし、生成を起動せずフォールバックのみ</li>
     </ul>
 
@@ -683,6 +685,7 @@
         <tr><td>LLM 出力</td><td><code>format=</code> JSON schema で <code>{items:[{sid, reason}]}</code></td><td>同型＋<code>reply</code>（チャット本文）。<code>_AssistantResponse</code> スキーマで検証</td></tr>
         <tr><td>ハルシネーション対策</td><td>SID を候補マップと照合（<code>llm_catalog.match_products</code>）</td><td>同じ共通関数を再利用。加えて <code>reply</code> 本文の SID 表記を正規表現で除去</td></tr>
         <tr><td>可視性の源</td><td><code>LISTED_STATUSES</code>（候補抽出・返却で再確認）</td><td>同じ（候補抽出・履歴復元の双方で再確認）</td></tr>
+        <tr><td>ログイン行動履歴</td><td>プロフィールの構築元そのもの（§8.6）</td><td>weight 上位 10 件を user プロンプトに注入（<code>history_prompt_lines</code> で共通化。ゲストは注入なし）</td></tr>
         <tr><td>障害時フォールバック</td><td>人気順（<code>get_popular_products</code>）</td><td>トークン分割 ILIKE キーワード検索 top-4 → 0 件なら人気順 top-4。定型文＋<code>source="fallback"</code></td></tr>
         <tr><td>永続化</td><td><code>user_recommendations</code>（ユーザー別キャッシュ、丸ごと差し替え）</td><td><code>assistant_conversations</code> / <code>assistant_messages</code>（会話ログ、追記）</td></tr>
       </tbody>
@@ -695,7 +698,35 @@
       <li><b>入力制限:</b> message 500 字・会話 50 メッセージ・履歴注入は直近 6 ターン（各 200 字切り詰め）でコンテキスト溢れを防ぐ。PII はプロンプトに一切入れない</li>
       <li><b>採用ゼロの許容:</b> LLM が「見つからない」と答え採用 SID が 0 でも、reply はそのまま返し products は空にする（カードだけ返す不自然さを避ける）</li>
     </ul>
-    <div class="note"><span class="lbl">スコープ外（将来拡張）</span><p style="margin:.3em 0 0">チャットからのカート追加・注文（tool calling）、FAQ / 注文状況照会、SSE トークンストリーミング、ログイン行動履歴のプロンプト注入（パーソナライズ）は初版では非対応。同期パスのレイテンシは gemma4 のローカル生成で 5〜20 秒程度になり得るため、フロントは待機 UX（タイピングインジケータ）を必ず入れる。</p></div>
+    <h4>ログインユーザーの行動履歴の注入（パーソナライズ）</h4>
+    <ul>
+      <li>ログインユーザーのチャットでは、<code>recommendation.collect_behaviors</code>（時間減衰済みの weight、§8.6）を weight 降順で上位 10 件に絞り、レコメンドと共通の <code>recommendation.history_prompt_lines</code> で「<code>[購入] {カタログ行}</code>」形式に整形して、user プロンプトの【これまでの会話】ブロックの前に<b>【お客様のこれまでの行動】</b>として差し込む</li>
+      <li><code>SYSTEM_PROMPT</code> に「行動が与えられたらその好みを踏まえて提案し、無ければ通常どおり応対する」旨の指示を 1 行追加。注入するのは商品名・行動種別のみで、PII（氏名・メール）は一切入れない</li>
+      <li>ゲスト会話（user_id なし）は従来どおり注入しない。履歴構築の例外はすべて握って空リストにし、チャット本体は止めない（フォールバック経路は不変）</li>
+    </ul>
+    <div class="note"><span class="lbl">スコープ外（将来拡張）</span><p style="margin:.3em 0 0">チャットからのカート追加・注文（tool calling）、FAQ / 注文状況照会、SSE トークンストリーミングは初版では非対応（ログイン行動履歴のプロンプト注入は上記のとおり対応済み）。同期パスのレイテンシは gemma4 のローカル生成で 5〜20 秒程度になり得るため、フロントは待機 UX（タイピングインジケータ）を必ず入れる。</p></div>
+
+    <h3><span class="num">8.6</span>パーソナライズ信号（閲覧履歴・時間減衰・おすすめ順ソート）</h3>
+    <p>プロフィールベクトル（§8.1 <code>build_profile</code>）は購入・カート・お気に入り・高評価に加えて<b>閲覧履歴</b>を弱いシグナルとして取り込み、各行動の重みに<b>時間減衰</b>を掛けて「今の好み」を優先する。さらにこの同じプロフィールを商品一覧の「おすすめ順」ソートにも再利用する。</p>
+    <h4>行動シグナルの重みと時間減衰</h4>
+    <div class="tw"><table>
+      <thead><tr><th>行動</th><th>基本重み</th><th>減衰の基準時刻</th></tr></thead>
+      <tbody>
+        <tr><td>purchase（購入）</td><td>3.0</td><td>商品ごとの最新注文時刻（cancelled 以外の注文の <code>max(created_at)</code>）</td></tr>
+        <tr><td>cart（カート）</td><td>2.0</td><td>減衰なし（CartItem は時刻列を持たない＝「今まさにある関心」扱い）</td></tr>
+        <tr><td>wishlist（お気に入り）</td><td>2.0</td><td><code>created_at</code></td></tr>
+        <tr><td>review（高評価・★≥4）</td><td>1.0</td><td><code>created_at</code></td></tr>
+        <tr><td>view（閲覧）</td><td>0.5</td><td><code>viewed_at</code>（直近 20 件のみプロフィールに反映）</td></tr>
+      </tbody>
+    </table></div>
+    <p>実効重みは <code>基本重み × 減衰係数</code>。減衰係数は <code>max(0.05, 0.5^(経過日数 / 30))</code>（半減期 30 日、下限 0.05 でどれだけ古くても完全には消さない）。列を足さない方針でタイムスタンプを持たないカートだけは減衰なし。view は加重平均には効かせるが、除外集合（購入済み＋カート）には含めない。</p>
+    <div class="note"><span class="lbl">設計判断: profile_hash に重み・時刻を入れない</span><p style="margin:.3em 0 0"><code>profile_hash</code> は「<code>種別:product_id</code> の集合」だけから算出し、重みや発生時刻は<b>意図的に含めない</b>。含めると時間減衰でハッシュが毎瞬変わり、行動が増減していなくてもキャッシュが永続的に陳腐化して LLM 再生成が止まらなくなるためである。一方 view はハッシュに入るので、新しい商品を閲覧するとキャッシュが失効して再生成が走る——これは「閲覧に追従しておすすめを更新する」意図的な挙動（多重起動は BackgroundTasks + advisory ロックで抑止）。</p></div>
+    <h4>商品一覧のおすすめ順ソート</h4>
+    <p><span class="badge m-get">GET</span> <code>/api/products?sort=recommended</code>（任意認証）は、ログインユーザーのプロフィールベクトルと <code>ProductEmbedding</code> の pgvector コサイン距離昇順で商品一覧を並べる（埋め込みの無い商品は nullslast で末尾、タイブレークは id）。プロフィールが作れない場合（未ログイン・行動ゼロ・埋め込み欠損）は人気順（注文数 desc → 平均評価 desc → 新着 desc）にフォールバックする。</p>
+    <ul>
+      <li>レコメンド枠（§8.1–8.4）と違い<b>一覧なので購入済み商品も除外せず、並び順だけを変える</b>（品揃え全体を好みに寄せて見せるのが目的）。既存の検索・カテゴリ・価格帯フィルタ・ページネーションと共存する</li>
+      <li>既知の制約: プロフィールはリクエストごとに再計算され、時間減衰でベクトルがわずかに動くため、ページ間で近接タイの商品が重複／欠落し得る（厳密な整合にはプロフィールの短期キャッシュが要るが、サンプル規模では許容）</li>
+    </ul>
   </section>
 
   <!-- ============ 9 ============ -->
@@ -742,8 +773,8 @@
     <div class="tw"><table>
       <thead><tr><th>画面</th><th>パス</th><th>概要</th></tr></thead>
       <tbody>
-        <tr><td>トップ / 商品一覧</td><td><code>app/page.tsx</code></td><td>Hero＋おすすめ＋一覧。検索/カテゴリ/並び替え/価格帯/ページを URL クエリで保持。Suspense 境界あり</td></tr>
-        <tr><td>商品詳細</td><td><code>app/products/[id]/page.tsx</code></td><td>画像ギャラリー・数量選択・カート追加。on_sale のみ購入パネル表示、他状態は理由文。関連/おすすめ/レビュー内包</td></tr>
+        <tr><td>トップ / 商品一覧</td><td><code>app/page.tsx</code></td><td>Hero＋おすすめ＋一覧。検索/カテゴリ/並び替え/価格帯/ページを URL クエリで保持。並び替え（<code>ProductFilters</code>）は先頭に「おすすめ順」（<code>recommended</code>）を追加、既定は新着順。Suspense 境界あり</td></tr>
+        <tr><td>商品詳細</td><td><code>app/products/[id]/page.tsx</code></td><td>画像ギャラリー・数量選択・カート追加。on_sale のみ購入パネル表示、他状態は理由文。関連/おすすめ/レビュー内包。表示時にログイン中のみ閲覧を <code>POST /products/{id}/view</code> で fire-and-forget 記録（失敗は無視。localStorage の「最近見た商品」とは独立に併存）</td></tr>
         <tr><td>カート</td><td><code>app/cart/page.tsx</code></td><td>数量変更・削除、クーポン検証、住所選択 or 手入力、注文確定。未ログインは /login?redirect=/cart へ</td></tr>
         <tr><td>注文履歴</td><td><code>app/orders/page.tsx</code></td><td>一覧。pending/paid のみキャンセルボタン表示</td></tr>
         <tr><td>注文詳細</td><td><code>app/orders/[id]/page.tsx</code></td><td>明細スナップショット表示、justOrdered で完了メッセージ。Suspense 境界あり</td></tr>
@@ -806,7 +837,8 @@
       <thead><tr><th>決定</th><th>内容 / 理由</th></tr></thead>
       <tbody>
         <tr><td>マイグレーション未導入</td><td>Alembic 等は入れない。テーブルは <code>main.py</code> lifespan の <code>Base.metadata.create_all</code> で自動生成（OperationalError で最大 10 回リトライ）。モデル変更は <code>make reset</code> で DB 作り直さないと反映されない</td></tr>
-        <tr><td>既存テーブルへの追加は不可</td><td>マイグレーション未導入のため、レコメンド機能は既存テーブルにカラムを足さず新規 4 テーブルに分離。将来の拡張も新規テーブル追加で行う</td></tr>
+        <tr><td>既存テーブルへの追加は不可</td><td>マイグレーション未導入のため、レコメンド機能は既存テーブルにカラムを足さず新規 5 テーブル（埋め込み・SID・キャッシュ 4 ＋ 閲覧履歴 <code>product_views</code>）に分離。将来の拡張も新規テーブル追加で行う</td></tr>
+        <tr><td>パーソナライズ信号の分離と時間減衰</td><td>閲覧履歴は専用テーブル <code>product_views</code>（1 ユーザー×1 商品 1 行の upsert）に持ち既存テーブルを汚さない。行動重みは半減期 30 日で時間減衰させ「今の好み」を優先。<code>profile_hash</code> には <code>種別:product_id</code> の集合のみを入れ重み・時刻は含めない（時間経過だけでキャッシュが陳腐化しないため）。§8.6</td></tr>
         <tr><td>商品は論理削除のみ</td><td>Product を物理削除してはならない。<code>status="archived"</code> にする。過去注文のスナップショットは不変に保たれる</td></tr>
         <tr><td>status が可視性・購入可否の唯一の源</td><td>6 状態から <code>is_listed</code>/<code>is_viewable</code>/<code>purchasable</code> を導出。個別の真偽フラグを増やさない（旧 is_active は archived に統合）</td></tr>
         <tr><td>実売価格は effective_price</td><td>sale_price があればそれ、なければ price。カート小計・注文金額・OrderItem スナップショットは全て effective_price を使い price を直接使わない</td></tr>
