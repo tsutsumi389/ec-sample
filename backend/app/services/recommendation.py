@@ -23,6 +23,7 @@ from app.models import (
     OrderItem,
     Product,
     ProductEmbedding,
+    ProductView,
     RecommendationState,
     Review,
     UserRecommendation,
@@ -33,15 +34,43 @@ from app.services import llm_catalog
 logger = logging.getLogger(__name__)
 
 # 行動種別ごとの重み（プロフィールベクトルの加重平均に使う）。
+# view（閲覧）は購入・お気に入りより弱いシグナルなので小さめの重みにする。
 _BEHAVIOR_WEIGHTS = {
     "purchase": 3.0,
     "cart": 2.0,
     "wishlist": 2.0,
     "review": 1.0,
+    "view": 0.5,
 }
 
 # LLM に渡す候補件数。reason の最大長・カタログ整形・SID 照合は llm_catalog に集約。
 _CANDIDATE_LIMIT = 20
+
+# プロフィールに反映する閲覧履歴の直近件数。古い閲覧まで無限に効かせず直近に絞る。
+_VIEW_LIMIT = 20
+
+# 行動重みの時間減衰パラメータ。半減期 30 日で古い行動ほど軽くする。
+_HALF_LIFE_DAYS = 30.0
+# 減衰の下限。どれだけ古くてもゼロにはせず、過去の購入もわずかに好みへ反映させる。
+_MIN_DECAY = 0.05
+
+
+def _decay_factor(occurred_at: datetime | None, now: datetime) -> float:
+    """行動の発生時刻から時間減衰係数（0〜1）を求める純関数。
+
+    occurred_at が None のときは 1.0（カートなどタイムスタンプを持たない行動は
+    「今まさにある関心」とみなして減衰させない）。半減期は _HALF_LIFE_DAYS 日で、
+    それだけ経つと重みが半分になる。下限 _MIN_DECAY を設けて古い行動も完全には
+    消さない（過去の購入もわずかに好みへ効かせるため）。
+    """
+    if occurred_at is None:
+        return 1.0
+    # naive datetime（tzinfo 無し）は UTC とみなして now と比較できるようにする。
+    if occurred_at.tzinfo is None:
+        occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+    # 経過日数は秒精度で日換算。未来時刻（負の経過）は 0 に丸めて減衰なし扱いにする。
+    age_days = max(0.0, (now - occurred_at).total_seconds() / 86400.0)
+    return max(_MIN_DECAY, 0.5 ** (age_days / _HALF_LIFE_DAYS))
 
 
 @dataclass
@@ -65,45 +94,66 @@ class _LLMRecResponse(BaseModel):
     items: list[_LLMRecItem]
 
 
-def _collect_behaviors(db: Session, user_id: int) -> list[tuple[str, int, float]]:
-    """購入・カート・お気に入り・高評価レビューを (種別, product_id, weight) で集める。"""
-    behaviors: list[tuple[str, int, float]] = []
+def collect_behaviors(db: Session, user_id: int) -> list[tuple[str, int, float]]:
+    """購入・カート・お気に入り・高評価・閲覧を (種別, product_id, weight) で集める。
 
-    # 購入（cancelled 以外の注文の明細）。
+    各行動の重みは「基本重み × 時間減衰係数」。新しい行動ほど重く、古い行動は
+    軽くすることで「今の好み」を優先する。タイムスタンプを持たないカートは減衰なし。
+    """
+    behaviors: list[tuple[str, int, float]] = []
+    now = datetime.now(timezone.utc)
+
+    # 購入（cancelled 以外の注文の明細）。同一商品を複数回買っていることもあるので、
+    # product_id ごとに最新の注文時刻（max）で減衰させる。
     purchased_rows = (
-        db.query(OrderItem.product_id)
+        db.query(OrderItem.product_id, func.max(Order.created_at))
         .join(Order, OrderItem.order_id == Order.id)
         .filter(Order.user_id == user_id, Order.status != "cancelled")
-        .distinct()
+        .group_by(OrderItem.product_id)
         .all()
     )
-    for (pid,) in purchased_rows:
-        behaviors.append(("purchase", pid, _BEHAVIOR_WEIGHTS["purchase"]))
+    for pid, last_ordered_at in purchased_rows:
+        weight = _BEHAVIOR_WEIGHTS["purchase"] * _decay_factor(last_ordered_at, now)
+        behaviors.append(("purchase", pid, weight))
 
-    # カート内。
+    # カート内。タイムスタンプを持たない（CartItem に列を足さない方針）ので減衰なし。
     cart_rows = (
         db.query(CartItem.product_id).filter(CartItem.user_id == user_id).all()
     )
     for (pid,) in cart_rows:
         behaviors.append(("cart", pid, _BEHAVIOR_WEIGHTS["cart"]))
 
-    # お気に入り。
+    # お気に入り。登録時刻で減衰させる。
     wish_rows = (
-        db.query(WishlistItem.product_id)
+        db.query(WishlistItem.product_id, WishlistItem.created_at)
         .filter(WishlistItem.user_id == user_id)
         .all()
     )
-    for (pid,) in wish_rows:
-        behaviors.append(("wishlist", pid, _BEHAVIOR_WEIGHTS["wishlist"]))
+    for pid, created_at in wish_rows:
+        weight = _BEHAVIOR_WEIGHTS["wishlist"] * _decay_factor(created_at, now)
+        behaviors.append(("wishlist", pid, weight))
 
-    # 高評価（rating>=4）レビュー。
+    # 高評価（rating>=4）レビュー。投稿時刻で減衰させる。
     review_rows = (
-        db.query(Review.product_id)
+        db.query(Review.product_id, Review.created_at)
         .filter(Review.user_id == user_id, Review.rating >= 4)
         .all()
     )
-    for (pid,) in review_rows:
-        behaviors.append(("review", pid, _BEHAVIOR_WEIGHTS["review"]))
+    for pid, created_at in review_rows:
+        weight = _BEHAVIOR_WEIGHTS["review"] * _decay_factor(created_at, now)
+        behaviors.append(("review", pid, weight))
+
+    # 閲覧履歴。直近 _VIEW_LIMIT 件を最終閲覧時刻の新しい順で拾い、閲覧時刻で減衰させる。
+    view_rows = (
+        db.query(ProductView.product_id, ProductView.viewed_at)
+        .filter(ProductView.user_id == user_id)
+        .order_by(ProductView.viewed_at.desc())
+        .limit(_VIEW_LIMIT)
+        .all()
+    )
+    for pid, viewed_at in view_rows:
+        weight = _BEHAVIOR_WEIGHTS["view"] * _decay_factor(viewed_at, now)
+        behaviors.append(("view", pid, weight))
 
     return behaviors
 
@@ -123,11 +173,17 @@ def get_exclude_ids(db: Session, user_id: int) -> set[int]:
 
 def build_profile(db: Session, user_id: int) -> Profile | None:
     """ユーザ行動からプロフィールを構築する。行動ゼロ・埋め込み欠損時は None。"""
-    behaviors = _collect_behaviors(db, user_id)
+    behaviors = collect_behaviors(db, user_id)
     if not behaviors:
         return None
 
     # profile_hash は種別:product_id をソートして連結した文字列の sha256。
+    # 重みや発生時刻は意図的にハッシュに含めない。含めると時間減衰で毎瞬ハッシュが
+    # 変わり、行動が増減していなくてもキャッシュが陳腐化し続けて再生成が止まらなくなる。
+    # 「どの商品にどの種別で関わったか」の集合が変わったときだけ再生成させる。
+    # なお view もハッシュに入るため、新しい商品を閲覧するとキャッシュが陳腐化し
+    # LLM 再生成が走る。これは閲覧に追従しておすすめを更新するための意図的な挙動
+    # （多重起動は BackgroundTasks + advisory ロック側で防いでいる）。
     keys = sorted(f"{kind}:{pid}" for kind, pid, _ in behaviors)
     profile_hash = hashlib.sha256("|".join(keys).encode("utf-8")).hexdigest()
 
@@ -235,25 +291,33 @@ def get_popular_products(
     return list(db.execute(stmt).scalars().all())
 
 
-def _build_messages(
-    db: Session,
-    profile: Profile,
-    candidates: list[tuple[Product, ProductEmbedding]],
-) -> tuple[list[dict], dict[str, Product]]:
-    """chat 用メッセージと SID→Product の候補マップを組み立てる。"""
-    candidate_ids = {p.id for p, _ in candidates}
-    history_ids = {pid for _, pid, _ in profile.behaviors}
-    avg_map = llm_catalog.avg_ratings(db, candidate_ids | history_ids)
+# 行動種別 → 履歴プロンプトに出す日本語ラベル。
+_BEHAVIOR_LABELS = {
+    "purchase": "購入",
+    "cart": "カート",
+    "wishlist": "お気に入り",
+    "review": "高評価",
+    "view": "閲覧",
+}
 
-    # 候補カタログ（SID で列挙）。SID→Product を採用判定に使う。
-    sid_to_product: dict[str, Product] = {}
-    catalog_lines: list[str] = []
-    for product, emb in candidates:
-        sid = emb.semantic_id or f"p{product.id}"
-        sid_to_product[sid] = product
-        catalog_lines.append(llm_catalog.catalog_line(product, sid, avg_map.get(product.id)))
 
-    # 顧客履歴も SID 列で表現する（埋め込みのある商品のみ）。
+def history_prompt_lines(
+    db: Session, behaviors: list[tuple[str, int, float]]
+) -> list[str]:
+    """行動一覧を「[購入] {catalog_line}」形式の履歴プロンプト行に整形する。
+
+    レコメンドとチャットアシスタントの双方から使う共通ビルダー。埋め込み・商品が
+    引ける行動のみを behaviors の順序を保って行にする（埋め込みが無い商品は履歴に
+    出さない）。avg_ratings はこの関数内で履歴対象 ID について取得する。呼び出し側で
+    候補分の avg_ratings と重複クエリになるが、公開 API の単純さ（behaviors を渡すだけ）
+    を優先してあえて内部で完結させている。
+    """
+    history_ids = {pid for _, pid, _ in behaviors}
+    if not history_ids:
+        return []
+
+    avg_map = llm_catalog.avg_ratings(db, history_ids)
+    # 履歴商品の埋め込み（SID 取得用）と商品本体を一括で引く。
     hist_embeddings = {
         e.product_id: e
         for e in db.query(ProductEmbedding)
@@ -264,22 +328,40 @@ def _build_messages(
         p.id: p
         for p in db.query(Product).filter(Product.id.in_(history_ids)).all()
     }
-    history_lines: list[str] = []
-    for kind, pid, _weight in profile.behaviors:
+
+    lines: list[str] = []
+    for kind, pid, _weight in behaviors:
         emb = hist_embeddings.get(pid)
         prod = history_products.get(pid)
         if emb is None or prod is None:
             continue
-        label = {
-            "purchase": "購入",
-            "cart": "カート",
-            "wishlist": "お気に入り",
-            "review": "高評価",
-        }.get(kind, kind)
+        label = _BEHAVIOR_LABELS.get(kind, kind)
         sid = emb.semantic_id or f"p{pid}"
-        history_lines.append(
+        lines.append(
             f"[{label}] {llm_catalog.catalog_line(prod, sid, avg_map.get(pid))}"
         )
+    return lines
+
+
+def _build_messages(
+    db: Session,
+    profile: Profile,
+    candidates: list[tuple[Product, ProductEmbedding]],
+) -> tuple[list[dict], dict[str, Product]]:
+    """chat 用メッセージと SID→Product の候補マップを組み立てる。"""
+    candidate_ids = {p.id for p, _ in candidates}
+    avg_map = llm_catalog.avg_ratings(db, candidate_ids)
+
+    # 候補カタログ（SID で列挙）。SID→Product を採用判定に使う。
+    sid_to_product: dict[str, Product] = {}
+    catalog_lines: list[str] = []
+    for product, emb in candidates:
+        sid = emb.semantic_id or f"p{product.id}"
+        sid_to_product[sid] = product
+        catalog_lines.append(llm_catalog.catalog_line(product, sid, avg_map.get(product.id)))
+
+    # 顧客履歴も SID 列で表現する（共通ビルダーに委譲。埋め込みのある商品のみ）。
+    history_lines = history_prompt_lines(db, profile.behaviors)
 
     system = (
         "あなたは生活道具店『Hibino』のベテラン店員です。"

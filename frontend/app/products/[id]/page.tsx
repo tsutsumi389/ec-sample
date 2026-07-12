@@ -3,7 +3,7 @@
 import { useEffect, useState, type SyntheticEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, getToken } from '@/lib/api';
 import type { Category, Product } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
@@ -54,6 +54,12 @@ export default function ProductDetailPage() {
         setQuantity(1);
         // 取得に成功した商品だけを閲覧履歴に残す。
         recordRecentlyViewed(p.id);
+        // ログイン時のみサーバー側にも閲覧を記録する（パーソナライズ用）。
+        // サーバー側はゲストを no-op にするため、未ログイン時は無駄なリクエストを避けて呼ばない。
+        // 閲覧記録は補助機能なので fire-and-forget とし、失敗は握りつぶして UI に影響させない。
+        if (getToken()) {
+          api.post<void>(`/products/${p.id}/view`).catch(() => {});
+        }
       })
       .catch((e) => {
         if (e instanceof ApiError && e.status === 404) {

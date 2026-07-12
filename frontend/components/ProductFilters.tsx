@@ -5,9 +5,10 @@ import { api, ApiError } from '@/lib/api';
 import type { Category } from '@/lib/types';
 import { Skeleton } from '@/components/Skeleton';
 
-export type ProductSort = 'newest' | 'price_asc' | 'price_desc' | 'rating';
+export type ProductSort = 'recommended' | 'newest' | 'price_asc' | 'price_desc' | 'rating';
 
 const SORT_OPTIONS: { value: ProductSort; label: string }[] = [
+  { value: 'recommended', label: 'おすすめ順' },
   { value: 'newest', label: '新着順' },
   { value: 'price_asc', label: '価格が安い順' },
   { value: 'price_desc', label: '価格が高い順' },

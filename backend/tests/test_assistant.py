@@ -69,6 +69,49 @@ class TestBuildUserPrompt:
         assert "（履歴なし）" in prompt
         assert "（該当する候補がありません）" in prompt
 
+    def test_user_context_block_inserted_before_conversation(self):
+        # 行動履歴がある場合、【これまでの会話】の前に行動ブロックが差し込まれること。
+        prompt = assistant.build_user_prompt(
+            ["user: こんにちは"],
+            ["SID a: 琺瑯ケトル"],
+            "ケトル探してる",
+            user_context_lines=["[購入] SID a: 琺瑯ケトル", "[お気に入り] SID b: 土鍋"],
+        )
+        assert "【お客様のこれまでの行動（購入・お気に入りなど）】" in prompt
+        assert "[購入] SID a: 琺瑯ケトル" in prompt
+        assert "[お気に入り] SID b: 土鍋" in prompt
+        # 行動ブロックが会話ブロックより前に来ること。
+        assert prompt.index("【お客様のこれまでの行動") < prompt.index("【これまでの会話】")
+
+    def test_none_user_context_matches_legacy_output(self):
+        # user_context_lines=None は従来（引数なし）出力と完全一致すること。
+        base = assistant.build_user_prompt(
+            ["user: こんにちは"], ["SID a: 琺瑯ケトル"], "ケトル探してる"
+        )
+        with_none = assistant.build_user_prompt(
+            ["user: こんにちは"],
+            ["SID a: 琺瑯ケトル"],
+            "ケトル探してる",
+            user_context_lines=None,
+        )
+        assert with_none == base
+
+    def test_empty_user_context_matches_legacy_output(self):
+        # 空リストも None と同様に行動ブロックを挿入せず従来出力と一致すること。
+        base = assistant.build_user_prompt([], ["SID a: 商品"], "おすすめ")
+        with_empty = assistant.build_user_prompt(
+            [], ["SID a: 商品"], "おすすめ", user_context_lines=[]
+        )
+        assert with_empty == base
+        assert "【お客様のこれまでの行動" not in with_empty
+
+
+class TestSystemPromptUserContext:
+    def test_mentions_user_behavior_context(self):
+        # 行動履歴が与えられたら好みを踏まえる旨が system プロンプトにあること。
+        assert "【お客様のこれまでの行動】" in assistant.SYSTEM_PROMPT
+        assert "履歴が無ければ通常どおり応対" in assistant.SYSTEM_PROMPT
+
 
 class TestSystemPrompt:
     def test_mentions_injection_guard(self):
