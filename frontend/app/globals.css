@@ -42,3 +42,30 @@ textarea:focus-visible,
   outline: 2px solid #5FA19A;
   outline-offset: 2px;
 }
+
+/* AIアシスタント: 商品リストをパネルの「実幅」に応じて多段化する。
+   ビューポート基準（lg 等）だと normal/wide/full やモバイル全画面で
+   実効幅が一致せず、ワイド画面でも単一列のままになる問題を避けるため、
+   スクロール領域をコンテナクエリの基準（container）にして列数を切り替える。 */
+.assistant-scroll {
+  container-type: inline-size;
+  container-name: assistant;
+}
+
+.assistant-product-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+@container assistant (min-width: 30rem) {
+  .assistant-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container assistant (min-width: 46rem) {
+  .assistant-product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

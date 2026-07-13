@@ -9,7 +9,9 @@ import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
 import { useToast } from '@/lib/toast-context';
 import ProductPrice from '@/components/ProductPrice';
-import { CartIcon } from '@/components/Icons';
+import RatingStars from '@/components/RatingStars';
+import StockLabel from '@/components/StockLabel';
+import { ArrowRightIcon, CartIcon } from '@/components/Icons';
 
 interface AssistantProductCardProps {
   product: Product;
@@ -18,11 +20,12 @@ interface AssistantProductCardProps {
 }
 
 /**
- * チャット内に表示するコンパクトな商品カード。
- * 幅の狭いパネル（PC 380px / モバイル全画面）に収まるよう横並びレイアウトにし、
- * 画像・商品名・価格（ProductPrice 再利用）と任意の提案理由を表示する。
- * 画像・商品名クリックで商品詳細へ遷移し（next/link のクライアント遷移なのでパネルは開いたまま）、
- * 「カートに追加」ボタンから商品詳細へ移動せずに直接カートへ追加できる。
+ * チャット内に表示する商品カード。
+ * 画像（96px）・商品名（2行まで）・評価・価格・在庫状況を示し、
+ * 「商品を見る」リンクと「カートに追加」ボタンを 1 行に並置して導線を明示する。
+ * 一覧の走査性を保つため縦丈を抑え（画像 96px・提案理由は 1 行に折り畳み）、
+ * 操作行はモバイルで 44px を確保しつつデスクトップでは高さを詰める。
+ * 画像・商品名クリックでも商品詳細へ遷移する（next/link のクライアント遷移でパネルは開いたまま）。
  */
 export default function AssistantProductCard({ product, reason }: AssistantProductCardProps) {
   const router = useRouter();
@@ -53,13 +56,16 @@ export default function AssistantProductCard({ product, reason }: AssistantProdu
     }
   };
 
+  const detailHref = `/products/${product.id}`;
+
   return (
-    <div className="flex gap-3 rounded-lg border border-gray-200 bg-white p-2">
-      <Link
-        href={`/products/${product.id}`}
-        className="group flex min-w-0 flex-1 gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
-      >
-        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-gray-100">
+    <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
+      <div className="flex gap-3">
+        <Link
+          href={detailHref}
+          aria-label={`${product.name}の詳細を見る`}
+          className="group relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={product.image_url}
@@ -72,23 +78,45 @@ export default function AssistantProductCard({ product, reason }: AssistantProdu
             }}
             className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
           />
-        </div>
+        </Link>
         <div className="flex min-w-0 flex-1 flex-col">
-          <h4 className="text-sm font-medium text-gray-900 line-clamp-1">{product.name}</h4>
-          <div className="mt-0.5">
-            <ProductPrice product={product} size="sm" />
+          <h4 className="text-sm font-medium leading-snug text-gray-900 line-clamp-2">
+            <Link
+              href={detailHref}
+              className="rounded hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+            >
+              {product.name}
+            </Link>
+          </h4>
+          <div className="mt-1">
+            <RatingStars value={product.avg_rating} count={product.review_count} size="sm" />
           </div>
-          {reason && <p className="mt-1 text-xs text-gray-500 leading-relaxed line-clamp-2">{reason}</p>}
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <ProductPrice product={product} size="base" />
+            {product.status === 'on_sale' && <StockLabel stock={product.stock} />}
+          </div>
         </div>
-      </Link>
-      <div className="flex shrink-0 items-center">
+      </div>
+
+      {reason && (
+        <p className="text-xs leading-relaxed text-gray-600 line-clamp-1">{reason}</p>
+      )}
+
+      <div className="flex items-stretch gap-2">
+        <Link
+          href={detailHref}
+          className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1 rounded-full border border-brand-200 bg-white px-3 text-sm font-medium text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:min-h-0 sm:py-2"
+        >
+          商品を見る
+          <ArrowRightIcon className="h-4 w-4" />
+        </Link>
         {product.purchasable ? (
           <button
             type="button"
             onClick={handleAddToCart}
             disabled={adding}
             aria-label={`${product.name}をカートに追加`}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:min-h-0 sm:py-2"
           >
             {adding ? (
               <span
@@ -97,11 +125,16 @@ export default function AssistantProductCard({ product, reason }: AssistantProdu
                 className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
               />
             ) : (
-              <CartIcon className="h-4 w-4" />
+              <>
+                <CartIcon className="h-4 w-4" />
+                カートに追加
+              </>
             )}
           </button>
         ) : (
-          <span className="px-1 text-[10px] leading-tight text-gray-400">在庫なし</span>
+          <span className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full bg-gray-100 px-3 text-sm font-medium text-gray-500 sm:min-h-0 sm:py-2">
+            在庫なし
+          </span>
         )}
       </div>
     </div>
