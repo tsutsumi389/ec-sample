@@ -275,7 +275,7 @@
           <tr><td>フロントエンド</td><td>Next.js 14（App Router）/ React / TypeScript / Tailwind CSS</td><td>全ページ <code>'use client'</code> の SPA 的構成。共通レイアウト＋認証 Context。</td></tr>
           <tr><td>バックエンド</td><td>FastAPI / SQLAlchemy 2.0（<code>Mapped</code>/<code>mapped_column</code>）/ Pydantic</td><td>全ルートは <code>/api</code> プレフィックス配下。依存注入で認証・DB セッションを供給。</td></tr>
           <tr><td>データベース</td><td>PostgreSQL 16 + pgvector 拡張</td><td>17 モデル。ベクトル検索（コサイン距離）に pgvector を利用。</td></tr>
-          <tr><td>AI / 埋め込み</td><td>Ollama（埋め込み + チャット）</td><td>埋め込み <code>nomic-embed-text</code>（768 次元）、チャットモデルで理由生成。</td></tr>
+          <tr><td>AI / 埋め込み</td><td>Ollama（埋め込み + チャット）</td><td>埋め込み <code>embeddinggemma</code>（768 次元）、チャットモデルで理由生成。</td></tr>
           <tr><td>認証</td><td>JWT（HS256, PyJWT）/ passlib bcrypt</td><td>Bearer トークン、有効期限 24h、パスワードは bcrypt ハッシュ。</td></tr>
           <tr><td>実行基盤</td><td>Docker / docker-compose / Makefile</td><td>開発操作は <code>Makefile</code> に集約（<code>make up</code> / <code>make reset</code> 等）。</td></tr>
         </tbody>
@@ -330,7 +330,7 @@
       <div class="tier" style="border-style:dashed;border-color:var(--accent)">
         <span class="tlabel">AI（外部）</span>
         <div class="row">
-          <div class="box"><b>Ollama</b><span>埋め込み <code>nomic-embed-text</code>（768d）</span></div>
+          <div class="box"><b>Ollama</b><span>埋め込み <code>embeddinggemma</code>（768d）</span></div>
           <div class="box"><b>Ollama Chat</b><span>おすすめ理由生成（JSON schema 強制）</span></div>
         </div>
       </div>
@@ -608,7 +608,7 @@
       <li>既存会話はメッセージ数を数え、50 件以上なら 400（会話の肥大化防止）。過去メッセージを (role, content) の古い順でロード</li>
       <li>ユーザーメッセージを AssistantMessage（role=user、product_ids=[]）として add（未 commit）</li>
       <li><code>generate_reply</code> を呼ぶ。ここは例外を握って必ず結果を返す（500 を出さない）</li>
-      <li>候補抽出（ハイブリッド）: <code>build_query_text</code> で直近 3 ユーザー発話を改行連結して埋め込み（<code>nomic-embed-text</code>）→ pgvector コサイン近傍 top-20（LISTED のみ）。加えて新メッセージをトークン分割した ILIKE キーワード検索 top-10。重複除去してベクトル優先でマージ。候補ゼロならフォールバックへ</li>
+      <li>候補抽出（ハイブリッド）: <code>build_query_text</code> で直近 3 ユーザー発話を改行連結して埋め込み（<code>embeddinggemma</code>）→ pgvector コサイン近傍 top-20（LISTED のみ）。加えて新メッセージをトークン分割した ILIKE キーワード検索 top-10。重複除去してベクトル優先でマージ。候補ゼロならフォールバックへ</li>
       <li>プロンプト構築: 候補を <code>llm_catalog.catalog_line</code>（SID / 商品名 / カテゴリ / effective_price / 平均★）で列挙し、履歴（直近 6 ターン・各 200 字）と <code>&lt;message&gt;</code> で囲んだ新メッセージを付す。ログインユーザーは行動履歴（weight 上位 10 件、§8.5）を【お客様のこれまでの行動】として前置きする。PII は入れない</li>
       <li>Ollama chat（<code>format=</code> JSON schema, temperature=0.3, timeout 60 秒）で構造化出力 <code>{reply, items:[{sid, reason}]}</code> を取得・pydantic 検証</li>
       <li>SID 検証: <code>llm_catalog.match_products</code> で候補マップに実在する SID のものだけ採用（正規化・重複除去・最大 4 件）。<code>strip_sids_from_reply</code> で reply 本文の SID 表記を正規表現で除去。本文が空なら定型文に落とす。source=llm で返す</li>
@@ -626,7 +626,7 @@
     <div class="arch">
       <div class="tier"><span class="tlabel">① 埋め込み</span><div class="row">
         <div class="box"><b>build_product_text</b><span>商品名・カテゴリ・説明・価格帯（effective_price を 4 区分に言語化）を結合、sha256 で変更検知</span></div>
-        <div class="box"><b>Ollama embed</b><span><code>nomic-embed-text</code>（768d）。差分 upsert（source_hash / embed_model 一致でスキップ）</span></div>
+        <div class="box"><b>Ollama embed</b><span><code>embeddinggemma</code>（768d）。差分 upsert（source_hash / embed_model 一致でスキップ）</span></div>
       </div></div>
       <div class="flowdown">▼</div>
       <div class="tier"><span class="tlabel">② セマンティック ID</span><div class="row">
@@ -668,7 +668,7 @@
       <thead><tr><th>設定</th><th>既定値</th><th>補足</th></tr></thead>
       <tbody>
         <tr><td><code>OLLAMA_BASE_URL</code></td><td><code>http://host.docker.internal:11434</code></td><td>環境変数で上書き可</td></tr>
-        <tr><td><code>OLLAMA_EMBED_MODEL</code></td><td><code>nomic-embed-text:latest</code></td><td>埋め込みモデル</td></tr>
+        <tr><td><code>OLLAMA_EMBED_MODEL</code></td><td><code>embeddinggemma:latest</code></td><td>埋め込みモデル</td></tr>
         <tr><td><code>OLLAMA_CHAT_MODEL</code></td><td><code>gemma4:latest</code></td><td>おすすめ理由生成</td></tr>
         <tr><td><code>EMBED_DIM</code></td><td><code>768</code></td><td>ProductEmbedding.embedding の Vector 次元と一致必須。想定外次元はスキップ</td></tr>
       </tbody>

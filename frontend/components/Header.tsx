@@ -162,7 +162,7 @@ export default function Header() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="商品を検索"
+              placeholder="商品名や雰囲気で検索（例: 雨の日に便利なもの）"
               aria-label="商品を検索"
               className="w-full rounded-l-md border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
             />
@@ -284,7 +284,7 @@ export default function Header() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="商品を検索"
+              placeholder="商品名や雰囲気で検索（例: 雨の日に便利なもの）"
               aria-label="商品を検索"
               // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus

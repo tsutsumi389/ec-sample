@@ -1,9 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, get_current_user_optional
+from app.config import (
+    SEMANTIC_SEARCH_CANDIDATES,
+    SEMANTIC_SEARCH_MARGIN,
+    SEMANTIC_SEARCH_MAX_DISTANCE,
+)
 from app.database import get_db
 from app.models import (
     LISTED_STATUSES,
@@ -16,7 +21,7 @@ from app.models import (
     User,
 )
 from app.schemas import ProductListOut, ProductOut, ReviewCreate, ReviewOut
-from app.services import recommendation
+from app.services import embedding, recommendation
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -50,8 +55,44 @@ def list_products(
     db: Session = Depends(get_db),
 ) -> ProductListOut:
     conditions = [Product.status.in_(LISTED_STATUSES)]
+    # 検索はハイブリッド（キーワード + セマンティック）。まずクエリを埋め込み、成功したら
+    # 「商品名の部分一致」または「意味的に近い商品」のどちらかにヒットすれば拾う。
+    # 部分一致だけでは表記揺れや雰囲気検索（例: 雨の日に便利なもの）を取りこぼすため。
+    # Ollama 停止等で埋め込めない場合は query_vec が None になり、従来の ILIKE のみに
+    # フォールバックして検索を止めない。
+    query_vec = embedding.embed_query(search) if search else None
+    # 意味的候補を実際に使ったかどうか。並び順（関連度順にするか）はこのフラグで判定する。
+    # query_vec があっても最近傍が絶対上限より遠ければ候補ゼロ扱いになるため、
+    # query_vec の有無だけでは判定できない。
+    semantic_subq = None
     if search:
-        conditions.append(Product.name.ilike(f"%{search}%"))
+        if query_vec is not None:
+            semantic_distance = ProductEmbedding.embedding.cosine_distance(query_vec)
+            # 距離の絶対値はクエリの具体度でスケールが変わる（具体的なクエリは全体に近く、
+            # 抽象的なクエリは全体に遠く出る）ため、固定閾値だけでは具体的なクエリで
+            # ノイズを拾い、抽象的なクエリで取りこぼす。そこで最近傍距離 d_min を測り、
+            # 「最も近い商品からマージン以内」の相対基準で足切りする（絶対上限は最後の砦）。
+            d_min = db.scalar(select(func.min(semantic_distance)))
+            if d_min is not None and d_min <= SEMANTIC_SEARCH_MAX_DISTANCE:
+                cutoff = min(d_min + SEMANTIC_SEARCH_MARGIN, SEMANTIC_SEARCH_MAX_DISTANCE)
+                # 相対カットオフ以内かつ距離が近い上位 N 件だけを意味的候補にする。
+                # 語彙の広いクエリで大量ヒットし得るため件数でも上限を設ける。
+                semantic_subq = (
+                    select(ProductEmbedding.product_id)
+                    .where(semantic_distance <= cutoff)
+                    .order_by(semantic_distance)
+                    .limit(SEMANTIC_SEARCH_CANDIDATES)
+                )
+        if semantic_subq is not None:
+            conditions.append(
+                or_(
+                    Product.name.ilike(f"%{search}%"),
+                    Product.id.in_(semantic_subq),
+                )
+            )
+        else:
+            # 埋め込み不可（Ollama 停止等）or 最近傍が遠すぎる → 従来の部分一致のみ。
+            conditions.append(Product.name.ilike(f"%{search}%"))
     if category_id is not None:
         conditions.append(Product.category_id == category_id)
     if min_price is not None:
@@ -126,6 +167,20 @@ def list_products(
                 Product.created_at.desc(),
                 Product.id.desc(),
             )
+    elif semantic_subq is not None:
+        # sort 未指定 かつ 意味的候補を実際に使ったときだけ「関連度順」で並べる。
+        # 名前に一致した商品を意味的ヒットより先に見せたいので、まず名前一致(0)を優先し、
+        # 次に埋め込みのコサイン距離が近い順（欠損は最後）、最後に id で安定化する。
+        # sort が明示された場合はセマンティックはフィルタとしてだけ効かせ、この join は
+        # 追加しない（recommended 分岐の outerjoin と二重にならないよう None のときだけ結合）。
+        relevance_rank = case((Product.name.ilike(f"%{search}%"), 0), else_=1)
+        stmt = stmt.outerjoin(
+            ProductEmbedding, ProductEmbedding.product_id == Product.id
+        ).order_by(
+            relevance_rank.asc(),
+            ProductEmbedding.embedding.cosine_distance(query_vec).nullslast(),
+            Product.id,
+        )
     else:
         stmt = stmt.order_by(Product.id)
 
