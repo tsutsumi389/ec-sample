@@ -24,7 +24,7 @@ services:
       DATABASE_URL: postgresql://ec:ecpass@db:5432/ecdb
       SECRET_KEY: dev-secret-key-change-in-production
       OLLAMA_BASE_URL: http://host.docker.internal:11434
-      OLLAMA_EMBED_MODEL: nomic-embed-text:latest
+      OLLAMA_EMBED_MODEL: embeddinggemma:latest
       OLLAMA_CHAT_MODEL: gemma4:latest
     extra_hosts:
       - "host.docker.internal:host-gateway"

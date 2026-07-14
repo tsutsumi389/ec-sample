@@ -11,7 +11,14 @@ import logging
 import ollama
 from sqlalchemy.orm import Session
 
-from app.config import EMBED_DIM, OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL, OLLAMA_EMBED_MODEL
+from app.config import (
+    EMBED_DIM,
+    EMBED_DOC_PREFIX,
+    EMBED_QUERY_PREFIX,
+    OLLAMA_BASE_URL,
+    OLLAMA_CHAT_MODEL,
+    OLLAMA_EMBED_MODEL,
+)
 from app.models import Product, ProductEmbedding
 from app.services import semantic_id
 
@@ -61,6 +68,35 @@ def _embed_texts(texts: list[str]) -> list[list[float]]:
     if embeddings is None:
         embeddings = response["embeddings"]
     return [list(vec) for vec in embeddings]
+
+
+def embed_query(text: str) -> list[float] | None:
+    """検索クエリ文字列を 1 本のベクトルに埋め込む（セマンティック検索用）。
+
+    商品埋め込みと同じモデルでクエリを埋め込み、pgvector のコサイン距離で近傍を引く。
+    Ollama 未起動・未 pull・接続不可なら例外を握って警告ログを出し None を返す。
+    呼び出し側は None のとき ILIKE の部分一致だけにフォールバックして検索を止めない。
+    """
+    try:
+        # クエリ側プレフィックスを付けて埋め込む（文書側と非対称・モデルカード推奨）。
+        vectors = _embed_texts([EMBED_QUERY_PREFIX + text])
+    except Exception as exc:  # noqa: BLE001 - Ollama 未起動/未pull は静かに戻る
+        logger.warning(
+            "検索クエリの埋め込みに失敗しました（ILIKE 部分一致にフォールバックします）: %s / "
+            "ホストの Ollama が起動しているか、対象モデルが pull 済みか確認してください",
+            exc,
+        )
+        return None
+
+    vector = vectors[0]
+    if len(vector) != EMBED_DIM:
+        logger.warning(
+            "検索クエリの埋め込み次元が想定外です got=%s expected=%s（ILIKE のみで検索します）",
+            len(vector),
+            EMBED_DIM,
+        )
+        return None
+    return vector
 
 
 def check_ollama_health() -> bool:
@@ -119,7 +155,9 @@ def sync_embeddings(db: Session, *, force: bool = False) -> int:
         return 0
 
     try:
-        vectors = _embed_texts([text for _, text, _ in pending])
+        # 文書側プレフィックスを付けて埋め込む（非対称検索・モデルカード推奨）。
+        # source_hash は生テキストから計算するので差分検知には影響しない。
+        vectors = _embed_texts([EMBED_DOC_PREFIX + text for _, text, _ in pending])
     except Exception as exc:  # noqa: BLE001 - Ollama 未起動/未pull は静かに戻る
         logger.warning(
             "埋め込み生成に失敗しました（フォールバック動作を継続します）: %s / "
@@ -174,7 +212,8 @@ def refresh_product_embedding(db: Session, product_id: int) -> None:
     text = build_product_text(product)
     digest = _source_hash(text)
     try:
-        vectors = _embed_texts([text])
+        # 文書側プレフィックスを付けて埋め込む（sync_embeddings と同じ扱い）。
+        vectors = _embed_texts([EMBED_DOC_PREFIX + text])
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "商品 %s の埋め込み更新に失敗しました（無視して継続）: %s / "

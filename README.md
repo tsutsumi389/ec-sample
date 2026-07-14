@@ -30,10 +30,10 @@ make reset
 
 ### AIレコメンド（LLM機能）の有効化
 
-トップページのおすすめ理由などの LLM 生成機能は、**ホストPCで Ollama が稼働しており、`nomic-embed-text:latest` / `gemma4:latest` が pull 済みであること**を前提とします。コンテナ内のバックエンドは `http://host.docker.internal:11434` 経由でホストの Ollama に接続します。
+トップページのおすすめ理由などの LLM 生成機能は、**ホストPCで Ollama が稼働しており、`embeddinggemma:latest` / `gemma4:latest` が pull 済みであること**を前提とします。コンテナ内のバックエンドは `http://host.docker.internal:11434` 経由でホストの Ollama に接続します。
 
 ```bash
-ollama pull nomic-embed-text
+ollama pull embeddinggemma
 ollama pull gemma4
 ```
 
