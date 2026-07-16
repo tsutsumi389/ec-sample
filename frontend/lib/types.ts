@@ -162,6 +162,38 @@ export interface RecommendationResponse {
   items: RecommendationItem[];
 }
 
+/**
+ * ホーム（GET /home）のレーン描画形式。
+ * バックエンドはこの3つ以外を返さない契約。
+ */
+export type HomeSectionLayout = 'hero' | 'ranked' | 'lane';
+
+/**
+ * ホームの1レーン。
+ * - `key` は同一レスポンス内で一意（React の key に使える）。`billboard` / `top10` /
+ *   `byw:{product_id}` / `category:{category_id}` などの名前空間を持つ。
+ * - `title` は layout==='hero' のときのみ null になり得る。
+ * - `subtitle` は Phase 1 では常に null。
+ */
+export interface HomeSection {
+  key: string;
+  title: string | null;
+  subtitle: string | null;
+  layout: HomeSectionLayout;
+  items: RecommendationItem[];
+}
+
+/**
+ * GET /home のレスポンス。
+ * - source==='personalized': 行動履歴（ログイン or recently_viewed_ids）由来のレーンを含む
+ * - source==='popular': 非パーソナライズのみ（コールドスタート）
+ * `sections` は空配列になり得る（商品が1件も無い場合）。
+ */
+export interface HomeResponse {
+  source: 'personalized' | 'popular';
+  sections: HomeSection[];
+}
+
 export type AssistantSource = 'llm' | 'fallback';
 
 export type AssistantRole = 'user' | 'assistant';

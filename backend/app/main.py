@@ -17,6 +17,7 @@ from app.routers import (
     cart,
     categories,
     coupons,
+    home,
     orders,
     products,
     recommendations,
@@ -157,3 +158,4 @@ app.include_router(coupons.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(recommendations.router, prefix="/api")
 app.include_router(assistant.router, prefix="/api")
+app.include_router(home.router, prefix="/api")
