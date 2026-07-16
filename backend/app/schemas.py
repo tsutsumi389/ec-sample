@@ -339,6 +339,35 @@ class RecommendationListOut(BaseModel):
     items: list[RecommendationItemOut]
 
 
+# ---------- ホーム（レーン構成） ----------
+
+# フロントの描画形式。この3つ以外は返さない（契約）。
+HomeLayout = Literal["hero", "ranked", "lane"]
+
+
+class HomeSectionOut(BaseModel):
+    """ホームの 1 レーン。1 レーン = 1 アルゴリズムの出力。"""
+
+    # レーンの安定識別子（React の key）。同一レスポンス内で一意であることを保証する。
+    # 例: "billboard" / "top10" / "byw:42" / "category:3"
+    key: str
+    # 見出し。layout="hero" のときのみ None になり得る。
+    title: str | None = None
+    # 補足文（例:「あと3点で送料無料」）。Phase 1 では常に None。
+    subtitle: str | None = None
+    layout: HomeLayout
+    # 商品は既存 RecommendationItemOut を再利用する（product + reason）。
+    items: list[RecommendationItemOut]
+
+
+class HomeOut(BaseModel):
+    # "personalized"（パーソナライズされたレーンが1本以上入った）か
+    # "popular"（非パーソナライズのみ = コールドスタート）か。
+    source: str
+    # 商品が1件も無ければ空配列（フロントは EmptyState を出す）。
+    sections: list[HomeSectionOut]
+
+
 # ---------- AIショッピングアシスタント ----------
 
 

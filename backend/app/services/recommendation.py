@@ -8,7 +8,7 @@ API は常に応答する。バックグラウンドタスクは自前で DB セ
 import hashlib
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 from pydantic import BaseModel
@@ -227,16 +227,22 @@ def get_candidates(
     profile_vec: np.ndarray,
     exclude_ids: set[int],
     limit: int = _CANDIDATE_LIMIT,
+    *,
+    category_id: int | None = None,
 ) -> list[tuple[Product, ProductEmbedding]]:
     """プロフィールベクトルの pgvector コサイン近傍を候補として返す。
 
     LISTED_STATUSES のみ・exclude_ids 除外。埋め込みが無ければ空リスト。
+    category_id を渡すとそのカテゴリ内での近傍に絞る（ホームの category レーン用。
+    既存呼び出しに影響しないようキーワード専用の任意引数として足している）。
     """
     stmt = (
         select(Product, ProductEmbedding)
         .join(ProductEmbedding, ProductEmbedding.product_id == Product.id)
         .where(Product.status.in_(LISTED_STATUSES))
     )
+    if category_id is not None:
+        stmt = stmt.where(Product.category_id == category_id)
     if exclude_ids:
         stmt = stmt.where(Product.id.notin_(exclude_ids))
     stmt = stmt.order_by(
@@ -288,6 +294,124 @@ def get_popular_products(
         Product.id.desc(),
     ).limit(limit)
 
+    return list(db.execute(stmt).scalars().all())
+
+
+# 「今週の売れ筋」の集計窓（日）。ホームの top10 レーン用。
+# 全期間の人気（get_popular_products）は殿堂入り商品が固定化して毎日同じ顔ぶれになるため、
+# ランキングとしての鮮度を出すには窓を切る必要がある。7日はEC の需要サイクル（週末に偏る
+# 購買を1周期ぶん必ず含む）に合わせた最小の窓。短くすると曜日バイアスが乗る。
+_RECENT_POPULAR_WINDOW_DAYS = 7
+
+
+def get_recent_popular_products(
+    db: Session,
+    limit: int,
+    *,
+    window_days: int = _RECENT_POPULAR_WINDOW_DAYS,
+    exclude_ids: set[int] | None = None,
+) -> list[Product]:
+    """直近 window_days 日の購入数ランキングを返す（ホームの top10 レーン用）。
+
+    get_popular_products との違いは集計窓だけ（あちらは全期間）。中身は完全に
+    非パーソナライズで、誰が見ても同じ順序になる。並びは購入数 desc → 新着 desc → id desc。
+    期間内に購入がゼロの商品は結果に含めない（0 件の商品まで並べると「売れ筋」が
+    ただの新着一覧になってしまうため、inner join で購入実績のあるものだけに絞る）。
+    """
+    since = datetime.now(timezone.utc) - timedelta(days=window_days)
+    purchase_subq = (
+        select(
+            OrderItem.product_id.label("product_id"),
+            func.coalesce(func.sum(OrderItem.quantity), 0).label("purchased"),
+        )
+        .join(Order, OrderItem.order_id == Order.id)
+        .where(Order.status != "cancelled", Order.created_at >= since)
+        .group_by(OrderItem.product_id)
+        .subquery()
+    )
+
+    stmt = (
+        select(Product)
+        # inner join: 期間内に1点でも売れた商品だけを対象にする。
+        .join(purchase_subq, purchase_subq.c.product_id == Product.id)
+        .where(Product.status.in_(LISTED_STATUSES))
+    )
+    if exclude_ids:
+        stmt = stmt.where(Product.id.notin_(exclude_ids))
+    stmt = stmt.order_by(
+        purchase_subq.c.purchased.desc(),
+        Product.created_at.desc(),
+        Product.id.desc(),
+    ).limit(limit)
+
+    return list(db.execute(stmt).scalars().all())
+
+
+def get_sale_products(
+    db: Session,
+    limit: int,
+    *,
+    profile_vec: np.ndarray | None = None,
+    exclude_ids: set[int] | None = None,
+) -> list[Product]:
+    """セール中（sale_price あり）の商品を返す。
+
+    profile_vec があればプロフィールのコサイン近傍順（＝好みに寄せたセール棚）、
+    無ければ割引率の大きい順にフォールバックする。割引率は effective_price を
+    price で割った比で、SQL 側では sale_price / price の昇順に等しい
+    （sale_price is not null に絞っているので effective_price == sale_price）。
+    """
+    stmt = select(Product).where(
+        Product.status.in_(LISTED_STATUSES),
+        Product.sale_price.isnot(None),
+    )
+    if exclude_ids:
+        stmt = stmt.where(Product.id.notin_(exclude_ids))
+
+    if profile_vec is not None:
+        stmt = stmt.join(
+            ProductEmbedding, ProductEmbedding.product_id == Product.id
+        ).order_by(
+            ProductEmbedding.embedding.cosine_distance(profile_vec.tolist()),
+            Product.id,
+        )
+    else:
+        # 割引率が大きい順。price が 0 の異常データでもゼロ除算しないよう nullif で守る。
+        stmt = stmt.order_by(
+            (Product.sale_price / func.nullif(Product.price, 0)).asc().nullslast(),
+            Product.id,
+        )
+    return list(db.execute(stmt.limit(limit)).scalars().all())
+
+
+def get_neighbors_of(
+    db: Session,
+    product_id: int,
+    limit: int,
+    *,
+    exclude_ids: set[int] | None = None,
+) -> list[Product]:
+    """指定商品の埋め込みのコサイン近傍を返す（アンカー商品の「これを見た人に」用）。
+
+    products.py の /{product_id}/recommendations と同じ近傍ロジックだが、あちらは
+    HTTP 応答（フォールバック込み）まで担うため、ここでは「近傍を引く」だけを切り出す。
+    埋め込みが無ければ空リスト（呼び出し側がレーンごと落とす）。
+    """
+    target = db.get(ProductEmbedding, product_id)
+    if target is None:
+        return []
+    excluded = set(exclude_ids or ())
+    excluded.add(product_id)  # アンカー自身は近傍に含めない。
+    stmt = (
+        select(Product)
+        .join(ProductEmbedding, ProductEmbedding.product_id == Product.id)
+        .where(
+            Product.status.in_(LISTED_STATUSES),
+            Product.id.notin_(excluded),
+        )
+        .order_by(ProductEmbedding.embedding.cosine_distance(target.embedding))
+        .limit(limit)
+    )
     return list(db.execute(stmt).scalars().all())
 
 
