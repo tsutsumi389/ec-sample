@@ -203,7 +203,7 @@
 <div class="scrim" id="scrim"></div>
 <div class="layout">
   <nav class="toc" id="toc" aria-label="目次">
-    <div class="brand">Hibino EC<small>システム設計書 / 2026-07-11</small></div>
+    <div class="brand">Hibino EC<small>システム設計書 / 2026-07-16</small></div>
     <ol>
       <li><a href="#s1">ドキュメント概要</a></li>
       <li><a href="#s2">システム概要</a></li>
@@ -230,7 +230,7 @@
     <div class="meta-grid">
       <div class="cell"><div class="k">ドキュメント</div><div class="v">システム設計書</div></div>
       <div class="cell"><div class="k">対象システム</div><div class="v">Hibino（EC サンプル）</div></div>
-      <div class="cell"><div class="k">更新日</div><div class="v">2026-07-11</div></div>
+      <div class="cell"><div class="k">更新日</div><div class="v">2026-07-16</div></div>
       <div class="cell"><div class="k">構成</div><div class="v">3 層 + Ollama 連携</div></div>
     </div>
   </header>
@@ -253,6 +253,7 @@
     <p>Hibino は Docker 上で動作する EC サイトのサンプルである。店頭（一般ユーザー）と管理の 2 系統の画面を持ち、商品閲覧から購入、注文管理、AI による生成的レコメンドまでを一通り備える。商品の可視性・購入可否は <code>Product.status</code>（6 状態の状態機械）を唯一の源として導出し、実売価格は <code>effective_price</code>（セール価格優先）に一元化されている点が設計の背骨となっている。</p>
     <h3><span class="num">2.1</span>主要機能サマリ</h3>
     <div class="cards">
+      <div class="card"><h4>ホーム（レーン構成）</h4><p>Netflix 型の複数レーンでホームを構成。1 レーン = 1 アルゴリズム（ビルボード / 買い忘れ / あなたへ / 売れ筋 Top10 / カテゴリ / セール / 新着ほか）を stage-wise 貪欲法で並べ、ゲストも閲覧履歴でパーソナライズ。</p></div>
       <div class="card"><h4>商品カタログ</h4><p>検索・カテゴリ絞り込み・価格帯フィルタ・並び替え・ページング付き一覧、商品詳細、関連商品、平均評価表示。</p></div>
       <div class="card"><h4>レビュー</h4><p>購入者限定の投稿（1 ユーザー 1 商品 1 件）、投稿者名付き一覧、平均評価集計。</p></div>
       <div class="card"><h4>お気に入り</h4><p>ユーザー単位で商品を登録・一覧・削除。追加/削除とも冪等操作。</p></div>
@@ -308,9 +309,9 @@
       <div class="tier">
         <span class="tlabel">Application</span>
         <div class="row">
-          <div class="box"><b>FastAPI ルーター群</b><span>auth / products / cart / orders / addresses / coupons / wishlist / recommendations / admin</span></div>
+          <div class="box"><b>FastAPI ルーター群</b><span>auth / products / cart / orders / addresses / coupons / wishlist / recommendations / assistant / home / admin</span></div>
           <div class="box"><b>依存注入</b><span>get_current_user / _optional / get_current_admin / get_db</span></div>
-          <div class="box"><b>services</b><span>embedding / semantic_id / recommendation</span></div>
+          <div class="box"><b>services</b><span>embedding / semantic_id / recommendation / llm_catalog / assistant / home_page</span></div>
         </div>
         <div class="row">
           <div class="box side"><b>lifespan（起動時）</b><span>pgvector 有効化 → create_all → seed_data → 埋め込み同期スレッド</span></div>
@@ -410,9 +411,11 @@
     <p><code>users</code> テーブルに 1 件でもあれば即 return する冪等ガード付き。初期投入は次のとおり。</p>
     <ul>
       <li>ユーザー: <code>admin@example.com</code>（admin123, role=admin）/ <code>user@example.com</code>（user123, role=user）</li>
-      <li>カテゴリ 5 件、商品 12 件（<code>desk-light</code>=suspended、<code>smart-watch</code>=coming_soon、<code>wrist-watch</code>=stock 0、他は on_sale）</li>
+      <li>カテゴリ 5 件（キッチン家電 / 生活家電 / 日用品 / アウトドア / ファッション小物）、商品 60 件。ホームのレーン分離・novelty がカテゴリ分布で多様性を測るため、5 カテゴリに配分して 1 カテゴリ偏りを避ける</li>
+      <li>各状態を一通り含む（<code>draft</code> / <code>coming_soon</code> / <code>suspended</code> / <code>discontinued</code> / <code>archived</code> を各数件、残りは <code>on_sale</code>、<code>wrist-watch</code>=stock 0）。可視性・購入可否の分岐やレーンのフォールバックを実データで確認できる</li>
+      <li>商品の <code>description</code> は埋め込みの原文を兼ねる。テンプレ文だと全ベクトルが密集してセマンティック検索もホームのレーン分離も効かなくなるため、用途・素材・シーン・サイズなど固有語を含む具体的な説明文にする。画像は <code>frontend/public/products/</code> の統一 SVG（10 枚）を <code>image_slug</code> で流用（新規 SVG は追加しない）</li>
       <li>クーポン 2 件: <code>WELCOME10</code>（percent 10）/ <code>SAVE500</code>（fixed 500・min 5000）</li>
-      <li>動作確認用に user のサンプル注文（status=delivered、<code>effective_price</code> を total にスナップショット、在庫 −1）とレビュー 2 件。レビュー投稿資格を満たすため実 Order/OrderItem を合わせて作る</li>
+      <li>動作確認用に user のサンプル注文（<code>delivered</code> / <code>paid</code> / <code>shipped</code> など複数ステータス、<code>effective_price</code> を total にスナップショット、在庫を購入分減算）とレビュー。「今週の売れ筋 Top10」レーンや注文管理のデモが成立するよう直近の購入実績を持たせ、レビュー投稿資格を満たすため実 Order/OrderItem を合わせて作る</li>
     </ul>
 
     <h3><span class="num">5.6</span>アシスタント会話テーブル</h3>
@@ -483,11 +486,12 @@
       </tbody>
     </table></div>
 
-    <h3><span class="num">6.4</span>レコメンド</h3>
+    <h3><span class="num">6.4</span>レコメンド・ホーム</h3>
     <div class="tw"><table>
       <thead><tr><th>Method</th><th>Path</th><th>認証</th><th>概要</th></tr></thead>
       <tbody>
-        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/recommendations/home</code></td><td><span class="badge a-none">none</span></td><td>ログイン時は ready かつ profile_hash 一致のキャッシュを rank 順で返却、無ければ人気順を即返しつつ生成をスケジュール。未ログインは人気順のみ。source で llm / fallback を区別（任意認証）</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/recommendations/home</code></td><td><span class="badge a-none">任意</span></td><td>単一のおすすめ枠。ログイン時は ready かつ profile_hash 一致のキャッシュを rank 順で返却、無ければ人気順を即返しつつ生成をスケジュール。未ログインは人気順のみ。source で llm / fallback を区別</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/home</code></td><td><span class="badge a-none">任意</span></td><td>ホーム画面のレーン構成（Netflix 型）。<code>recently_viewed_ids</code>（"12,7,3" 形式・先頭 10 件）/ <code>max_lanes</code>（既定 8, 1-12）を受け取り、複数レーンを stage-wise 貪欲法で並べた <code>HomeOut</code>（<code>source</code> = personalized / popular ＋ <code>sections[]</code>）を返す。LLM キャッシュ陳腐化時は <code>/recommendations/home</code> と同流儀で再生成をスケジュール（レスポンスはブロックしない）。多層フォールバックで常に 200。詳細は §8.7</td></tr>
       </tbody>
     </table></div>
 
@@ -620,7 +624,7 @@
   <!-- ============ 8 ============ -->
   <section id="s8">
     <h2><span class="num">08</span>AI レコメンド・アシスタント設計</h2>
-    <p>ユーザー行動（購入・カート・お気に入り・高評価レビュー・閲覧）から商品埋め込みの加重平均でプロフィールベクトルを作り、pgvector のコサイン近傍で候補を絞り、Ollama のチャットモデルにカタログを渡しておすすめ商品と理由を LLM 生成するサブシステム。行動重みには時間減衰を掛けて「今の好み」を優先する。全体が「Ollama が無くても動く」フォールバック前提で設計されている。§8.5 では、この基盤を再利用したチャット型ショッピングアシスタントを、§8.6 ではパーソナライズ信号（閲覧履歴・時間減衰・おすすめ順ソート）を扱う。</p>
+    <p>ユーザー行動（購入・カート・お気に入り・高評価レビュー・閲覧）から商品埋め込みの加重平均でプロフィールベクトルを作り、pgvector のコサイン近傍で候補を絞り、Ollama のチャットモデルにカタログを渡しておすすめ商品と理由を LLM 生成するサブシステム。行動重みには時間減衰を掛けて「今の好み」を優先する。全体が「Ollama が無くても動く」フォールバック前提で設計されている。§8.5 では、この基盤を再利用したチャット型ショッピングアシスタントを、§8.6 ではパーソナライズ信号（閲覧履歴・時間減衰・おすすめ順ソート）を、§8.7 ではこれらを束ねてホーム画面を複数レーンで構成する仕組みを扱う。</p>
 
     <h3><span class="num">8.1</span>パイプライン概観</h3>
     <div class="arch">
@@ -727,6 +731,49 @@
       <li>レコメンド枠（§8.1–8.4）と違い<b>一覧なので購入済み商品も除外せず、並び順だけを変える</b>（品揃え全体を好みに寄せて見せるのが目的）。既存の検索・カテゴリ・価格帯フィルタ・ページネーションと共存する</li>
       <li>既知の制約: プロフィールはリクエストごとに再計算され、時間減衰でベクトルがわずかに動くため、ページ間で近接タイの商品が重複／欠落し得る（厳密な整合にはプロフィールの短期キャッシュが要るが、サンプル規模では許容）</li>
     </ul>
+
+    <h3><span class="num">8.7</span>ホーム画面のレーン構成（stage-wise 貪欲法）</h3>
+    <p>ホーム画面（<span class="badge m-get">GET</span> <code>/api/home</code>）を、単一のおすすめ枠ではなく <b>Netflix 型の複数レーン</b>で構成する。§8.1–8.6 で作った素材（LLM キャッシュ・プロフィールベクトル・pgvector 近傍・閲覧履歴・カテゴリ関心）を再利用し、それぞれ性格の異なる棚（レーン）に束ねてページとして並べる。実装は HTTP 境界の <code>routers/home.py</code> と、レーン組み立ての中核 <code>services/home_page.py</code> に分かれる。設計の柱は 2 つ。</p>
+    <div class="cards">
+      <div class="card"><h4>① レーンビルダー方式（1 レーン = 1 アルゴリズム）</h4><p>各ビルダーは <code>HomeContext</code> を受け取り候補レーンを 0 本以上返すだけの純粋関数。ページ全体の都合（何本載るか・重複したか）を一切知らない。1 本のレーンが複数アルゴリズムの混合物になることを型とレジストリで構造的に禁じる。<code>BUILDERS</code> に関数を足すだけでレーン種別が増える。</p></div>
+      <div class="card"><h4>② stage-wise 貪欲法</h4><p>各レーンを独立にスコアして上から並べる row-ranking ではなく、「すでに選んだレーン・すでに載せた商品」を込みでスコアし、1 本選ぶたびに残り全候補を再スコアする。ページは行の集合ではなく系列であり、n 本目の価値は 1..n-1 本目に依存するという前提に立つ。</p></div>
+    </div>
+
+    <h4>レーン種別（ビルダー）と事前重み（prior）</h4>
+    <p>各レーンは <code>layout</code>（<code>hero</code> 1 件 / <code>ranked</code> 4–10 件 / <code>lane</code> 4–12 件の横スクロール棚）と <code>kind</code>（prior 表の引き当てキー）を持つ。prior は「関連度だけで並べるとページが自分の興味の反響室になり、A/B で非パーソナライズの人気行に負ける」という Netflix の知見に基づき、非パーソナライズ行（top10 等）にも健全な重みを与えるための事前重み。</p>
+    <div class="tw"><table class="col-mono">
+      <thead><tr><th>kind</th><th>layout</th><th>prior</th><th>内容 / データ源</th></tr></thead>
+      <tbody>
+        <tr><td><code>billboard</code></td><td>hero</td><td>3.0</td><td>ページ先頭の 1 枚絵。LLM キャッシュがあれば 1 位（理由文つき）、無ければ全期間人気 1 位。prior を突出させて「hero が必ず 1 本目」を目的関数の外の if 文でなく重みの大小で表現</td></tr>
+        <tr><td><code>cart_reminder</code></td><td>lane</td><td>1.40</td><td>「買い忘れはありませんか」。カート内商品（ログインのみ）。<b>exclude_ids を意図的に無視</b>（除外するとこのレーンは必ず空になる）</td></tr>
+        <tr><td><code>for_you</code></td><td>lane</td><td>1.30</td><td>「あなたへのおすすめ」。LLM キャッシュの 2 位以降（1 位は billboard が使う）。理由文つき、ログインのみ</td></tr>
+        <tr><td><code>top10</code></td><td>ranked</td><td>1.15</td><td>「今週の売れ筋」。<code>get_recent_popular_products</code>（直近 7 日の購入数順）。完全に非パーソナライズ（誰が見ても同じ順序＝社会的証明）、位置だけが個人化される。exclude_ids も適用しない</td></tr>
+        <tr><td><code>byw</code></td><td>lane</td><td>1.00</td><td>「『〇〇』を見たあなたに」。直近閲覧・購入のアンカー商品（最大 3）ごとにベクトル近傍（<code>get_neighbors_of</code>）を引く。<code>byw:{product_id}</code></td></tr>
+        <tr><td><code>recently_viewed</code></td><td>lane</td><td>0.95</td><td>「最近見た商品」。ログインは product_views、ゲストは <code>recently_viewed_ids</code> の順序を保持</td></tr>
+        <tr><td><code>sale</code></td><td>lane</td><td>0.90</td><td>セール中（sale_price あり）の棚。プロフィールがあれば近傍順（「セール中のあなた向け」）、無ければ割引率順（<code>get_sale_products</code>）</td></tr>
+        <tr><td><code>category</code></td><td>lane</td><td>0.85</td><td>「{カテゴリ名}のおすすめ」。関心上位 3 カテゴリ × プロフィール近傍（<code>get_candidates(category_id=…)</code>）。<code>category:{category_id}</code></td></tr>
+        <tr><td><code>new_arrivals</code></td><td>lane</td><td>0.75</td><td>「新着アイテム」（created_at 降順）。非パーソナライズ。コールドスタートでページを空にしない最後の砦</td></tr>
+      </tbody>
+    </table></div>
+
+    <h4>スコア関数と貪欲な選択</h4>
+    <p>1 本のレーンをページの現在位置に置く価値を、<b>3 要素の乗算</b>で評価する（加算にすると 1 要素が致命的に低い棚を他要素で救済できてしまうため乗算）。</p>
+    <p style="text-align:center;font-size:14px"><code>score = relevance × prior × novelty</code></p>
+    <ul>
+      <li><b>relevance（0.5〜1.0）</b>: レーン内商品の埋め込みとプロフィールベクトルのコサイン類似度の平均を <code>(1+cos)/2</code> で写す。プロフィール無し／埋め込み無しは中立 0.5</li>
+      <li><b>prior</b>: 上表のレーン種別重み</li>
+      <li><b>novelty（0.35〜1.0）</b>: すでに選んだレーン群とのカテゴリ分布の類似度で減点し、ページの多様性を担保する。減点は候補レーンの<b>集中度（ハーフィンダール指数 Σp²）で重み付け</b>する——これが要点で、全カテゴリに薄く広がったレーン（top10 等）は一様分布ゆえ他のあらゆる分布と類似度が高く、掛けないと「広いレーンが 1 本載った瞬間に後続が全部冗長判定される」誤検知（コールドスタートで 2 本しか載らない事故）が起きる。集中度を掛けることで、特定カテゴリに寄ったレーンが既出と丸かぶりのときにだけ減点が効く</li>
+    </ul>
+    <p>ページ構築（<code>build_page</code>）は、全ビルダーの候補を集めてから貪欲に 1 本ずつ選ぶ。毎イテレーションで <b>(1) 既出商品の重複排除 → (2) min_items 割れの脱落 → (3) 全候補の再スコアリング</b> を行い、最大スコアの 1 本を確定する。<code>max_lanes</code>（既定 8）に達するか、最大スコアが <code>_SCORE_THRESHOLD</code>=0.20 を下回れば打ち切る（<b>水増しした 9 本より意味のある 5 本のほうがページとして強い</b>という判断で、上限より先に閾値で止まるのを許容）。重複排除はスコアに埋め込まず明示的なフィルタ工程として持ち、契約「同じ商品が 2 セクションに出現しない」を傾向でなく保証にする。</p>
+
+    <h4>ゲストのパーソナライズと多層フォールバック</h4>
+    <ul>
+      <li><b>ゲスト（未ログイン）</b>: フロントが localStorage の閲覧履歴を <code>recently_viewed_ids</code>（"12,7,3" 形式・先頭 10 件）として送る。<code>_guest_profile</code> がその埋め込みを ID 順の位置減衰（<code>0.85^i</code>、行動時刻が無いため時間減衰の代わり）で加重平均し擬似プロフィールを作る。これにより byw / category / sale がゲストでもパーソナライズされ <code>source="personalized"</code> を満たせる</li>
+      <li><b>プロフィールは 1 回だけ構築</b>: <code>build_context</code> で profile・除外 ID・LLM キャッシュ鮮度・アンカー・カテゴリ関心をまとめて 1 回だけ計算し、全ビルダーで使い回す（ビルダーごとに build_profile を呼ぶとレーン本数ぶん重複実行される）</li>
+      <li><b>多層フォールバック</b>: pgvector 不在・Ollama 停止・埋め込み 0 件・プロフィール構築不能のいずれでも 200 を返す。<code>build_context</code> の各取得は <code>_safe</code>、各ビルダーは <code>_safe_build</code> で個別に隔離し、失敗時は必ず <code>db.rollback()</code>（rollback しないと以後同一セッションの全クエリが InFailedSqlTransaction で連鎖失敗し、後続レーンまで巻き添えになる）。1 本のレーンの失敗がページ全体を落とさない</li>
+      <li><b>source 判定</b>: パーソナライズされたレーンが 1 本でも載れば <code>personalized</code>、非パーソナライズのみ（コールドスタート）なら <code>popular</code></li>
+    </ul>
+    <div class="note warn"><span class="lbl">既知の性能課題（Phase 3 TODO）</span><p style="margin:.3em 0 0"><code>product_embeddings.embedding</code> に ANN インデックス（HNSW）が無いため、ベクトル近傍を引くレーン（billboard/for_you/byw/category/sale）ごとに全件コサインスキャンが走る。商品数が数千を超えたら <code>CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)</code> が必要。マイグレーション未導入のため、追加時は create_all 後の DDL 実行として lifespan に入れる形になる。</p></div>
   </section>
 
   <!-- ============ 9 ============ -->
@@ -773,7 +820,7 @@
     <div class="tw"><table>
       <thead><tr><th>画面</th><th>パス</th><th>概要</th></tr></thead>
       <tbody>
-        <tr><td>トップ / 商品一覧</td><td><code>app/page.tsx</code></td><td>Hero＋おすすめ＋一覧。検索/カテゴリ/並び替え/価格帯/ページを URL クエリで保持。並び替え（<code>ProductFilters</code>）は先頭に「おすすめ順」（<code>recommended</code>）を追加、既定は新着順。Suspense 境界あり</td></tr>
+        <tr><td>トップ / 商品一覧</td><td><code>app/page.tsx</code></td><td>ホームのレーン群（<code>HomeSections</code>、§10.5）＋カテゴリクイックリンク＋商品一覧。検索中（<code>?search=…</code>）はレーンを出さず検索結果に集中。一覧は検索/カテゴリ/並び替え/価格帯/ページを URL クエリで保持。並び替え（<code>ProductFilters</code>）は先頭に「おすすめ順」（<code>recommended</code>）を追加、既定は新着順。Suspense 境界あり</td></tr>
         <tr><td>商品詳細</td><td><code>app/products/[id]/page.tsx</code></td><td>画像ギャラリー・数量選択・カート追加。on_sale のみ購入パネル表示、他状態は理由文。関連/おすすめ/レビュー内包。表示時にログイン中のみ閲覧を <code>POST /products/{id}/view</code> で fire-and-forget 記録（失敗は無視。localStorage の「最近見た商品」とは独立に併存）</td></tr>
         <tr><td>カート</td><td><code>app/cart/page.tsx</code></td><td>数量変更・削除、クーポン検証、住所選択 or 手入力、注文確定。未ログインは /login?redirect=/cart へ</td></tr>
         <tr><td>注文履歴</td><td><code>app/orders/page.tsx</code></td><td>一覧。pending/paid のみキャンセルボタン表示</td></tr>
@@ -827,6 +874,20 @@
       <li><code>source="fallback"</code> の応答には「キーワード検索の結果です」の注記を添える</li>
       <li><code>lib/api.ts</code> に <code>api.assistant.chat()</code> / <code>api.assistant.messages()</code> を追加（既存 fetch ラッパー踏襲、未ログインでも呼べる）</li>
     </ul>
+
+    <h3><span class="num">10.5</span>ホーム画面のレーン描画</h3>
+    <p>トップ（<code>app/page.tsx</code>）のヒーロー＋単一おすすめ枠を、<code>GET /api/home</code> を <b>1 リクエストだけ</b>叩いて返ってきた <code>sections[]</code> を <code>layout</code> に応じて描き分ける構成に刷新した。認証トークンが localStorage 保持のため Server Component 化できず、レーンごとの個別 fetch によるウォーターフォールを避けるべく <code>/home</code> に集約している。</p>
+    <div class="cards">
+      <div class="card"><h4>HomeSections</h4><p>ホームのレーン群のコンテナ（<code>'use client'</code>）。<code>useAuth</code> の user を依存に <code>/home</code> を取得し、ログイン状態が変われば取り直す。ゲストは <code>getRecentlyViewedIds()</code>（localStorage）を <code>recently_viewed_ids</code> に載せてパーソナライズ。取得失敗時は <code>BrandHero</code> だけ出して画面を壊さない。</p></div>
+      <div class="card"><h4>HomeBillboard</h4><p>最上部のビルボード（<code>layout: hero</code>）。商品 1 件＋理由文（reason）を大きく訴求。暗いブランド背景で <code>ProductPrice</code>（<code>text-gray-900</code> 固定）が読めないため価格だけ白文字で自前描画（打ち消し線つき定価の併記ルールは踏襲）。</p></div>
+      <div class="card"><h4>ProductLane</h4><p>横スクロールレーン（<code>lane</code> / <code>ranked</code>）。カルーセルライブラリを使わず素の CSS scroll snap で実現。端検知で矢印・フェードを出し分け、キーボード操作対応。<code>ranked</code> は順位番号を大きく併記（社会的証明の可視化）。</p></div>
+      <div class="card"><h4>BrandHero</h4><p>ビルボードを出せないとき（商品無し・<code>/home</code> 取得失敗・コールドスタートで hero レーン無し）のフォールバック。旧トップの装飾ヒーロー（ケトル・湯呑み・植物の SVG）を切り出したもの。</p></div>
+    </div>
+    <ul>
+      <li>読み込み中は <code>BillboardSkeleton</code>＋<code>LaneSkeleton</code> で高さを予約し段差を防ぐ。<code>sections</code> が空なら <code>EmptyState</code> を表示</li>
+      <li>hero は先頭 1 本のみ採用（契約上も billboard は 1 本）。それ以外を <code>ProductLane</code> に振り分け、<code>key</code> は <code>section.key</code>（<code>billboard</code> / <code>top10</code> / <code>byw:{id}</code> / <code>category:{id}</code> など一意）を使う</li>
+      <li>「最近見た商品」はレーン（<code>recently_viewed</code>）が担うためトップ末尾の <code>RecentlyViewed</code> は撤去（同コンポーネントは商品詳細ページで継続利用）。型は <code>lib/types.ts</code> の <code>HomeResponse</code> / <code>HomeSection</code> / <code>HomeSectionLayout</code></li>
+    </ul>
   </section>
 
   <!-- ============ 11 ============ -->
@@ -854,13 +915,17 @@
         <tr><td>ゲスト会話の認可</td><td>ログイン会話は本人のみ。ゲスト会話（user_id NULL）は UUID を知っていること自体が認可（サンプルとして許容）。本番想定なら署名付きセッション（HttpOnly Cookie 等）でゲスト会話を端末に束縛する必要がある旨をコードコメントに明記</td></tr>
         <tr><td>reply 本文に SID を出さない</td><td>system プロンプトで「本文に SID を書かない」と指示した上で、防御的に <code>strip_sids_from_reply</code> の正規表現後処理で <code>SID x-y-z</code> 表記を除去（小型モデルはプロンプト指示だけでは漏れが残るため二段構え）</td></tr>
         <tr><td>SID 照合・カタログ整形の共通化</td><td>ハルシネーション対策の SID→Product 照合とカタログ 1 行表現は <code>services/llm_catalog.py</code> に集約し、レコメンドとアシスタントで共用（重複実装しない）</td></tr>
+        <tr><td>ホームは 1 レーン = 1 アルゴリズム</td><td>各ビルダーは <code>HomeContext</code> から候補レーンを返すだけの純粋関数で、ページ全体の都合を知らない。1 本のレーンが複数アルゴリズムの混合物になることを型と <code>BUILDERS</code> レジストリで構造的に禁じる。レーン追加はビルダー関数の追加のみで行う（§8.7）</td></tr>
+        <tr><td>ホームは stage-wise 貪欲法で組む</td><td>row-ranking ではなく「既出レーン・既出商品」込みでスコアし 1 本選ぶたびに再スコアする。<code>score = relevance × prior × novelty</code>（乗算で 1 要素が致命的に低い棚の救済を防ぐ）。重複排除は目的関数に埋めず明示フィルタ工程にして「同一商品が 2 セクションに出ない」を保証にする。<code>max_lanes</code> 上限より先に score 閾値 0.20 で打ち切ることを許容</td></tr>
+        <tr><td>ホームは何があっても 200</td><td>pgvector 不在・Ollama 停止・埋め込み 0 件・プロフィール構築不能でも、載せられるレーンだけでページを組んで返す。<code>_safe</code> / <code>_safe_build</code> で各処理を隔離し失敗時は必ず <code>rollback</code>（残すと以後同一セッションが InFailedSqlTransaction で連鎖失敗）。コールドスタートは新着レーンが最後の砦</td></tr>
+        <tr><td>プロフィールは 1 リクエスト 1 回</td><td>ホームの全ビルダーが共有するプロフィール・除外 ID・LLM キャッシュ鮮度は <code>build_context</code> で 1 回だけ構築して使い回す（ビルダーごとに <code>build_profile</code> を呼ぶとレーン本数ぶん重複実行される）。ゲストは <code>recently_viewed_ids</code> の位置減衰加重平均で擬似プロフィールを作りパーソナライズする</td></tr>
         <tr><td>冪等性</td><td>seed_data は users が非空なら即 return。お気に入り追加は重複時に既存返却、削除は非存在時 204</td></tr>
         <tr><td>テスト未整備</td><td>テストコードは無い。追加する場合は <code>backend/</code>（pytest 想定）から</td></tr>
       </tbody>
     </table></div>
 
     <footer class="docfoot">
-      Hibino EC システム設計書 — 更新日 2026-07-11 ／ 本書はコードベースの構造化分析（7 サブシステム）に基づく統合設計書である。
+      Hibino EC システム設計書 — 更新日 2026-07-16 ／ 本書はコードベースの構造化分析（7 サブシステム）に基づく統合設計書である。
       <div style="margin-top:8px"><a href="#top">▲ ページ先頭へ戻る</a></div>
     </footer>
   </section>
