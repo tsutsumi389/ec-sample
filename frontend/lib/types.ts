@@ -47,6 +47,11 @@ export interface ProductListResponse {
   total: number;
 }
 
+/** GET /products/suggest のレスポンス。商品名にマッチした検索語候補の配列。 */
+export interface SuggestResponse {
+  suggestions: string[];
+}
+
 export interface Category {
   id: number;
   name: string;

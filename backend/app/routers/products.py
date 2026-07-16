@@ -20,7 +20,7 @@ from app.models import (
     Review,
     User,
 )
-from app.schemas import ProductListOut, ProductOut, ReviewCreate, ReviewOut
+from app.schemas import ProductListOut, ProductOut, ReviewCreate, ReviewOut, SuggestOut
 from app.services import embedding, recommendation
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -197,6 +197,53 @@ def list_products(
     ]
 
     return ProductListOut(items=items, total=total)
+
+
+@router.get("/suggest", response_model=SuggestOut)
+def suggest_products(
+    q: str = Query(default=""),
+    limit: int = Query(default=8, ge=1, le=20),
+    db: Session = Depends(get_db),
+) -> SuggestOut:
+    """検索サジェスト（キーワード候補）。
+
+    入力中の高頻度呼び出しに耐えるため、埋め込み等の重い処理は一切使わない。
+    出品中（LISTED）商品の名前に対する ILIKE 部分一致だけで候補語を返す。
+    前方一致を優先し、次に名前順で安定化する。同名商品は 1 件に畳む。
+    2 文字未満は候補過多になるだけなので即空配列で返す（DB も引かない）。
+    ルート順の都合で /{product_id} より前に定義する（"suggest" が int パスに
+    マッチして 422 になるのを避けるため）。
+    """
+    query = q.strip()
+    if len(query) < 2:
+        return SuggestOut(suggestions=[])
+
+    # ILIKE のワイルドカード（% _ \）はエスケープしてリテラル一致にする。
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    # 関連度順で並べる（strpos はワイルドカードを特殊扱いしないので生クエリを使う）:
+    #   ① マッチ位置が早いほど関連が高い（前方一致は pos=1 で自動的に最上位に来る）
+    #   ② 同着なら商品名が短いほどクエリの比重が高く、関連度が高いとみなす
+    #   ③ 最後に名前で安定化（ページングやタイの再現性のため）
+    match_pos = func.strpos(func.lower(Product.name), query.lower())
+    rows = (
+        db.execute(
+            select(Product.name)
+            .where(
+                Product.status.in_(LISTED_STATUSES),
+                Product.name.ilike(f"%{escaped}%", escape="\\"),
+            )
+            .group_by(Product.name)
+            .order_by(
+                match_pos.asc(),
+                func.char_length(Product.name).asc(),
+                Product.name.asc(),
+            )
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
+    return SuggestOut(suggestions=list(rows))
 
 
 @router.get("/{product_id}", response_model=ProductOut)

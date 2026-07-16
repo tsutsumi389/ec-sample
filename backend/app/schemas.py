@@ -116,6 +116,12 @@ class ProductListOut(BaseModel):
     total: int
 
 
+class SuggestOut(BaseModel):
+    # 検索サジェスト候補。出品中商品の名前にマッチした検索語（文字列）の配列。
+    # クリックでそのままフル検索（GET /products?search=）に渡す想定。
+    suggestions: list[str]
+
+
 class ProductCreate(BaseModel):
     name: str
     sku: str | None = None
