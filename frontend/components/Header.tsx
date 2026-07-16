@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
 import { iconButton } from '@/lib/buttonStyles';
+import SearchBox from '@/components/SearchBox';
 import {
   SearchIcon,
   CartIcon,
@@ -26,7 +27,6 @@ export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [search, setSearch] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -93,16 +93,6 @@ export default function Header() {
     };
   }, [menuOpen]);
 
-  const handleSearch = (e: FormEvent) => {
-    e.preventDefault();
-    setSearchOpen(false);
-    const params = new URLSearchParams();
-    if (search.trim()) {
-      params.set('search', search.trim());
-    }
-    router.push(params.toString() ? `/?${params.toString()}` : '/');
-  };
-
   const handleLogout = () => {
     setMenuOpen(false);
     logout();
@@ -157,23 +147,11 @@ export default function Header() {
           </Link>
 
           {/* 検索（sm以上で常時表示） */}
-          <form onSubmit={handleSearch} className="hidden flex-1 sm:flex">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="商品名や雰囲気で検索（例: 雨の日に便利なもの）"
-              aria-label="商品を検索"
-              className="w-full rounded-l-md border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-            />
-            <button
-              type="submit"
-              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-r-md border border-l-0 border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 transition-colors duration-150 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
-            >
-              <SearchIcon />
-              検索
-            </button>
-          </form>
+          <SearchBox
+            className="hidden flex-1 sm:block"
+            inputClassName="py-1.5"
+            buttonClassName="py-1.5"
+          />
 
           {/* ナビ（sm以上） */}
           <nav className="hidden items-center gap-1 whitespace-nowrap text-sm sm:flex">
@@ -279,25 +257,14 @@ export default function Header() {
 
         {/* モバイル検索バー（開閉式） */}
         {searchOpen && (
-          <form onSubmit={handleSearch} className="flex pb-3 sm:hidden">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="商品名や雰囲気で検索（例: 雨の日に便利なもの）"
-              aria-label="商品を検索"
-              // eslint-disable-next-line jsx-a11y/no-autofocus
+          <div className="pb-3 sm:hidden">
+            <SearchBox
+              inputClassName="py-2"
+              buttonClassName="py-2"
               autoFocus
-              className="w-full rounded-l-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+              onSubmitted={() => setSearchOpen(false)}
             />
-            <button
-              type="submit"
-              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-r-md border border-l-0 border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 transition-colors duration-150 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
-            >
-              <SearchIcon />
-              検索
-            </button>
-          </form>
+          </div>
         )}
       </div>
 

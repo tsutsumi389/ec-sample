@@ -143,7 +143,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string): Promise<T> => request<T>(path, { method: 'GET' }),
+  // signal を渡すと途中キャンセルできる（サジェスト等、古いリクエストを捨てたい用途）。
+  get: <T>(path: string, signal?: AbortSignal): Promise<T> =>
+    request<T>(path, { method: 'GET', signal }),
   post: <T>(path: string, body?: unknown): Promise<T> =>
     request<T>(path, {
       method: 'POST',
