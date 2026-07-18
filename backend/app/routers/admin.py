@@ -1,9 +1,9 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
-from app.database import SessionLocal, get_db
-from app.models import Category, Coupon, Order, Product, ProductImage, User
+from app.database import get_db
+from app.models import Category, Coupon, Order, Product, User
 from app.schemas import (
     AdminOrderOut,
     AdminUserOut,
@@ -18,32 +18,11 @@ from app.schemas import (
     ProductOut,
     ProductUpdate,
 )
-from app.services import embedding
+from app.services import admin as admin_service
+from app.services import category as category_service
+from app.services import coupon as coupon_service
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
-
-VALID_ORDER_STATUSES = {"pending", "paid", "shipped", "delivered", "cancelled"}
-
-
-def _refresh_embedding_task(product_id: int) -> None:
-    """商品作成/更新後に単一商品の埋め込みを更新する（自前セッションで開閉）。
-
-    失敗しても本体処理には影響させない（embedding 側で例外を握って警告ログ化する）。
-    """
-    db = SessionLocal()
-    try:
-        embedding.refresh_product_embedding(db, product_id)
-    finally:
-        db.close()
-
-
-def _rebuild_embeddings_task() -> None:
-    """全商品の埋め込み + セマンティックID を強制再構築する（rebuild 用）。"""
-    db = SessionLocal()
-    try:
-        embedding.sync_embeddings(db, force=True)
-    finally:
-        db.close()
 
 
 # ---------- Products ----------
@@ -51,33 +30,18 @@ def _rebuild_embeddings_task() -> None:
 
 @router.get("/products", response_model=list[ProductOut])
 def list_all_products(db: Session = Depends(get_db)) -> list[Product]:
-    return db.query(Product).order_by(Product.id).all()
+    return admin_service.list_all_products(db)
 
 
-def _sync_images(product: Product, image_urls: list[str]) -> None:
-    """商品のギャラリー画像を与えられた URL 列で丸ごと置き換える（表示順は配列順）。"""
-    product.images = [
-        ProductImage(image_url=url, sort_order=index)
-        for index, url in enumerate(image_urls)
-        if url.strip()
-    ]
-
-
-@router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
+@router.post("/products", response_model=ProductOut, status_code=201)
 def create_product(
     payload: ProductCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> Product:
-    data = payload.model_dump()
-    image_urls = data.pop("image_urls", [])
-    product = Product(**data)
-    _sync_images(product, image_urls)
-    db.add(product)
-    db.commit()
-    db.refresh(product)
+    product = admin_service.create_product(db, payload)
     # 埋め込み更新は本体処理と切り離して非同期実行（失敗しても作成は成立済み）。
-    background_tasks.add_task(_refresh_embedding_task, product.id)
+    background_tasks.add_task(admin_service.refresh_embedding_task, product.id)
     return product
 
 
@@ -88,48 +52,24 @@ def update_product(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> Product:
-    product = db.get(Product, product_id)
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-
-    data = payload.model_dump(exclude_unset=True)
-    # image_urls は None=変更しない / [] や配列=その内容で丸ごと置換、として扱う。
-    image_urls = data.pop("image_urls", None)
-    for field, value in data.items():
-        setattr(product, field, value)
-    if image_urls is not None:
-        _sync_images(product, image_urls)
-
-    db.commit()
-    db.refresh(product)
+    product = admin_service.update_product(db, product_id, payload)
     # 商品テキストが変わった可能性があるので埋め込みを非同期で更新する。
-    background_tasks.add_task(_refresh_embedding_task, product.id)
+    background_tasks.add_task(admin_service.refresh_embedding_task, product.id)
     return product
 
 
 @router.delete("/products/{product_id}", response_model=ProductOut)
 def delete_product(product_id: int, db: Session = Depends(get_db)) -> Product:
-    product = db.get(Product, product_id)
-    if product is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-
-    # 物理削除はせず archived に落とす（論理削除。過去注文のスナップショットは不変）。
-    product.status = "archived"
-    db.commit()
-    db.refresh(product)
-    return product
+    return admin_service.delete_product(db, product_id)
 
 
 # ---------- Recommendations ----------
 
 
-@router.post("/recommendations/rebuild", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/recommendations/rebuild", status_code=202)
 def rebuild_recommendations(background_tasks: BackgroundTasks) -> dict[str, str]:
-    """全商品の埋め込み + セマンティックID を再構築する（source_hash 無視の強制再計算）。
-
-    重い処理なので BackgroundTasks で非同期実行し、即 202 を返す。
-    """
-    background_tasks.add_task(_rebuild_embeddings_task)
+    """全商品の埋め込み + セマンティックID を再構築する（重い処理なので即 202 を返す）。"""
+    background_tasks.add_task(admin_service.rebuild_embeddings_task)
     return {"status": "started"}
 
 
@@ -138,24 +78,14 @@ def rebuild_recommendations(background_tasks: BackgroundTasks) -> dict[str, str]
 
 @router.get("/orders", response_model=list[AdminOrderOut])
 def list_all_orders(db: Session = Depends(get_db)) -> list[Order]:
-    return db.query(Order).order_by(Order.created_at.desc(), Order.id.desc()).all()
+    return admin_service.list_all_orders(db)
 
 
 @router.put("/orders/{order_id}/status", response_model=AdminOrderOut)
 def update_order_status(
     order_id: int, payload: OrderStatusUpdate, db: Session = Depends(get_db)
 ) -> Order:
-    if payload.status not in VALID_ORDER_STATUSES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status")
-
-    order = db.get(Order, order_id)
-    if order is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-
-    order.status = payload.status
-    db.commit()
-    db.refresh(order)
-    return order
+    return admin_service.update_order_status(db, order_id, payload.status)
 
 
 # ---------- Users ----------
@@ -163,7 +93,7 @@ def update_order_status(
 
 @router.get("/users", response_model=list[AdminUserOut])
 def list_users(db: Session = Depends(get_db)) -> list[User]:
-    return db.query(User).order_by(User.id).all()
+    return admin_service.list_users(db)
 
 
 # ---------- Categories ----------
@@ -171,64 +101,24 @@ def list_users(db: Session = Depends(get_db)) -> list[User]:
 
 @router.get("/categories", response_model=list[CategoryOut])
 def list_categories(db: Session = Depends(get_db)) -> list[Category]:
-    return db.query(Category).order_by(Category.id).all()
+    return category_service.list_all(db)
 
 
-@router.post("/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
+@router.post("/categories", response_model=CategoryOut, status_code=201)
 def create_category(payload: CategoryCreate, db: Session = Depends(get_db)) -> Category:
-    existing = db.query(Category).filter(Category.slug == payload.slug).first()
-    if existing is not None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Slug already exists")
-
-    category = Category(**payload.model_dump())
-    db.add(category)
-    db.commit()
-    db.refresh(category)
-    return category
+    return category_service.create(db, payload)
 
 
 @router.put("/categories/{category_id}", response_model=CategoryOut)
 def update_category(
     category_id: int, payload: CategoryUpdate, db: Session = Depends(get_db)
 ) -> Category:
-    category = db.get(Category, category_id)
-    if category is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
-
-    data = payload.model_dump(exclude_unset=True)
-    if "slug" in data:
-        existing = (
-            db.query(Category)
-            .filter(Category.slug == data["slug"], Category.id != category_id)
-            .first()
-        )
-        if existing is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Slug already exists"
-            )
-
-    for field, value in data.items():
-        setattr(category, field, value)
-
-    db.commit()
-    db.refresh(category)
-    return category
+    return category_service.update(db, category_id, payload)
 
 
 @router.delete("/categories/{category_id}", response_model=CategoryOut)
 def delete_category(category_id: int, db: Session = Depends(get_db)) -> CategoryOut:
-    category = db.get(Category, category_id)
-    if category is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
-
-    result = CategoryOut.model_validate(category)
-    # Products are never deleted; only detach them from the removed category.
-    db.query(Product).filter(Product.category_id == category_id).update(
-        {Product.category_id: None}
-    )
-    db.delete(category)
-    db.commit()
-    return result
+    return category_service.delete(db, category_id)
 
 
 # ---------- Coupons ----------
@@ -236,57 +126,19 @@ def delete_category(category_id: int, db: Session = Depends(get_db)) -> Category
 
 @router.get("/coupons", response_model=list[CouponOut])
 def list_coupons(db: Session = Depends(get_db)) -> list[Coupon]:
-    return db.query(Coupon).order_by(Coupon.id).all()
+    return coupon_service.list_all(db)
 
 
-@router.post("/coupons", response_model=CouponOut, status_code=status.HTTP_201_CREATED)
+@router.post("/coupons", response_model=CouponOut, status_code=201)
 def create_coupon(payload: CouponCreate, db: Session = Depends(get_db)) -> Coupon:
-    existing = db.query(Coupon).filter(Coupon.code == payload.code).first()
-    if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Coupon code already exists"
-        )
-
-    coupon = Coupon(**payload.model_dump())
-    db.add(coupon)
-    db.commit()
-    db.refresh(coupon)
-    return coupon
+    return coupon_service.create(db, payload)
 
 
 @router.put("/coupons/{coupon_id}", response_model=CouponOut)
 def update_coupon(coupon_id: int, payload: CouponUpdate, db: Session = Depends(get_db)) -> Coupon:
-    coupon = db.get(Coupon, coupon_id)
-    if coupon is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coupon not found")
-
-    data = payload.model_dump(exclude_unset=True)
-    if "code" in data:
-        existing = (
-            db.query(Coupon)
-            .filter(Coupon.code == data["code"], Coupon.id != coupon_id)
-            .first()
-        )
-        if existing is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Coupon code already exists"
-            )
-
-    for field, value in data.items():
-        setattr(coupon, field, value)
-
-    db.commit()
-    db.refresh(coupon)
-    return coupon
+    return coupon_service.update(db, coupon_id, payload)
 
 
 @router.delete("/coupons/{coupon_id}", response_model=CouponOut)
 def delete_coupon(coupon_id: int, db: Session = Depends(get_db)) -> CouponOut:
-    coupon = db.get(Coupon, coupon_id)
-    if coupon is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coupon not found")
-
-    result = CouponOut.model_validate(coupon)
-    db.delete(coupon)
-    db.commit()
-    return result
+    return coupon_service.delete(db, coupon_id)
