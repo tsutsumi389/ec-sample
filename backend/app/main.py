@@ -3,11 +3,13 @@ import threading
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
+from app.core.exceptions import AppError
 from app.database import Base, SessionLocal, engine
 from app.routers import (
     addresses,
@@ -140,6 +142,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    """ドメイン例外（Service 層由来）を HTTP レスポンスへ一元変換する。
+
+    従来 router ごとに散っていた HTTPException 送出をこの 1 か所に集約する。
+    status_code / detail は各例外クラスが持つ値をそのまま使う。
+    """
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
 @app.get("/api/health")

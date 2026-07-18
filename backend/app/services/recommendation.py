@@ -11,8 +11,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
+from fastapi import BackgroundTasks
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL
@@ -26,9 +27,13 @@ from app.models import (
     ProductView,
     RecommendationState,
     Review,
+    User,
     UserRecommendation,
     WishlistItem,
 )
+from app.core.presenters import to_recommendation_item
+from app.repositories import review as review_repo
+from app.schemas import RecommendationItemOut, RecommendationListOut
 from app.services import llm_catalog
 
 logger = logging.getLogger(__name__)
@@ -595,6 +600,126 @@ def generate_for_user(db_session_factory: sessionmaker, user_id: int) -> None:
             db.rollback()
     finally:
         db.close()
+
+
+# 生成中とみなす猶予。この時間内に generating なら二重起動しない。
+_GENERATING_TTL = timedelta(minutes=10)
+
+
+def _should_generate(state: RecommendationState | None) -> bool:
+    """多重起動防止 + 失敗クールダウン。
+
+    generating（生成中）と failed（直近失敗）は、状態更新時刻から一定時間内なら
+    再起動しない。これにより並行リクエストの二重起動と、Ollama 障害時にホーム表示の
+    たびに失敗する生成を再スケジュールし続ける空回りの両方を防ぐ。
+    """
+    if state is None:
+        return True
+    if state.status not in ("generating", "failed"):
+        return True
+    marker = state.updated_at or state.generated_at
+    if marker is None:
+        return True
+    if marker.tzinfo is None:
+        marker = marker.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - marker > _GENERATING_TTL
+
+
+def schedule_generation(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    session_factory: sessionmaker,
+    user_id: int,
+    profile_hash: str,
+) -> None:
+    """多重起動を防ぎつつ LLM 生成タスクを起動する（/recommendations/home と /home の共通経路）。
+
+    BackgroundTasks はレスポンス返却後に走るため、generating がコミットされる前に
+    届いた同一ユーザの並行リクエストが二重に生成をスケジュールし得る。PostgreSQL の
+    advisory ロックで同一ユーザのスケジューリングを直列化し、ロック下で state を
+    読み直して generating を同期確定させることで TOCTOU 競合と重複生成を防ぐ。
+    ロックが取れない（＝他リクエストが処理中）ならスキップする。
+    """
+    got_lock = db.execute(
+        text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": user_id}
+    ).scalar()
+    if not got_lock:
+        return
+    # ロック取得後に最新の state を読み直す（identity map の古い値ではなく DB の確定値）。
+    state = db.get(RecommendationState, user_id, populate_existing=True)
+    if not _should_generate(state):
+        return
+    # レスポンス返却前に generating を同期確定させ、後続リクエストの二重起動を防ぐ。
+    mark_generating(db, user_id, profile_hash)
+    background_tasks.add_task(generate_for_user, session_factory, user_id)
+
+
+def _rec_item(db: Session, product: Product, reason: str | None) -> RecommendationItemOut:
+    avg_rating, review_count = review_repo.rating_stats(db, product.id)
+    return to_recommendation_item(product, avg_rating, review_count, reason)
+
+
+def _popular_fallback(
+    db: Session, limit: int, exclude_ids: set[int] | None
+) -> RecommendationListOut:
+    products = get_popular_products(db, limit, exclude_ids=exclude_ids)
+    items = [_rec_item(db, p, None) for p in products]
+    return RecommendationListOut(source="fallback", items=items)
+
+
+def get_home_recommendations(
+    db: Session,
+    background_tasks: BackgroundTasks,
+    session_factory: sessionmaker,
+    current_user: User | None,
+    limit: int,
+) -> RecommendationListOut:
+    """ホームのおすすめ一覧を返す（キャッシュ利用可否の判定 + 必要なら生成起動を含む）。
+
+    ログイン時は LLM 生成キャッシュ（state=ready かつ profile_hash 一致）があれば rank 順に
+    返し、無ければ人気順フォールバックを即返しつつ生成を起動する。未ログイン時は人気順のみ。
+    """
+    # 未ログイン: 人気順フォールバックのみ（生成はしない）。
+    if current_user is None:
+        return _popular_fallback(db, limit, exclude_ids=None)
+
+    user_id = current_user.id
+    exclude_ids = get_exclude_ids(db, user_id)
+    profile = build_profile(db, user_id)
+    state = db.get(RecommendationState, user_id)
+
+    # キャッシュ利用可否: state=ready かつ profile_hash が現在の行動ハッシュと一致。
+    if (
+        profile is not None
+        and state is not None
+        and state.status == "ready"
+        and state.profile_hash == profile.profile_hash
+    ):
+        rows = (
+            db.query(UserRecommendation)
+            .filter(UserRecommendation.user_id == user_id)
+            .order_by(UserRecommendation.rank, UserRecommendation.id)
+            .all()
+        )
+        items: list[RecommendationItemOut] = []
+        for row in rows:
+            product = row.product
+            # 返却時にも可視性を再確認（生成後に status が変わった商品を弾く）。
+            if product is None or product.status not in LISTED_STATUSES:
+                continue
+            items.append(_rec_item(db, product, row.reason))
+            if len(items) >= limit:
+                break
+        if items:
+            return RecommendationListOut(source="llm", items=items)
+        # キャッシュが全滅（全部非表示化）なら人気順に落とす。
+
+    # キャッシュ無し/陳腐化。人気順フォールバックを即返し、必要なら生成起動。
+    # プロフィールが作れない（行動なし/埋め込み欠損）なら生成しても失敗するだけなので起動しない。
+    if profile is not None:
+        schedule_generation(db, background_tasks, session_factory, user_id, profile.profile_hash)
+
+    return _popular_fallback(db, limit, exclude_ids=exclude_ids)
 
 
 def mark_generating(db: Session, user_id: int, profile_hash: str) -> None:
