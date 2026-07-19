@@ -168,6 +168,27 @@ class ReviewOut(BaseModel):
     created_at: datetime
 
 
+# ---------- 商品Q&A ----------
+
+
+class ProductQuestionCreate(BaseModel):
+    # 購入前の質問。1〜300 文字（空送信・コンテキスト溢れの防止）。
+    question: str = Field(min_length=1, max_length=300)
+
+
+class ProductQuestionOut(BaseModel):
+    id: str
+    question: str
+    answer: str
+    # "llm"（AI 回答）か "fallback"（自動回答不可の定型文）か。
+    source: str
+    # AI が商品情報・レビューを根拠に答えられたか（false は「情報不足」）。
+    answerable: bool
+    # 質問者の表示名。
+    asker_name: str
+    created_at: datetime
+
+
 # ---------- Wishlist ----------
 
 

@@ -17,6 +17,7 @@ import WishlistButton from '@/components/WishlistButton';
 import RelatedProducts from '@/components/RelatedProducts';
 import ProductRecommendations from '@/components/ProductRecommendations';
 import ReviewSection from '@/components/ReviewSection';
+import ProductQA from '@/components/ProductQA';
 import RecentlyViewed from '@/components/RecentlyViewed';
 import Breadcrumbs, { type BreadcrumbItem } from '@/components/Breadcrumbs';
 import { Skeleton } from '@/components/Skeleton';
@@ -352,6 +353,8 @@ export default function ProductDetailPage() {
         avgRating={product.avg_rating}
         reviewCount={product.review_count}
       />
+
+      <ProductQA productId={product.id} />
 
       <RecentlyViewed excludeId={product.id} />
     </div>
