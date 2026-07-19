@@ -1,4 +1,4 @@
-import type { AssistantChatResponse, AssistantMessage } from './types';
+import type { AssistantChatResponse, AssistantMessage, ProductQuestion } from './types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -170,6 +170,17 @@ export const api = {
     messages: (conversationId: string): Promise<AssistantMessage[]> =>
       request<AssistantMessage[]>(`/assistant/conversations/${encodeURIComponent(conversationId)}/messages`, {
         method: 'GET',
+      }),
+  },
+
+  // 商品ページの購入前Q&A。一覧は公開、投稿は要ログイン（AIが同期で回答を生成）。
+  productQa: {
+    list: (productId: number): Promise<ProductQuestion[]> =>
+      request<ProductQuestion[]>(`/products/${productId}/questions`, { method: 'GET' }),
+    ask: (productId: number, question: string): Promise<ProductQuestion> =>
+      request<ProductQuestion>(`/products/${productId}/questions`, {
+        method: 'POST',
+        body: JSON.stringify({ question }),
       }),
   },
 };

@@ -449,3 +449,40 @@ class AssistantMessage(Base):
     conversation: Mapped["AssistantConversation"] = relationship(
         back_populates="messages"
     )
+
+
+# ---------- 商品Q&A（購入前質問へのAI回答）----------
+#
+# 商品ページで購入検討者の質問に、その商品の説明文とレビューだけを根拠に AI が即答し、
+# 公開・蓄積する機能。回答は生成時点のスナップショット（OrderItem と同じ思想で後から
+# 再生成しない）。可視性・購入可否は Product.status に従い、既存テーブルには一切カラムを
+# 足さず新規テーブルのみ追加する運用に合わせる。
+
+
+class ProductQuestion(Base):
+    """商品ページの購入前Q&A。1 質問 = 1 AI回答で 1 行持つ。
+
+    質問できるのはログインユーザーのみ（レビューと同じ権限モデル）だが、蓄積された
+    Q&A は誰でも閲覧できる（社会的証明）。source は生成元（llm / fallback）、answerable は
+    根拠から答えられたか（UI で「情報不足」表示に使う）。id は推測困難な UUID 文字列。
+    """
+
+    __tablename__ = "product_questions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    # "llm" | "fallback"（Ollama 失敗時は fallback の定型文を保存する）。
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    # AI が商品情報・レビューを根拠に答えられたか。False は「情報不足」を表す。
+    answerable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    product: Mapped["Product"] = relationship()
+    user: Mapped["User"] = relationship()

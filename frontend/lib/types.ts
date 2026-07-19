@@ -75,6 +75,21 @@ export interface WishlistItem {
   created_at: string;
 }
 
+/**
+ * 商品ページの購入前Q&A（質問とAI回答）。
+ * source==='fallback' は自動回答をご用意できなかった場合の定型文。
+ * answerable===false は「商品情報からは判断できない」旨のAI回答。
+ */
+export interface ProductQuestion {
+  id: string;
+  question: string;
+  answer: string;
+  source: 'llm' | 'fallback';
+  answerable: boolean;
+  asker_name: string;
+  created_at: string;
+}
+
 export interface Address {
   id: number;
   recipient_name: string;

@@ -19,6 +19,7 @@ from app.routers import (
     coupons,
     home,
     orders,
+    product_qa,
     products,
     recommendations,
     wishlist,
@@ -149,6 +150,7 @@ def health() -> dict[str, str]:
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
+app.include_router(product_qa.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
 app.include_router(cart.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
