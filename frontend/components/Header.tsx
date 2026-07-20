@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
 import { iconButton } from '@/lib/buttonStyles';
@@ -147,11 +147,16 @@ export default function Header() {
           </Link>
 
           {/* 検索（sm以上で常時表示） */}
-          <SearchBox
-            className="hidden flex-1 sm:block"
-            inputClassName="py-1.5"
-            buttonClassName="py-1.5"
-          />
+          {/* SearchBox は useSearchParams を使うため Suspense 境界が必要
+              （Header は layout でレンダリングされ、無いと next build が落ちる）。
+              fallback はレイアウトが崩れないよう同じ幅クラスの空要素にする。 */}
+          <Suspense fallback={<div className="hidden flex-1 sm:block" />}>
+            <SearchBox
+              className="hidden flex-1 sm:block"
+              inputClassName="py-1.5"
+              buttonClassName="py-1.5"
+            />
+          </Suspense>
 
           {/* ナビ（sm以上） */}
           <nav className="hidden items-center gap-1 whitespace-nowrap text-sm sm:flex">
@@ -258,12 +263,16 @@ export default function Header() {
         {/* モバイル検索バー（開閉式） */}
         {searchOpen && (
           <div className="pb-3 sm:hidden">
-            <SearchBox
-              inputClassName="py-2"
-              buttonClassName="py-2"
-              autoFocus
-              onSubmitted={() => setSearchOpen(false)}
-            />
+            {/* PC 版と同じく useSearchParams のための Suspense 境界。fallback は null で可
+                （開閉式のためレイアウトへの影響が無い）。 */}
+            <Suspense fallback={null}>
+              <SearchBox
+                inputClassName="py-2"
+                buttonClassName="py-2"
+                autoFocus
+                onSubmitted={() => setSearchOpen(false)}
+              />
+            </Suspense>
           </div>
         )}
       </div>

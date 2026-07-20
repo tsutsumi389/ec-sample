@@ -47,9 +47,29 @@ export interface ProductListResponse {
   total: number;
 }
 
-/** GET /products/suggest のレスポンス。商品名にマッチした検索語候補の配列。 */
+/**
+ * サジェストの「商品ダイレクト候補」。検索を確定せずに商品詳細へ直接飛べるよう、
+ * 表示に必要な最小限のフィールドだけを持つ（Product 全体ではない）。
+ */
+export interface SuggestProduct {
+  id: number;
+  name: string;
+  image_url: string | null;
+  price: number;
+  sale_price: number | null;
+  /** 実売価格（sale_price があればそれ、なければ price）。表示の基準。 */
+  effective_price: number;
+}
+
+/**
+ * GET /products/suggest のレスポンス。
+ * - `suggestions`: 商品名にマッチした検索語候補の配列（従来どおり）。
+ * - `products`: 商品ダイレクト候補（最大3件）。古いバックエンドでは欠損し得るため、
+ *   受信側は `res.products ?? []` で必ず欠損に耐えること。
+ */
 export interface SuggestResponse {
   suggestions: string[];
+  products?: SuggestProduct[];
 }
 
 export interface Category {
