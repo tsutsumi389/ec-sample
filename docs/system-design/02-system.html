@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書 — 02 システム概要</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html">ドキュメント概要</a></li>
+      <li><a href="02-system.html" class="active">システム概要</a></li>
+      <li><a href="03-tech-stack.html">技術スタック</a></li>
+      <li><a href="04-architecture.html">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html">データモデル設計</a></li>
+      <li><a href="06-api.html">API 設計</a></li>
+      <li><a href="07-flows.html">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html">認証・認可設計</a></li>
+      <li><a href="10-frontend.html">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s2">
+    <h2><span class="num">02</span>システム概要</h2>
+    <p>Hibino は Docker 上で動作する EC サイトのサンプルである。店頭（一般ユーザー）と管理の 2 系統の画面を持ち、商品閲覧から購入、注文管理、AI による生成的レコメンドまでを一通り備える。商品の可視性・購入可否は <code>Product.status</code>（6 状態の状態機械）を唯一の源として導出し、実売価格は <code>effective_price</code>（セール価格優先）に一元化されている点が設計の背骨となっている。</p>
+    <h3><span class="num">2.1</span>主要機能サマリ</h3>
+    <div class="cards">
+      <div class="card"><h4>ホーム（レーン構成）</h4><p>Netflix 型の複数レーンでホームを構成。1 レーン = 1 アルゴリズム（ビルボード / 買い忘れ / あなたへ / 売れ筋 Top10 / カテゴリ / セール / 新着ほか）を stage-wise 貪欲法で並べ、ゲストも閲覧履歴でパーソナライズ。</p></div>
+      <div class="card"><h4>商品カタログ</h4><p>セマンティック（ハイブリッド）検索・カテゴリ絞り込み・価格帯フィルタ・並び替え・ページング付き一覧、商品詳細、関連商品、平均評価表示。検索窓は履歴・キーワード・商品直行の 3 種サジェスト付き（§10.6）。</p></div>
+      <div class="card"><h4>レビュー</h4><p>購入者限定の投稿（1 ユーザー 1 商品 1 件）、投稿者名付き一覧、平均評価集計。</p></div>
+      <div class="card"><h4>お気に入り</h4><p>ユーザー単位で商品を登録・一覧・削除。追加/削除とも冪等操作。</p></div>
+      <div class="card"><h4>カート・注文</h4><p>カート操作、在庫ロック付き注文確定、注文履歴・詳細・キャンセル（在庫戻し）。</p></div>
+      <div class="card"><h4>住所帳・クーポン</h4><p>複数配送先（デフォルト 1 件保証）、クーポン検証と注文時適用（percent / fixed）。</p></div>
+      <div class="card"><h4>AI レコメンド</h4><p>ユーザー行動から Ollama × pgvector × セマンティック ID で生成的におすすめと理由を提示。</p></div>
+      <div class="card"><h4>AI アシスタント</h4><p>全ページ常駐のチャット型店員 AI。自然文の相談にカタログ商品を根拠付きで提案。未ログイン可、Ollama 不在でもフォールバック応答。</p></div>
+      <div class="card"><h4>商品Q&amp;A（購入前 AI 回答）</h4><p>商品ページで購入検討者の質問に、その商品の説明文とレビューだけを根拠に AI が即答・蓄積。回答はスナップショットとして公開され、未ログインでも閲覧可（社会的証明）。</p></div>
+      <div class="card"><h4>認証・認可</h4><p>JWT によるステートレス認証、一般ユーザーと管理者の分離、パスワード変更時の全セッション失効。</p></div>
+      <div class="card"><h4>管理機能</h4><p>商品/カテゴリ/クーポン CRUD、全注文管理・ステータス更新、ユーザー一覧、レコメンド再構築。</p></div>
+    </div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="01-overview.html">← <span class="n">01</span> ドキュメント概要</a>
+    <a class="next" href="03-tech-stack.html"><span class="n">03</span> 技術スタック →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>

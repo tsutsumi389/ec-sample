@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書 — 10 フロントエンド設計</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html">ドキュメント概要</a></li>
+      <li><a href="02-system.html">システム概要</a></li>
+      <li><a href="03-tech-stack.html">技術スタック</a></li>
+      <li><a href="04-architecture.html">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html">データモデル設計</a></li>
+      <li><a href="06-api.html">API 設計</a></li>
+      <li><a href="07-flows.html">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html">認証・認可設計</a></li>
+      <li><a href="10-frontend.html" class="active">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s10">
+    <h2><span class="num">10</span>フロントエンド設計</h2>
+    <p>Next.js 14 App Router 構成。全ページが <code>'use client'</code> のクライアントコンポーネントで、<code>app/layout.tsx</code> が <code>AuthProvider</code>・<code>Header</code>・<code>Footer</code> を全ページに敷き、認証状態を React Context で一元管理する。データ取得は各ページの useEffect＋fetch で行う SPA 的構成。</p>
+
+    <h3><span class="num">10.1</span>画面一覧</h3>
+    <h4>店頭系</h4>
+    <div class="tw"><table>
+      <thead><tr><th>画面</th><th>パス</th><th>概要</th></tr></thead>
+      <tbody>
+        <tr><td>トップ / 商品一覧</td><td><code>app/page.tsx</code></td><td>ホームのレーン群（<code>HomeSections</code>、§10.5）＋カテゴリクイックリンク＋商品一覧。検索中（<code>?search=…</code>）はレーンを出さず検索結果に集中。一覧は検索/カテゴリ/並び替え/価格帯/ページを URL クエリで保持。並び替え（<code>ProductFilters</code>）は「おすすめ順」（<code>recommended</code>）を含み、既定は非検索時が新着順・検索中は「関連度順」（sort 未指定＝URL に出さない擬似値で表現）。<code>sm</code> 未満はフィルタを「絞り込み・並び替え」ボタン（適用数バッジ付き）→ ボトムシートに畳む。再検索・ページ切替中は直前のグリッドを薄く保持（スケルトン全置換は初回のみ）。検索 0 件時は言い換え提案＋カテゴリ導線。Suspense 境界あり</td></tr>
+        <tr><td>商品詳細</td><td><code>app/products/[id]/page.tsx</code></td><td>画像ギャラリー・数量選択・カート追加。on_sale のみ購入パネル表示、他状態は理由文。関連/おすすめ/レビュー/購入前Q&amp;A（<code>ProductQA</code>、§8.8）内包。Q&amp;A は蓄積分を公開表示し、質問フォームはログイン時のみ（未ログインはログイン誘導）。<code>answerable=false</code> は「情報不足」、<code>source="fallback"</code> は定型文の注記付きで表示。表示時にログイン中のみ閲覧を <code>POST /products/{id}/view</code> で fire-and-forget 記録（失敗は無視。localStorage の「最近見た商品」とは独立に併存）</td></tr>
+        <tr><td>カート</td><td><code>app/cart/page.tsx</code></td><td>数量変更・削除、クーポン検証、住所選択 or 手入力、注文確定。未ログインは /login?redirect=/cart へ</td></tr>
+        <tr><td>注文履歴</td><td><code>app/orders/page.tsx</code></td><td>一覧。pending/paid のみキャンセルボタン表示</td></tr>
+        <tr><td>注文詳細</td><td><code>app/orders/[id]/page.tsx</code></td><td>明細スナップショット表示、justOrdered で完了メッセージ。Suspense 境界あり</td></tr>
+        <tr><td>アカウント</td><td><code>app/account/page.tsx</code></td><td>氏名変更・パスワード変更。メールは表示のみ</td></tr>
+        <tr><td>住所帳</td><td><code>app/account/addresses/page.tsx</code></td><td>一覧/追加/編集/削除/既定設定（AddressForm）</td></tr>
+        <tr><td>お気に入り</td><td><code>app/wishlist/page.tsx</code></td><td>一覧。解除は楽観的更新</td></tr>
+        <tr><td>ログイン / 登録</td><td><code>app/login/…</code> / <code>register/…</code></td><td>ログイン後 redirect 先へ遷移。登録後は自動ログイン</td></tr>
+        <tr><td>404</td><td><code>app/not-found.tsx</code></td><td>唯一のサーバーコンポーネント</td></tr>
+      </tbody>
+    </table></div>
+    <h4>管理系（AdminLayout が role≠admin を <code>/</code> へリダイレクト）</h4>
+    <div class="tw"><table>
+      <thead><tr><th>画面</th><th>パス</th><th>概要</th></tr></thead>
+      <tbody>
+        <tr><td>ダッシュボード</td><td><code>app/admin/page.tsx</code></td><td>各種サマリカードと最近の注文 5 件。Promise.all で並行取得</td></tr>
+        <tr><td>商品管理</td><td><code>app/admin/products/page.tsx</code></td><td>一覧テーブル、ProductFormModal で作成/編集、論理削除。状態バッジは PRODUCT_STATUS_META</td></tr>
+        <tr><td>注文管理</td><td><code>app/admin/orders/page.tsx</code></td><td>全注文テーブル、select で status 変更</td></tr>
+        <tr><td>ユーザー管理</td><td><code>app/admin/users/page.tsx</code></td><td>一覧（読み取り専用）。権限を Badge で表示</td></tr>
+        <tr><td>カテゴリ / クーポン管理</td><td><code>app/admin/categories|coupons/…</code></td><td>CRUD。内部にフォームモーダル（フォーカストラップ / Esc クローズ）</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3><span class="num">10.2</span>認証コンテキストと API クライアント</h3>
+    <div class="cards">
+      <div class="card"><h4>AuthProvider / useAuth</h4><p><code>lib/auth-context.tsx</code>。user / loading と login / register / logout を提供。初回にトークンがあれば <code>/auth/me</code> で復元。ログイン変化を依存に持つコンポーネントは再取得する。</p></div>
+      <div class="card"><h4>lib/api.ts</h4><p>fetch ラッパ（get/post/put/delete）。JWT を localStorage（キー <code>token</code>）から <code>Authorization: Bearer</code> に自動付与、401 でトークン破棄、204/空ボディ対応、英語 detail を日本語化。</p></div>
+      <div class="card"><h4>状態の集約</h4><p>商品 status は <code>lib/productStatus.ts</code>（PRODUCT_STATUS_META / ADMIN_SELECTABLE_STATUSES）、注文 status は <code>lib/order-status.ts</code> にラベル・色・選択肢を集約。</p></div>
+    </div>
+
+    <h3><span class="num">10.3</span>UI 規律</h3>
+    <ul>
+      <li>保護ページ（cart/orders/account/wishlist）は <code>!authLoading &amp;&amp; !user</code> で <code>/login?redirect=…</code> へ誘導。管理ページは AdminLayout が role で弾く</li>
+      <li>価格の配色規律: 金額は常に <code>text-gray-900</code>・font-semibold で統一し赤字を使わない。<code>ProductPrice</code> はセール時のみ定価打消し線＋NN%OFF バッジを併記</li>
+      <li>brand 塗り（btnPrimary）は最重要 CTA 限定。共通見た目は Badge / Price / StockLabel / RatingStars 等と <code>buttonStyles.ts</code> 定数で統一</li>
+      <li>モーダルは role=dialog + aria-modal、自前フォーカストラップと Esc クローズ。画像は素の <code>&lt;img&gt;</code> で onError 時 <code>/no-image.svg</code> にフォールバック</li>
+      <li>各ページはメタデータ API を使えないため、RootLayout が usePathname でパス別に document.title を設定</li>
+    </ul>
+
+    <h3><span class="num">10.4</span>AI アシスタントウィジェット</h3>
+    <p><code>app/layout.tsx</code> が <code>&lt;AssistantWidget /&gt;</code> を全ページ末尾に敷く（<code>AuthProvider</code> 内）。右下フローティングボタンでパネルを開閉する常駐ウィジェットで、<code>components/assistant/</code> 配下の 3 コンポーネントで構成する。</p>
+    <div class="cards">
+      <div class="card"><h4>AssistantWidget</h4><p>フローティングボタン＋パネル開閉（<code>'use client'</code>）。<code>usePathname</code> で <code>/admin</code> 配下なら <code>null</code> を返し管理画面では非表示。モバイルは開いている間ボタンを隠す。</p></div>
+      <div class="card"><h4>AssistantPanel</h4><p>メッセージリスト・入力欄・送信・ローディング。モバイルは全画面、PC は 380px 幅パネル。会話 ID を <code>localStorage</code> に保持し、再オープン時に履歴 API で復元（無効=404 なら ID を破棄）。「新しい会話」ボタンは ID を破棄して画面リセット。</p></div>
+      <div class="card"><h4>AssistantProductCard</h4><p>チャット内のコンパクト商品カード。画像・商品名・<code>ProductPrice</code> を再利用し、クリックで <code>/products/[id]</code> へ遷移（パネルは開いたまま）。</p></div>
+    </div>
+    <ul>
+      <li>会話継続: <code>conversation_id</code> を <code>localStorage</code> に保存し、パネル再オープン時に <code>api.assistant.messages()</code> で履歴復元。未ログインでも端末単位で会話が続く</li>
+      <li>多重送信防止: 送信中はスピナー＋入力無効化。応答まで最大 60 秒待つ旨のプレースホルダを表示（同期パスのレイテンシ対策）</li>
+      <li>初回オープンはウェルカムメッセージ（クライアント固定文言、API は呼ばない）＋サジェスト chips（タップで入力欄に挿入、自動送信はしない）</li>
+      <li><code>source="fallback"</code> の応答には「キーワード検索の結果です」の注記を添える</li>
+      <li><code>lib/api.ts</code> に <code>api.assistant.chat()</code> / <code>api.assistant.messages()</code> を追加（既存 fetch ラッパー踏襲、未ログインでも呼べる）</li>
+    </ul>
+
+    <h3><span class="num">10.5</span>ホーム画面のレーン描画</h3>
+    <p>トップ（<code>app/page.tsx</code>）のヒーロー＋単一おすすめ枠を、<code>GET /api/home</code> を <b>1 リクエストだけ</b>叩いて返ってきた <code>sections[]</code> を <code>layout</code> に応じて描き分ける構成に刷新した。認証トークンが localStorage 保持のため Server Component 化できず、レーンごとの個別 fetch によるウォーターフォールを避けるべく <code>/home</code> に集約している。</p>
+    <div class="cards">
+      <div class="card"><h4>HomeSections</h4><p>ホームのレーン群のコンテナ（<code>'use client'</code>）。<code>useAuth</code> の user を依存に <code>/home</code> を取得し、ログイン状態が変われば取り直す。ゲストは <code>getRecentlyViewedIds()</code>（localStorage）を <code>recently_viewed_ids</code> に載せてパーソナライズ。取得失敗時は <code>BrandHero</code> だけ出して画面を壊さない。</p></div>
+      <div class="card"><h4>HomeBillboard</h4><p>最上部のビルボード（<code>layout: hero</code>）。商品 1 件＋理由文（reason）を大きく訴求。暗いブランド背景で <code>ProductPrice</code>（<code>text-gray-900</code> 固定）が読めないため価格だけ白文字で自前描画（打ち消し線つき定価の併記ルールは踏襲）。</p></div>
+      <div class="card"><h4>ProductLane</h4><p>横スクロールレーン（<code>lane</code> / <code>ranked</code>）。カルーセルライブラリを使わず素の CSS scroll snap で実現。端検知で矢印・フェードを出し分け、キーボード操作対応。<code>ranked</code> は順位番号を大きく併記（社会的証明の可視化）。</p></div>
+      <div class="card"><h4>BrandHero</h4><p>ビルボードを出せないとき（商品無し・<code>/home</code> 取得失敗・コールドスタートで hero レーン無し）のフォールバック。旧トップの装飾ヒーロー（ケトル・湯呑み・植物の SVG）を切り出したもの。</p></div>
+    </div>
+    <ul>
+      <li>読み込み中は <code>BillboardSkeleton</code>＋<code>LaneSkeleton</code> で高さを予約し段差を防ぐ。<code>sections</code> が空なら <code>EmptyState</code> を表示</li>
+      <li>hero は先頭 1 本のみ採用（契約上も billboard は 1 本）。それ以外を <code>ProductLane</code> に振り分け、<code>key</code> は <code>section.key</code>（<code>billboard</code> / <code>top10</code> / <code>byw:{id}</code> / <code>category:{id}</code> など一意）を使う</li>
+      <li>「最近見た商品」はレーン（<code>recently_viewed</code>）が担うためトップ末尾の <code>RecentlyViewed</code> は撤去（同コンポーネントは商品詳細ページで継続利用）。型は <code>lib/types.ts</code> の <code>HomeResponse</code> / <code>HomeSection</code> / <code>HomeSectionLayout</code></li>
+    </ul>
+
+    <h3><span class="num">10.6</span>検索窓（SearchBox・サジェスト）</h3>
+    <p><code>components/SearchBox.tsx</code>。<code>Header</code> に PC 常時表示＋モバイル開閉バーの 2 箇所で配置され、WAI-ARIA combobox パターン（<code>role="combobox"</code> / <code>listbox</code> / <code>option</code>、<code>aria-activedescendant</code>）に準拠する。確定で <code>/?search=…</code> へ遷移しフルのハイブリッド検索に渡す。詳細設計は <code>docs/design/search-uiux.html</code>。</p>
+    <ul>
+      <li><b>3 種のサジェスト</b>: 入力 2 文字未満は localStorage の検索履歴（<code>lib/searchHistory.ts</code>、最大 5 件・個別削除・全消去）、2 文字以上はデバウンス 250ms＋AbortController で <code>GET /products/suggest</code> を叩き、キーワード候補（一致部分を太字強調）と商品ダイレクト候補（サムネイル＋実売価格、クリックで <code>/products/{id}</code> へ直行）を表示</li>
+      <li><b>選択肢のフラット配列モデル</b>: 履歴・キーワード・商品を <code>Option = { kind: 'history' | 'keyword' | 'product' }</code> の種別付き 1 次元配列に正規化し、↑↓ / Enter / <code>aria-activedescendant</code> が種別を問わず一貫動作。セクション見出しは配列に含めず <code>role="presentation"</code> で描画（キーボードで止まらない）</li>
+      <li><b>IME ガード</b>: <code>e.nativeEvent.isComposing || e.keyCode === 229</code>（Safari の compositionend 後 Enter 対策）を判定し、変換確定の Enter は <code>preventDefault</code> で form の暗黙送信ごと止める。変換中は矢印・Esc も無効化（日本語入力での誤検索防止）</li>
+      <li><b>URL 同期</b>: <code>useSearchParams</code> で <code>?search=</code> を検索欄へ反映（直接アクセス・リロード・ブラウザ戻る対応）。タイピングを潰さないよう「パラメータが実際に変わったときだけ」反映し、URL 由来の反映ではドロップダウンを開かない。<code>SearchBox</code> が <code>useSearchParams</code> を使うため <code>Header</code> 内 2 箇所を <code>Suspense</code> でラップ（無いと <code>next build</code> が落ちる）</li>
+      <li>入力があるときだけクリア（×）ボタンを表示。候補クリックは blur より先に処理するため mousedown で拾い <code>preventDefault</code> でフォーカスを維持（既存パターン踏襲）</li>
+    </ul>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="09-auth.html">← <span class="n">09</span> 認証・認可設計</a>
+    <a class="next" href="11-decisions.html"><span class="n">11</span> 設計上の決定・運用ルール →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>

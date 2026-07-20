@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書 — 01 ドキュメント概要</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html" class="active">ドキュメント概要</a></li>
+      <li><a href="02-system.html">システム概要</a></li>
+      <li><a href="03-tech-stack.html">技術スタック</a></li>
+      <li><a href="04-architecture.html">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html">データモデル設計</a></li>
+      <li><a href="06-api.html">API 設計</a></li>
+      <li><a href="07-flows.html">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html">認証・認可設計</a></li>
+      <li><a href="10-frontend.html">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s1">
+    <h2><span class="num">01</span>ドキュメント概要</h2>
+    <p class="lead">本書は EC サイトサンプル「Hibino — 日々の暮らしの道具店」のシステム設計書である。7 つのサブシステム（データモデル層・認証認可・商品カタログ・購買中核・AI レコメンド・管理者/アプリ基盤・フロントエンド）をコードベース精読により分析し、構造を統合的に記述する。</p>
+    <div class="cards">
+      <div class="card"><h4>目的</h4><p>本サンプルのデータモデル・API・主要処理フロー・設計判断を一望できる技術リファレンスを提供し、機能追加や改修時の前提知識を共有する。</p></div>
+      <div class="card"><h4>対象読者</h4><p>本リポジトリで開発・レビューを行うエンジニア、アーキテクチャを把握したいテクニカルリード、AI レコメンド機構の理解者。</p></div>
+      <div class="card"><h4>スコープ</h4><p>バックエンド（FastAPI）・フロントエンド（Next.js）・データベース（PostgreSQL/pgvector）・AI 連携（Ollama）の設計。インフラ/デプロイ詳細は対象外。</p></div>
+    </div>
+    <div class="note"><span class="lbl">前提</span><p style="margin:.3em 0 0">記述はコードベースの構造化分析結果に厳密に基づく。マイグレーションツールは未導入で、テーブルは起動時の <code>Base.metadata.create_all</code> で自動生成される（詳細は §11）。</p></div>
+  </section>
+
+  <nav class="pager">
+    <a class="next" href="02-system.html"><span class="n">02</span> システム概要 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>

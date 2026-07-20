@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書 — 07 主要処理フロー</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html">ドキュメント概要</a></li>
+      <li><a href="02-system.html">システム概要</a></li>
+      <li><a href="03-tech-stack.html">技術スタック</a></li>
+      <li><a href="04-architecture.html">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html">データモデル設計</a></li>
+      <li><a href="06-api.html">API 設計</a></li>
+      <li><a href="07-flows.html" class="active">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html">認証・認可設計</a></li>
+      <li><a href="10-frontend.html">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s7">
+    <h2><span class="num">07</span>主要処理フロー</h2>
+
+    <h3><span class="num">7.1</span>注文確定（カート → 在庫確認 → スナップショット → 在庫減算）</h3>
+    <ol class="steps">
+      <li><span class="badge m-post">POST</span> <code>/api/orders</code> を認証ユーザーで呼び出し、<code>OrderCreate</code>（shipping_address / address_id / coupon_code）を受け取る</li>
+      <li>current_user のカート明細を id 順で取得。空なら 400「カートが空です」</li>
+      <li>配送先を決定: address_id 指定時は自分の Address を整形（無ければ 404）、未指定なら shipping_address を使用。最終的に空なら 400</li>
+      <li>try 開始: カート内 product_id 群を <code>with_for_update</code> で行ロック取得し、同時注文による超過販売（oversell）を防止</li>
+      <li>各明細を検証: 商品が存在し is_viewable か、status==on_sale か（不可なら「この商品は現在購入できません」）、stock ≥ quantity か（不足なら「在庫が不足しています」）</li>
+      <li><code>unit_price = product.effective_price</code> を採用。<code>stock -= quantity</code> で減算。total_amount に unit_price×quantity を加算</li>
+      <li><code>OrderItem</code>（product_name / price=unit_price / quantity）をスナップショットとして蓄積（後から商品マスタを参照しない）</li>
+      <li>coupon_code があれば get_coupon_by_code → evaluate_coupon(total_amount) で検証。無効なら 400、有効なら discount_amount を確定</li>
+      <li><code>Order</code> を total_amount=（合計−割引）、discount_amount、coupon_code、status=pending、shipping_address、items で生成し add</li>
+      <li>カート明細を全て delete し commit。例外時は rollback して再送出</li>
+      <li>refresh して注文詳細（OrderDetailOut）を返す</li>
+    </ol>
+
+    <h3><span class="num">7.2</span>レビュー投稿</h3>
+    <ol class="steps">
+      <li>get_current_user で認証（未認証は 401）</li>
+      <li>対象商品を取得。None または is_viewable でなければ 404</li>
+      <li>OrderItem×Order を JOIN し、cancelled 以外の注文に当該 product_id が含まれるか確認。無ければ 403（Purchase required to review）</li>
+      <li>同一 user_id×product_id の既存 Review があれば 400（Already reviewed）</li>
+      <li>Review（rating, comment）を作成し add → commit → refresh</li>
+      <li>投稿者名を含む ReviewOut を 201 で返す</li>
+    </ol>
+
+    <h3><span class="num">7.3</span>クーポン適用</h3>
+    <ol class="steps">
+      <li>検証: <span class="badge m-post">POST</span> <code>/api/coupons/validate</code> に code と subtotal を送信</li>
+      <li>get_coupon_by_code でコードからクーポンを取得（無ければ None）</li>
+      <li>evaluate_coupon: None または is_active 偽なら「Invalid coupon code」、expires_at が現在より前なら「Coupon has expired」、subtotal &lt; min_order_amount なら「Minimum order amount…」</li>
+      <li>全て通れば _compute_discount で算出: percent は <code>subtotal×value//100</code>、固定額は value。いずれも <code>min(amount, subtotal)</code> で上限</li>
+      <li>注文時適用: create_order 内で total_amount 確定後に同じ検証を呼び、無効なら注文中止、有効なら Order から減算し coupon_code を保存</li>
+    </ol>
+
+    <h3><span class="num">7.4</span>AI レコメンド生成（home API → generate_for_user）</h3>
+    <ol class="steps">
+      <li><span class="badge m-get">GET</span> <code>/api/recommendations/home</code>。未ログインは get_popular_products（source=fallback）を返して終了</li>
+      <li>ログイン時は除外 ID（購入済み＋カート内）・build_profile・RecommendationState を取得</li>
+      <li>state=ready かつ profile_hash 一致なら UserRecommendation を rank 順で取得。返却時に status が LISTED か再確認し可視商品のみ source=llm で返す</li>
+      <li>キャッシュ無し/陳腐化かつ profile ありかつ _should_generate（generating/failed の 10 分クールダウン外）なら生成起動</li>
+      <li>_schedule_generation: <code>pg_try_advisory_xact_lock(user_id)</code> を試行、取れなければスキップ。取れたら mark_generating で同期的に generating を確定し BackgroundTasks に登録</li>
+      <li>即座に人気順フォールバック（除外 ID 付き）を返す</li>
+      <li>レスポンス後に generate_for_user が自前セッションで起動: build_profile → get_candidates（pgvector コサイン近傍、LISTED のみ、除外、上位 20 件）</li>
+      <li>候補・履歴を SID 列挙のカタログにして system/user メッセージを構築（PII なし）</li>
+      <li>ollama chat（format=JSON schema, temperature=0.3）を呼び、pydantic で検証</li>
+      <li>ハルシネーション対策: 候補集合に実在する SID のものだけ採用（重複 product 除外、最大 8 件）</li>
+      <li>採用ゼロなら failed。採用ありなら旧 UserRecommendation を削除し rank 付きで差し替え、state=ready ＋ generated_at を確定。例外時は rollback し state=failed</li>
+    </ol>
+
+    <h3><span class="num">7.5</span>セマンティック ID 量子化（reassign_semantic_ids）</h3>
+    <ol class="steps">
+      <li><code>pg_advisory_xact_lock</code>（固定キー 918273645）で generation 採番と全体上書きの競合を直列化</li>
+      <li>全 ProductEmbedding を product_id 順に取得。0 件なら終了</li>
+      <li>embedding を np.array（float64）化。n&lt;2 は縮退（全商品を <code>0-0-0</code> ベースに寄せる）</li>
+      <li>n≥2 は残差量子化を 3 階層ループ: <code>k=min(8,max(2,n))</code> で KMeans を残差に fit_predict し labels を各階層の code に記録</li>
+      <li>残差を「元ベクトル − 割り当てセントロイド」で更新し次階層へ渡す</li>
+      <li>各商品の code3 つを <code>a-b-c</code> 文字列化。base 衝突時は第 3 コードに連番サフィックスで一意化</li>
+      <li>新 generation を採番し SemanticIdCodebook を add、各 ProductEmbedding に semantic_id と codebook_generation を刻む</li>
+      <li>最新 generation 以外のコードブックを削除（肥大化防止）し commit</li>
+    </ol>
+
+    <h3><span class="num">7.6</span>認証（トークン検証）</h3>
+    <ol class="steps">
+      <li>login で <code>create_access_token</code> が payload <code>{sub: user_id, iat, exp: +24h}</code> を HS256 署名</li>
+      <li>各リクエストで HTTPBearer が Authorization ヘッダを受け取り decode_access_token で検証（不正・期限切れは 401）</li>
+      <li>_resolve_user_from_token: sub から user_id を取り出し <code>db.get(User)</code>。不在なら 401</li>
+      <li>password_changed_at が設定済みなら iat と比較。iat が無いか変更時刻より前なら 401（トークン失効）</li>
+      <li>必須認証は get_current_user、任意認証（get_current_user_optional）は無効トークンでも None 匿名扱い、管理者は get_current_admin で role==admin を確認</li>
+    </ol>
+
+    <h3><span class="num">7.7</span>アシスタントのチャット処理（同期パス・500 を返さない）</h3>
+    <ol class="steps">
+      <li><span class="badge m-post">POST</span> <code>/api/assistant/chat</code> を任意認証で受け、<code>AssistantChatIn</code>（conversation_id? / message 1〜500 字）を検証</li>
+      <li>会話の取得/作成: conversation_id=null なら UUID で新規 AssistantConversation を作成（ログイン中なら user_id 付与）、flush で id 確定。既存なら <code>_load_conversation</code> で所有チェック（他人/不在は 404）し、ゲスト会話中にログイン済みなら user_id を紐付け（引き継ぎ）</li>
+      <li>既存会話はメッセージ数を数え、50 件以上なら 400（会話の肥大化防止）。過去メッセージを (role, content) の古い順でロード</li>
+      <li>ユーザーメッセージを AssistantMessage（role=user、product_ids=[]）として add（未 commit）</li>
+      <li><code>generate_reply</code> を呼ぶ。ここは例外を握って必ず結果を返す（500 を出さない）</li>
+      <li>候補抽出（ハイブリッド）: <code>build_query_text</code> で直近 3 ユーザー発話を改行連結して埋め込み（<code>embeddinggemma</code>）→ pgvector コサイン近傍 top-20（LISTED のみ）。加えて新メッセージをトークン分割した ILIKE キーワード検索 top-10。重複除去してベクトル優先でマージ。候補ゼロならフォールバックへ</li>
+      <li>プロンプト構築: 候補を <code>llm_catalog.catalog_line</code>（SID / 商品名 / カテゴリ / effective_price / 平均★）で列挙し、履歴（直近 6 ターン・各 200 字）と <code>&lt;message&gt;</code> で囲んだ新メッセージを付す。ログインユーザーは行動履歴（weight 上位 10 件、§8.5）を【お客様のこれまでの行動】として前置きする。PII は入れない</li>
+      <li>Ollama chat（<code>format=</code> JSON schema, temperature=0.3, timeout 60 秒）で構造化出力 <code>{reply, items:[{sid, reason}]}</code> を取得・pydantic 検証</li>
+      <li>SID 検証: <code>llm_catalog.match_products</code> で候補マップに実在する SID のものだけ採用（正規化・重複除去・最大 4 件）。<code>strip_sids_from_reply</code> で reply 本文の SID 表記を正規表現で除去。本文が空なら定型文に落とす。source=llm で返す</li>
+      <li>フォールバック分岐: Ollama 接続不可・タイムアウト・parse 失敗・候補ゼロのいずれでも、キーワード検索 top-4 + 定型文を source=fallback で返す。キーワード 0 件なら <code>get_popular_products</code> top-4（人気順）で必ず商品を出す。Ollama 例外は DB を汚さないため rollback しない</li>
+      <li>assistant メッセージ（content=reply、product_ids=採用商品ID、source）を add して commit。採用商品を RecommendationItemOut に整形して <code>AssistantChatOut</code> を返す</li>
+    </ol>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="06-api.html">← <span class="n">06</span> API 設計</a>
+    <a class="next" href="08-ai.html"><span class="n">08</span> AI レコメンド・アシスタント設計 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>

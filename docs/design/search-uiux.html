@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>商品検索 UI/UX 改善 設計書</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 機能設計書</a><small>商品検索 UI/UX 改善 / 2026-07-20</small></div>
+    <ol>
+      <li><a href="#s1">概要</a></li>
+      <li><a href="#s2">前提（改善前のアーキテクチャ）</a></li>
+      <li><a href="#s3">改善項目</a></li>
+      <li><a href="#s4">API 仕様変更: GET /products/suggest（拡張）</a></li>
+      <li><a href="#s5">並び順の仕様（正）</a></li>
+      <li><a href="#s6">検証結果（2026-07-20）</a></li>
+      <li><a href="#s7">非ゴール・見送り</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <header class="cover" id="top">
+    <div class="kicker">Design Document</div>
+    <h1>商品検索 UI/UX 改善 設計書</h1>
+    <div class="subtitle">検索の入力から結果閲覧までの体験を改善した 10 項目（品質修正 / サジェスト強化 / 結果ページ改善の 3 フェーズ）の設計</div>
+    <div class="meta-grid">
+      <div class="cell"><div class="k">ドキュメント</div><div class="v">機能設計書</div></div>
+      <div class="cell"><div class="k">対象</div><div class="v">商品検索 UI/UX（検索窓・サジェスト・結果ページ）</div></div>
+      <div class="cell"><div class="k">更新日</div><div class="v">2026-07-20</div></div>
+      <div class="cell"><div class="k">体制</div><div class="v">指揮・設計・検証 Fable / 実装 Opus ×3</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="num">01</span>概要</h2>
+    <p>セマンティック検索（ハイブリッド検索、#15）とキーワードサジェスト（#17）で検索基盤は整ったが、検索の入力から結果閲覧までの体験には粗が残っていた。本書は、その改善として実施した 10項目（品質修正 / サジェスト強化 / 結果ページ改善の3フェーズ）の設計を記す。</p>
+    <ul>
+      <li>指揮・設計・検証: Fable / 実装: Opus サブエージェント×3（検索窓・バックエンド・結果ページの3領域に分割し並列実装）</li>
+      <li>対象コード: <code>frontend/components/SearchBox.tsx</code>, <code>frontend/components/Header.tsx</code>, <code>frontend/components/ProductFilters.tsx</code>, <code>frontend/app/page.tsx</code>, <code>frontend/lib/searchHistory.ts</code>（新規）, <code>frontend/lib/types.ts</code>, <code>backend/app/routers/products.py</code>, <code>backend/app/schemas.py</code></li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="num">02</span>前提（改善前のアーキテクチャ）</h2>
+    <ul>
+      <li>検索窓は <code>SearchBox</code>（WAI-ARIA combobox 準拠）。<code>GET /products/suggest</code> からキーワード候補をデバウンス（250ms）+ AbortController 付きで取得。確定で <code>/?search=...</code> に遷移。</li>
+      <li>検索結果はホーム（<code>/?search=</code>）の <code>ProductListContent</code> が表示。カテゴリチップ・並び替え・価格帯フィルタ・絞り込みチップ・ページネーションあり。</li>
+      <li><code>GET /products</code> はハイブリッド検索: <code>name ILIKE</code> ∪ pgvector 意味的候補（動的カットオフ）。<strong><code>sort</code> 未指定 かつ 意味的候補を実際に使ったときだけ関連度順</strong>で並ぶ。</li>
+      <li><code>GET /products/suggest</code> は出品中（<code>LISTED_STATUSES</code>）商品名への ILIKE のみの軽量エンドポイント。埋め込みは入力中には一切呼ばない（この原則は本改善でも維持）。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="num">03</span>改善項目</h2>
+
+    <h3><span class="num">3.1</span>フェーズ1: 品質修正（実質バグの解消）</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>項目</th><th>設計判断</th></tr></thead>
+        <tbody>
+          <tr><td>A-1</td><td>IME 変換確定 Enter での誤検索防止</td><td><code>handleKeyDown</code> で <code>e.nativeEvent.isComposing || e.keyCode === 229</code>（Safari の compositionend 後 Enter 対策）を判定。変換中の Enter は <code>preventDefault</code> で form の暗黙送信ごと止め、矢印・Esc も変換中は無効化。日本語ECでは必須のガード</td></tr>
+          <tr><td>A-2</td><td>検索欄と URL の同期</td><td><code>useSearchParams</code> で <code>?search=</code> を初期値・変化時に反映。タイピング上書きを防ぐため「パラメータが実際に変わったときだけ」<code>setQuery</code>。URL 由来の反映ではドロップダウンを開かない（<code>suppressFetchRef</code> を流用）。<code>SearchBox</code> が <code>useSearchParams</code> を使うため、layout 配下の <code>Header</code> 内 2 箇所を <code>&lt;Suspense&gt;</code> でラップ（無いと <code>next build</code> が落ちる）</td></tr>
+          <tr><td>A-3</td><td>「関連度順」表示と実際の並び順の一致</td><td>検索中に sort 未指定だと実際は関連度順なのに UI は「新着順」を表示していた。<code>ProductFilters</code> に <code>searching</code> prop を追加し、検索中はセレクト先頭に「関連度順」を出して既定表示にする。関連度順は <strong>select 内だけの擬似値 <code>__relevance__</code></strong> で表現し、選択時は <code>sort: null</code>（URL から sort を削除）へマップ。バックエンドに <code>sort=relevance</code> は存在しないため URL には一切流さない</td></tr>
+          <tr><td>A-4</td><td>クリア（×）ボタン</td><td>入力があるときだけ表示。<code>onMouseDown</code> で <code>preventDefault</code> してフォーカス（＝ドロップダウン）を維持したままクリアし、履歴表示へ遷移</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">3.2</span>フェーズ2: サジェスト強化</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>項目</th><th>設計判断</th></tr></thead>
+        <tbody>
+          <tr><td>B-1</td><td>検索履歴（最近の検索）</td><td><code>lib/searchHistory.ts</code> 新規。localStorage キー <code>hibino:search-history</code>、最大5件・新しい順・重複（大文字小文字無視）は先頭繰り上げ。SSR ガード / 例外握りつぶしは <code>recentlyViewed.ts</code> と同じ流儀。<strong>2文字未満（サジェスト非対象域）のフォーカスで履歴を表示</strong>し、個別削除・全消去はドロップダウンを閉じずに即時反映</td></tr>
+          <tr><td>B-2</td><td>一致部分ハイライト</td><td>最初の一致のみ、文字列分割で <code>&lt;mark&gt;</code>（黄背景は打ち消し太字化）。<code>dangerouslySetInnerHTML</code> は使わない</td></tr>
+          <tr><td>B-3</td><td>商品ダイレクト候補</td><td>キーワード候補の下に「商品」セクションとしてサムネイル+商品名+実売価格を最大3件表示し、クリックで検索を経ずに <code>/products/{id}</code> へ直行。API 拡張は §4</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>ドロップダウンの選択肢モデル</strong>: 履歴・キーワード・商品が混在するため、<code>Option = { kind: 'history' | 'keyword' | 'product', ... }</code> の<strong>種別付きフラット1次元配列</strong>に正規化（履歴モード = 履歴のみ / 通常モード = キーワード→商品の順）。<code>activeIndex</code> はこの配列の添字で、↑↓ / Enter / <code>aria-activedescendant</code> が種別を問わず一貫動作する。セクション見出しは配列に含めず <code>role="presentation"</code> の <code>li</code> として描画（キーボードで止まらない）。確定は <code>selectOption</code> に集約し、product は遷移・それ以外は検索実行。</p>
+
+    <h3><span class="num">3.3</span>フェーズ3: 検索結果ページ改善</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>項目</th><th>設計判断</th></tr></thead>
+        <tbody>
+          <tr><td>C-1</td><td>0件時の体験</td><td>検索0件時の文言を「別の言葉・一般的な言葉・曖昧な表現でも探せる」へ差し替え（セマンティック検索の示唆）。取得済み <code>categories</code> をチップで出しカテゴリ導線を追加。「絞り込みをすべて解除」は残置</td></tr>
+          <tr><td>C-2</td><td>モバイルのフィルタドロワー</td><td><code>sm</code> 未満はフィルタ本体を畳み、「絞り込み・並び替え」ボタン（適用中フィルタ数バッジ付き。search はカウント外、並び順は既定からの逸脱を1件と数える）→ ボトムシートで表示。フィルタ本体は <code>FilterBody</code> に切り出して PC 版と共用し、<code>useId</code> で id 衝突を回避。ドロワーは <code>role="dialog" aria-modal</code>、Esc・背景タップで閉じる、背景スクロール固定、簡易フォーカストラップ、閉じたらトリガーへフォーカス復帰（<code>ConfirmDialog</code> の作法を踏襲）。フィルタ変更は即時反映でドロワーは開いたまま</td></tr>
+          <tr><td>C-3</td><td>再検索時のローディング</td><td><code>hasLoadedOnce</code> を導入し、スケルトン全置換は初回のみ。2回目以降のロード中は直前のグリッドを <code>opacity-50 pointer-events-none</code> + <code>aria-busy</code> で薄く残し、レイアウトの跳ねを解消</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="num">04</span>API 仕様変更: GET /products/suggest（拡張）</h2>
+    <ul>
+      <li>認可: 不要</li>
+      <li>クエリ: <code>q: string</code>（2文字未満は DB を引かず即空返し）, <code>limit: int = 8</code>（キーワード候補数、1〜20）</li>
+      <li>レスポンス: <code>SuggestOut</code></li>
+    </ul>
+<pre class="codeblock">{
+  "suggestions": ["マイクロファイバータオル", ...],  // 従来どおり（変更なし）
+  "products": [                                      // 追加。最大3件
+    {
+      "id": 38,
+      "name": "マイクロファイバータオル",
+      "image_url": "/products/yoga-mat.svg",  // null あり
+      "price": 1680,
+      "sale_price": null,
+      "effective_price": 1680                  // 実売価格。表示はこれを使う
+    }
+  ]
+}</pre>
+    <ul>
+      <li><code>products</code> は <code>SuggestProductOut</code>（<code>schemas.py</code>）。<code>ProductOut</code> は重い（レビュー集計・画像配列）ため表示に必要な最小限だけ返す。</li>
+      <li>商品の可視性は <code>Product.status.in_(LISTED_STATUSES)</code> のみで判定（status が唯一の源、CLAUDE.md 準拠）。</li>
+      <li>キーワード候補と同じエスケープ済み ILIKE パターン・同じ関連度順（<code>strpos</code> → <code>char_length(name)</code> → <code>name</code>）で <strong>1クエリ追加</strong>のみ。埋め込み等の重い処理は不使用。</li>
+      <li>後方互換: <code>products</code> は default <code>[]</code>。フロントは <code>res.products ?? []</code> で欠損に耐える（旧バックエンドと併用しても安全）。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="num">05</span>並び順の仕様（正）</h2>
+    <div class="tw">
+      <table>
+        <thead><tr><th>状況</th><th>実際の並び</th><th>UI 表示</th></tr></thead>
+        <tbody>
+          <tr><td>非検索・sort 未指定</td><td>新着順（従来どおり）</td><td>「新着順」</td></tr>
+          <tr><td>検索中・sort 未指定</td><td>関連度順（ILIKE 一致優先 + 意味的距離）</td><td>「関連度順」（A-3 で一致させた）</td></tr>
+          <tr><td>sort 明示指定</td><td>指定どおり（セマンティックはフィルタとしてのみ作用）</td><td>指定どおり</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="num">06</span>検証結果（2026-07-20）</h2>
+    <ul>
+      <li><code>make lint</code> / コンテナ内 <code>tsc --noEmit</code>: パス</li>
+      <li><code>make up-d</code> → バックエンド起動エラーなし。<code>/products/suggest</code> が新形状を返すこと、2文字未満で <code>{suggestions: [], products: []}</code> を返すことを curl で確認</li>
+      <li>ホーム / <code>/?search=</code> の表示 200</li>
+      <li>既知の制約: コンテナ内 <code>next build</code> は Google Fonts（Noto Sans JP）へ到達できず失敗する（本改善と無関係の既存環境制約）。<code>useSearchParams</code> の Suspense 境界は実装済みだが本番ビルドでの静的検証は未実施</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="num">07</span>非ゴール・見送り</h2>
+    <ul>
+      <li>専用の <code>/search</code> ページ化（ホーム内表示のままで十分と判断）</li>
+      <li>サジェストへの人気キーワード・カテゴリ候補の追加（履歴で代替。必要になったら検討）</li>
+      <li>検索実行時の既存フィルタ維持（新しい検索でフィルタをリセットする現行挙動は一般的なECの慣習どおり）</li>
+    </ul>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="ai-assistant.html">← <span class="n">01</span> AIショッピングアシスタント 設計書</a>
+    <a class="next" href="feature-additions.html"><span class="n">03</span> 機能追加設計書 →</a>
+  </nav>
+
+  <footer class="docfoot">
+    Hibino EC 機能設計書 — 商品検索 UI/UX 改善 設計書 / 最終更新 2026-07-20 / <a href="index.html">機能設計書 索引へ戻る</a>
+  </footer>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>

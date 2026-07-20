@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html">ドキュメント概要</a></li>
+      <li><a href="02-system.html">システム概要</a></li>
+      <li><a href="03-tech-stack.html">技術スタック</a></li>
+      <li><a href="04-architecture.html">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html">データモデル設計</a></li>
+      <li><a href="06-api.html">API 設計</a></li>
+      <li><a href="07-flows.html">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html">認証・認可設計</a></li>
+      <li><a href="10-frontend.html">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <header class="cover" id="top">
+    <div class="kicker">System Design Document</div>
+    <h1>Hibino EC システム設計書</h1>
+    <div class="subtitle">日々の暮らしの道具店 — Next.js 14 + FastAPI + PostgreSQL 16 / pgvector + Ollama による EC サンプル</div>
+    <div class="meta-grid">
+      <div class="cell"><div class="k">ドキュメント</div><div class="v">システム設計書</div></div>
+      <div class="cell"><div class="k">対象システム</div><div class="v">Hibino（EC サンプル）</div></div>
+      <div class="cell"><div class="k">更新日</div><div class="v">2026-07-20</div></div>
+      <div class="cell"><div class="k">構成</div><div class="v">3 層 + Ollama 連携</div></div>
+    </div>
+  </header>
+
+  <section id="contents">
+    <h2>目次</h2>
+  <div class="ch-list">
+    <a class="ch-card" href="01-overview.html"><span class="n">01</span><span class="t">ドキュメント概要</span><span class="d">本書の目的・対象読者・範囲と、記載内容の前提。</span></a>
+    <a class="ch-card" href="02-system.html"><span class="n">02</span><span class="t">システム概要</span><span class="d">Hibino EC が扱う業務ドメインとシステム全体の位置づけ。</span></a>
+    <a class="ch-card" href="03-tech-stack.html"><span class="n">03</span><span class="t">技術スタック</span><span class="d">フロント / バックエンド / DB / AI 基盤に採用した技術と選定理由。</span></a>
+    <a class="ch-card" href="04-architecture.html"><span class="n">04</span><span class="t">アーキテクチャ全体像</span><span class="d">3 層 + Ollama 連携の構成、コンテナ配置とレイヤ責務。</span></a>
+    <a class="ch-card" href="05-data-model.html"><span class="n">05</span><span class="t">データモデル設計</span><span class="d">主要エンティティ、テーブル定義、リレーションと状態遷移。</span></a>
+    <a class="ch-card" href="06-api.html"><span class="n">06</span><span class="t">API 設計</span><span class="d">/api 配下の全エンドポイント一覧、認可レベルと入出力仕様。</span></a>
+    <a class="ch-card" href="07-flows.html"><span class="n">07</span><span class="t">主要処理フロー</span><span class="d">検索・カート・注文など中心的なユースケースの処理シーケンス。</span></a>
+    <a class="ch-card" href="08-ai.html"><span class="n">08</span><span class="t">AI レコメンド・アシスタント設計</span><span class="d">埋め込み生成、ハイブリッド検索、商品 Q&A の設計。</span></a>
+    <a class="ch-card" href="09-auth.html"><span class="n">09</span><span class="t">認証・認可設計</span><span class="d">JWT によるログイン、ロール区分と保護対象リソース。</span></a>
+    <a class="ch-card" href="10-frontend.html"><span class="n">10</span><span class="t">フロントエンド設計</span><span class="d">App Router 構成、コンポーネント分割と状態管理方針。</span></a>
+    <a class="ch-card" href="11-decisions.html"><span class="n">11</span><span class="t">設計上の決定・運用ルール</span><span class="d">コードに現れない暗黙の前提と、変更時に守るべき運用ルール。</span></a>
+  </div>
+  </section>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>

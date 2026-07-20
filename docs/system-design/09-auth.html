@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書 — 09 認証・認可設計</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html">ドキュメント概要</a></li>
+      <li><a href="02-system.html">システム概要</a></li>
+      <li><a href="03-tech-stack.html">技術スタック</a></li>
+      <li><a href="04-architecture.html">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html">データモデル設計</a></li>
+      <li><a href="06-api.html">API 設計</a></li>
+      <li><a href="07-flows.html">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html" class="active">認証・認可設計</a></li>
+      <li><a href="10-frontend.html">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s9">
+    <h2><span class="num">09</span>認証・認可設計</h2>
+    <p>JWT（HS256、Bearer トークン）によるステートレス認証を提供し、bcrypt でパスワードをハッシュ化する。トークンは <code>user_id</code> を <code>sub</code> に持ち、有効期限は 24 時間。サーバ側トークンストアやブラックリストは持たない。</p>
+
+    <h3><span class="num">9.1</span>トークンと依存性</h3>
+    <div class="tw"><table>
+      <thead><tr><th>依存性</th><th>挙動</th></tr></thead>
+      <tbody>
+        <tr><td><code>get_current_user</code></td><td>必須認証。HTTPBearer(auto_error=True) でヘッダを要求し、検証済み User を返す</td></tr>
+        <tr><td><code>get_current_user_optional</code></td><td>任意認証。HTTPBearer(auto_error=False)。ヘッダ無し・無効・期限切れ・失効・削除済みでも 401 を投げず None（匿名）を返す。レコメンド等のフォールバック用</td></tr>
+        <tr><td><code>get_current_admin</code></td><td>管理者認可。get_current_user に依存し role≠admin なら 403（Admin privileges required）</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3><span class="num">9.2</span>パスワード変更時の全セッション失効</h3>
+    <ol class="steps">
+      <li>update_password で current_password を検証（不一致は 400）</li>
+      <li>new_password を bcrypt で保存し、<code>password_changed_at</code> を秒精度（microsecond=0）に丸めて記録</li>
+      <li>以後 _resolve_user_from_token でトークンの iat が password_changed_at より前なら 401 にして失効させる</li>
+      <li>秒に丸めるのは、変更直後の再ログインで得た同一秒 iat の新トークンが誤失効しないため</li>
+    </ol>
+
+    <h3><span class="num">9.3</span>セキュリティ上の取り決め</h3>
+    <ul>
+      <li>login はメール不在・パスワード不一致を区別せず一律 401「Incorrect email or password」（ユーザー列挙防止）</li>
+      <li>register は既存メールを 400 で拒否。新規ユーザーは常に role=user（管理者昇格の API 経路は無い）</li>
+      <li>認証失敗時の 401 応答には常に <code>WWW-Authenticate: Bearer</code> ヘッダを付与</li>
+      <li>認可は role 文字列で判定（user / admin）。細粒度の権限は無い</li>
+      <li>リフレッシュトークンの仕組みは無い（有効期限 24h 固定）</li>
+    </ul>
+    <div class="note warn"><span class="lbl">設計リスク</span><p style="margin:.3em 0 0">JWT 署名鍵 <code>SECRET_KEY</code> は環境変数から取得するが、未設定時は <code>"dev-secret-key-change-in-production"</code> というハードコードのデフォルト値にフォールバックする。本番で環境変数未設定だと既知の弱鍵で署名される。</p></div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="08-ai.html">← <span class="n">08</span> AI レコメンド・アシスタント設計</a>
+    <a class="next" href="10-frontend.html"><span class="n">10</span> フロントエンド設計 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>
