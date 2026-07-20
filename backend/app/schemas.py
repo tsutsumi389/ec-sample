@@ -116,10 +116,26 @@ class ProductListOut(BaseModel):
     total: int
 
 
+class SuggestProductOut(BaseModel):
+    # サジェストのダイレクト候補（商品そのもの）。クリックで商品ページへ直行させる用途。
+    # ProductOut は重い（レビュー集計・画像配列など）ので、表示に必要な最小限だけ返す。
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    image_url: str | None = None
+    price: int
+    sale_price: int | None = None
+    # 実売価格（sale_price があればそれ、なければ price）。表示・計算の基準。
+    effective_price: int
+
+
 class SuggestOut(BaseModel):
     # 検索サジェスト候補。出品中商品の名前にマッチした検索語（文字列）の配列。
     # クリックでそのままフル検索（GET /products?search=）に渡す想定。
     suggestions: list[str]
+    # ダイレクト候補（商品そのもの、最大3件）。クリックで商品ページへ直行させる。
+    products: list[SuggestProductOut] = []
 
 
 class ProductCreate(BaseModel):

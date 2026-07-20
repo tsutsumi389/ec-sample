@@ -131,6 +131,9 @@ function ProductListContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  // 一度でもロードが完了したか。初回だけスケルトンを出し、以降の再ロード中は
+  // 直前の結果グリッドを薄く残す（レイアウトの跳ねを防ぐ）ための判定に使う。
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -176,7 +179,10 @@ function ProductListContent() {
         setError(e instanceof ApiError ? e.message : '商品の取得に失敗しました');
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setHasLoadedOnce(true);
+        }
       });
 
     return () => {
@@ -263,6 +269,12 @@ function ProductListContent() {
     ? '商品の読み込みに失敗しました'
     : `${total}件の商品が見つかりました`;
 
+  // 初回ロード（まだ結果グリッドを一度も出していない）だけスケルトンに置き換える。
+  // 2回目以降のロード中は直前のグリッドを薄く残して差し替える。
+  const showSkeleton = loading && (!hasLoadedOnce || products.length === 0);
+  const showDimmedGrid = loading && hasLoadedOnce && products.length > 0;
+  const showGrid = showDimmedGrid || (!loading && !error && products.length > 0);
+
   return (
     <div id="products" className="max-w-6xl mx-auto px-4 py-8 scroll-mt-4">
       <p className="sr-only" role="status" aria-live="polite">
@@ -283,7 +295,7 @@ function ProductListContent() {
         )}
       </div>
 
-      <ProductFilters value={filtersValue} onChange={handleFiltersChange} />
+      <ProductFilters value={filtersValue} onChange={handleFiltersChange} searching={Boolean(search)} />
 
       {hasActiveFilters && (
         <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -326,7 +338,7 @@ function ProductListContent() {
         </div>
       )}
 
-      {loading && <ProductGridSkeleton count={LIMIT} />}
+      {showSkeleton && <ProductGridSkeleton count={LIMIT} />}
 
       {!loading && error && (
         <div role="alert" className="flex flex-col items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
@@ -349,19 +361,48 @@ function ProductListContent() {
               ? `「${search}」に一致する商品が見つかりませんでした`
               : '条件に合う商品が見つかりませんでした'
           }
-          description="絞り込み条件を変えると、お探しの道具が見つかるかもしれません。"
+          description={
+            search
+              ? '別の言葉や、もっと一般的な言葉で試してみてください。「雨の日に便利なもの」のような曖昧な表現でも探せます。'
+              : '絞り込み条件を変えると、お探しの道具が見つかるかもしれません。'
+          }
           action={
-            hasActiveFilters ? (
-              <button type="button" onClick={() => router.push('/')} className={btnPrimary}>
-                絞り込みをすべて解除する
-              </button>
+            categories.length > 0 || hasActiveFilters ? (
+              <div className="flex flex-col items-center gap-6">
+                {categories.length > 0 && (
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-sm text-gray-500">カテゴリから探す</span>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {categories.map((category) => (
+                        <Link
+                          key={category.id}
+                          href={`/?category_id=${category.id}#products`}
+                          className="whitespace-nowrap rounded-full bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors duration-150 hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+                        >
+                          {category.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {hasActiveFilters && (
+                  <button type="button" onClick={() => router.push('/')} className={btnPrimary}>
+                    絞り込みをすべて解除する
+                  </button>
+                )}
+              </div>
             ) : undefined
           }
         />
       )}
 
-      {!loading && !error && products.length > 0 && (
-        <>
+      {showGrid && (
+        <div
+          className={
+            showDimmedGrid ? 'opacity-50 pointer-events-none transition-opacity duration-150' : ''
+          }
+          aria-busy={showDimmedGrid || undefined}
+        >
           <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 items-stretch">
             {products.map((product) => (
               <li key={product.id} className="h-full">
@@ -371,7 +412,7 @@ function ProductListContent() {
           </ul>
 
           <Pagination page={page} totalPages={totalPages} onChange={handlePageChange} />
-        </>
+        </div>
       )}
     </div>
   );

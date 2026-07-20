@@ -20,7 +20,14 @@ from app.models import (
     Review,
     User,
 )
-from app.schemas import ProductListOut, ProductOut, ReviewCreate, ReviewOut, SuggestOut
+from app.schemas import (
+    ProductListOut,
+    ProductOut,
+    ReviewCreate,
+    ReviewOut,
+    SuggestOut,
+    SuggestProductOut,
+)
 from app.services import embedding, recommendation
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -205,12 +212,14 @@ def suggest_products(
     limit: int = Query(default=8, ge=1, le=20),
     db: Session = Depends(get_db),
 ) -> SuggestOut:
-    """検索サジェスト（キーワード候補）。
+    """検索サジェスト（キーワード候補 + 商品ダイレクト候補）。
 
     入力中の高頻度呼び出しに耐えるため、埋め込み等の重い処理は一切使わない。
-    出品中（LISTED）商品の名前に対する ILIKE 部分一致だけで候補語を返す。
-    前方一致を優先し、次に名前順で安定化する。同名商品は 1 件に畳む。
-    2 文字未満は候補過多になるだけなので即空配列で返す（DB も引かない）。
+    出品中（LISTED）商品の名前に対する ILIKE 部分一致だけで、以下の 2 種を返す:
+      - suggestions: マッチした検索語（文字列）。前方一致を優先し名前順で安定化。同名は畳む。
+      - products: マッチした商品そのもの（最大3件）。クリックで商品ページへ直行させる用途。
+    どちらも同じエスケープ済みパターン・同じ関連度順（strpos → 名前長 → 名前）で引く。
+    2 文字未満は候補過多になるだけなので即空で返す（DB も引かない）。
     ルート順の都合で /{product_id} より前に定義する（"suggest" が int パスに
     マッチして 422 になるのを避けるため）。
     """
@@ -243,7 +252,28 @@ def suggest_products(
         .scalars()
         .all()
     )
-    return SuggestOut(suggestions=list(rows))
+
+    # ダイレクト候補（商品本体）。suggestions と同じパターン・同じ関連度順で最大3件。
+    # 埋め込みや集計は挟まない軽量クエリのみ。effective_price はモデルのプロパティを使う。
+    product_rows = (
+        db.execute(
+            select(Product)
+            .where(
+                Product.status.in_(LISTED_STATUSES),
+                Product.name.ilike(f"%{escaped}%", escape="\\"),
+            )
+            .order_by(
+                match_pos.asc(),
+                func.char_length(Product.name).asc(),
+                Product.name.asc(),
+            )
+            .limit(3)
+        )
+        .scalars()
+        .all()
+    )
+    products = [SuggestProductOut.model_validate(p) for p in product_rows]
+    return SuggestOut(suggestions=list(rows), products=products)
 
 
 @router.get("/{product_id}", response_model=ProductOut)
