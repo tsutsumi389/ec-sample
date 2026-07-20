@@ -23,6 +23,9 @@
   - `max_price: int | None`（`ge=0`）
 - レスポンス: `ProductListOut` = `{ items: ProductOut[], total: int }`
 - `ProductOut` 追加フィールド: `category_id: int | None`, `avg_rating: float | None`, `review_count: int`
+- **注**: 本書は追加当時の仕様。その後 `search` はセマンティック（ハイブリッド）検索になり、
+  `sort` には `"recommended"` が追加、検索中の sort 未指定時は関連度順で並ぶ。
+  検索・サジェスト（`GET /products/suggest`）の現行仕様は `docs/SEARCH_UIUX_DESIGN.md` を参照。
 
 ### GET /products/{id} （拡張）
 - レスポンス `ProductOut` に `avg_rating` / `review_count` を含む。
