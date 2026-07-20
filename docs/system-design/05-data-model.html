@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書 — 05 データモデル設計</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html">ドキュメント概要</a></li>
+      <li><a href="02-system.html">システム概要</a></li>
+      <li><a href="03-tech-stack.html">技術スタック</a></li>
+      <li><a href="04-architecture.html">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html" class="active">データモデル設計</a></li>
+      <li><a href="06-api.html">API 設計</a></li>
+      <li><a href="07-flows.html">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html">認証・認可設計</a></li>
+      <li><a href="10-frontend.html">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s5">
+    <h2><span class="num">05</span>データモデル設計</h2>
+    <p><code>backend/app/models.py</code> に全 17 モデル（EC 中核 10 + レコメンド・パーソナライズ 5 + アシスタント会話 2）を定義する。<code>database.py</code> が <code>Base</code> / <code>engine</code> / <code>SessionLocal</code> / <code>get_db</code> を提供し、<code>seed.py</code> が初期データを冪等投入する。全テーブルは <code>main.py</code> の lifespan 内 <code>Base.metadata.create_all</code> で自動生成される（マイグレーションツール未導入）。</p>
+
+    <h3><span class="num">5.1</span>Product 状態機械（可視性・購入可否の唯一の源）</h3>
+    <p>商品の一覧表示・商品ページ表示・購入可否はすべて <code>Product.status</code> の 6 状態から導出する。個別の真偽フラグは持たない（旧 <code>is_active</code> は <code>archived</code> に統合し廃止）。判定は <code>is_listed</code> / <code>is_viewable</code> / <code>purchasable</code> プロパティと <code>LISTED_STATUSES</code> / <code>VIEWABLE_STATUSES</code> 定数に集約される。</p>
+    <div class="sm">
+      <div class="st"><div class="name">draft</div><div class="desc">下書き（未公開）。新規作成時のデフォルト（誤公開防止）。</div><div class="flags"><span class="flg off">listed</span><span class="flg off">viewable</span><span class="flg off">purchasable</span></div></div>
+      <div class="st"><div class="name">coming_soon</div><div class="desc">近日発売。表示はするが購入不可。</div><div class="flags"><span class="flg on">listed</span><span class="flg on">viewable</span><span class="flg off">purchasable</span></div></div>
+      <div class="st"><div class="name">on_sale</div><div class="desc">販売中。表示・購入可（在庫があれば）。</div><div class="flags"><span class="flg on">listed</span><span class="flg on">viewable</span><span class="flg on">purchasable*</span></div></div>
+      <div class="st"><div class="name">suspended</div><div class="desc">一時停止。在庫があっても表示のみで購入不可。</div><div class="flags"><span class="flg on">listed</span><span class="flg on">viewable</span><span class="flg off">purchasable</span></div></div>
+      <div class="st"><div class="name">discontinued</div><div class="desc">販売終了。一覧からは隠すが商品ページ・履歴は残す。</div><div class="flags"><span class="flg off">listed</span><span class="flg on">viewable</span><span class="flg off">purchasable</span></div></div>
+      <div class="st"><div class="name">archived</div><div class="desc">論理削除相当。一覧・商品ページとも非表示。</div><div class="flags"><span class="flg off">listed</span><span class="flg off">viewable</span><span class="flg off">purchasable</span></div></div>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>定数</th><th>含む状態</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>LISTED_STATUSES</code></td><td><code>coming_soon, on_sale, suspended</code></td><td>一覧（トップ・検索・関連・おすすめ）に表示してよいか（<code>is_listed</code>）</td></tr>
+          <tr><td><code>VIEWABLE_STATUSES</code></td><td><code>coming_soon, on_sale, suspended, discontinued</code></td><td>商品ページを直接開いて閲覧してよいか（<code>is_viewable</code>）。URL では見られる <code>discontinued</code> を含む</td></tr>
+          <tr><td><code>purchasable</code></td><td><code>on_sale</code> かつ <code>stock &gt; 0</code></td><td>* 販売中かつ在庫ありのときだけ購入可能</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">5.2</span>実売価格 <code>effective_price</code></h3>
+    <p><code>sale_price</code> が設定されていればそれを、なければ <code>price</code> を実売価格として返す。カート小計・注文金額・<code>OrderItem</code> スナップショット・埋め込みテキストの価格帯言語化まで、すべて <code>effective_price</code> を使い <code>price</code> を直接参照しない。<code>sale_price</code> 設定時は <code>price</code> を定価（打ち消し表示）扱いにする。</p>
+    <div class="price-demo">
+      <div class="pd"><div class="t">sale_price 無し</div><div class="eff" style="margin-top:6px">¥2,400</div><div style="font-size:12px;color:var(--ink-faint)">effective_price = price</div></div>
+      <div class="pd"><div class="t">sale_price 有り</div><div style="margin-top:6px"><span class="strike">¥3,000</span> <span class="eff" style="font-size:20px">¥2,400</span><span class="off">20% OFF</span></div><div style="font-size:12px;color:var(--ink-faint)">effective_price = sale_price、price は定価</div></div>
+    </div>
+
+    <h3><span class="num">5.3</span>EC 中核テーブル</h3>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>テーブル</th><th>主なカラム</th><th>リレーション / 制約</th></tr></thead>
+        <tbody>
+          <tr><td><code>users</code><br>User</td><td><code>id</code> PK / <code>email</code> unique,index / <code>hashed_password</code> / <code>name</code> / <code>role</code>（default <code>user</code>）/ <code>created_at</code> / <code>password_changed_at</code>（nullable）</td><td>cart_items（1:N, cascade）/ orders（1:N）。<code>password_changed_at</code> より前発行の JWT を失効させる基準</td></tr>
+          <tr><td><code>categories</code><br>Category</td><td><code>id</code> PK / <code>name</code> / <code>slug</code> unique,index / <code>created_at</code></td><td>products（1:N）</td></tr>
+          <tr><td><code>products</code><br>Product</td><td><code>id</code> PK / <code>name</code> / <code>sku</code> unique,nullable / <code>description</code> / <code>price</code> / <code>sale_price</code> nullable / <code>stock</code>（default 0）/ <code>status</code>（default <code>draft</code>）/ <code>image_url</code> / <code>category_id</code> FK</td><td>category（N:1）/ cart_items / reviews（cascade）/ images（cascade, sort_order 順）。プロパティ <code>effective_price</code> / <code>is_listed</code> / <code>is_viewable</code> / <code>purchasable</code></td></tr>
+          <tr><td><code>product_images</code><br>ProductImage</td><td><code>id</code> PK / <code>product_id</code> FK / <code>image_url</code> / <code>sort_order</code>（default 0）/ <code>created_at</code></td><td>product（N:1）</td></tr>
+          <tr><td><code>reviews</code><br>Review</td><td><code>id</code> PK / <code>product_id</code> FK / <code>user_id</code> FK / <code>rating</code> / <code>comment</code> nullable / <code>created_at</code></td><td>product（N:1）/ user（N:1）。複合 unique <code>uq_review_user_product</code></td></tr>
+          <tr><td><code>wishlist_items</code><br>WishlistItem</td><td><code>id</code> PK / <code>user_id</code> FK / <code>product_id</code> FK / <code>created_at</code></td><td>user / product（N:1）。複合 unique <code>uq_wishlist_user_product</code></td></tr>
+          <tr><td><code>addresses</code><br>Address</td><td><code>id</code> PK / <code>user_id</code> FK / <code>recipient_name</code> / <code>postal_code</code> / <code>prefecture</code> / <code>city</code> / <code>address_line</code> / <code>phone</code> / <code>is_default</code>（default false）</td><td>user（N:1）。デフォルトは常に 1 件以下に維持</td></tr>
+          <tr><td><code>coupons</code><br>Coupon</td><td><code>id</code> PK / <code>code</code> unique,index / <code>discount_type</code>（percent / fixed）/ <code>discount_value</code> / <code>min_order_amount</code>（default 0）/ <code>is_active</code> / <code>expires_at</code> nullable</td><td>リレーション無し（独立テーブル。注文側は <code>coupon_code</code> に文字列スナップショット）</td></tr>
+          <tr><td><code>cart_items</code><br>CartItem</td><td><code>id</code> PK / <code>user_id</code> FK / <code>product_id</code> FK / <code>quantity</code>（default 1）</td><td>user / product（N:1）。複合 unique <code>uq_cart_user_product</code></td></tr>
+          <tr><td><code>orders</code><br>Order</td><td><code>id</code> PK / <code>user_id</code> FK / <code>total_amount</code>（割引後）/ <code>discount_amount</code>（default 0）/ <code>coupon_code</code> nullable / <code>status</code>（default <code>pending</code>）/ <code>shipping_address</code> / <code>created_at</code></td><td>user（N:1）/ items（1:N, cascade）</td></tr>
+          <tr><td><code>order_items</code><br>OrderItem</td><td><code>id</code> PK / <code>order_id</code> FK / <code>product_id</code> FK / <code>product_name</code>（スナップショット）/ <code>price</code>（注文時 effective_price）/ <code>quantity</code></td><td>order（N:1）/ product（N:1）。商品マスタを再参照しない</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">5.4</span>レコメンド・パーソナライズ用テーブル</h3>
+    <p>既存テーブルにカラムを足さず新規 5 テーブルに分離している（マイグレーション未導入のため既存テーブルへの追加ができず、新規テーブル追加のみ許容される運用に合わせた設計）。うち <code>product_views</code> は購入・お気に入りと並ぶパーソナライズの行動シグナルで、他 4 テーブルは埋め込み・SID・生成キャッシュを担う。</p>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>テーブル</th><th>主なカラム</th><th>役割</th></tr></thead>
+        <tbody>
+          <tr><td><code>product_embeddings</code><br>ProductEmbedding</td><td><code>product_id</code> PK 兼 FK（1 商品 1 行）/ <code>embedding</code> <code>Vector(768)</code> / <code>semantic_id</code> nullable,index / <code>codebook_generation</code> / <code>source_hash</code>（テキスト sha256）/ <code>embed_model</code> / <code>updated_at</code></td><td>埋め込み本体と SID。<code>source_hash</code>/<code>embed_model</code> 一致で再埋め込みをスキップする差分同期に使う</td></tr>
+          <tr><td><code>semantic_id_codebooks</code><br>SemanticIdCodebook</td><td><code>generation</code> PK（再構築でインクリメント）/ <code>centroids</code> JSONB（3 階層分、各 K×768）/ <code>created_at</code></td><td>残差量子化のセントロイド世代管理。最新以外は削除</td></tr>
+          <tr><td><code>user_recommendations</code><br>UserRecommendation</td><td><code>id</code> PK / <code>user_id</code> FK,index / <code>product_id</code> FK / <code>reason</code>（LLM 生成の理由文）/ <code>rank</code>（default 0）/ <code>created_at</code></td><td>ユーザー別おすすめキャッシュ。生成のたび当該ユーザーの行を丸ごと入れ替え</td></tr>
+          <tr><td><code>recommendation_states</code><br>RecommendationState</td><td><code>user_id</code> PK 兼 FK / <code>profile_hash</code> nullable / <code>status</code>（generating / ready / failed）/ <code>generated_at</code> / <code>updated_at</code></td><td>多重起動防止・キャッシュ陳腐化判定。<code>profile_hash</code> 一致かつ ready でキャッシュ返却</td></tr>
+          <tr><td><code>product_views</code><br>ProductView</td><td><code>id</code> PK / <code>user_id</code> FK,index / <code>product_id</code> FK / <code>view_count</code>（default 1）/ <code>viewed_at</code>（timestamptz）</td><td>ログインユーザーの閲覧履歴（パーソナライズの弱いシグナル、view 重み 0.5）。複合 unique <code>uq_product_view_user_product</code> で 1 ユーザー×1 商品 1 行に保ち、再閲覧は viewed_at 更新＋view_count+1 で upsert（履歴の肥大化防止）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">5.5</span>シードデータ（<code>seed_data</code>）</h3>
+    <p><code>users</code> テーブルに 1 件でもあれば即 return する冪等ガード付き。初期投入は次のとおり。</p>
+    <ul>
+      <li>ユーザー: <code>admin@example.com</code>（admin123, role=admin）/ <code>user@example.com</code>（user123, role=user）</li>
+      <li>カテゴリ 5 件（キッチン家電 / 生活家電 / 日用品 / アウトドア / ファッション小物）、商品 60 件。ホームのレーン分離・novelty がカテゴリ分布で多様性を測るため、5 カテゴリに配分して 1 カテゴリ偏りを避ける</li>
+      <li>各状態を一通り含む（<code>draft</code> / <code>coming_soon</code> / <code>suspended</code> / <code>discontinued</code> / <code>archived</code> を各数件、残りは <code>on_sale</code>、<code>wrist-watch</code>=stock 0）。可視性・購入可否の分岐やレーンのフォールバックを実データで確認できる</li>
+      <li>商品の <code>description</code> は埋め込みの原文を兼ねる。テンプレ文だと全ベクトルが密集してセマンティック検索もホームのレーン分離も効かなくなるため、用途・素材・シーン・サイズなど固有語を含む具体的な説明文にする。画像は <code>frontend/public/products/</code> の統一 SVG（10 枚）を <code>image_slug</code> で流用（新規 SVG は追加しない）</li>
+      <li>クーポン 2 件: <code>WELCOME10</code>（percent 10）/ <code>SAVE500</code>（fixed 500・min 5000）</li>
+      <li>動作確認用に user のサンプル注文（<code>delivered</code> / <code>paid</code> / <code>shipped</code> など複数ステータス、<code>effective_price</code> を total にスナップショット、在庫を購入分減算）とレビュー。「今週の売れ筋 Top10」レーンや注文管理のデモが成立するよう直近の購入実績を持たせ、レビュー投稿資格を満たすため実 Order/OrderItem を合わせて作る</li>
+    </ul>
+
+    <h3><span class="num">5.6</span>アシスタント会話テーブル</h3>
+    <p>チャット型ショッピングアシスタントの会話とメッセージを永続化する新規 2 テーブル。既存テーブルにはカラムを足さず分離する（マイグレーション未導入の運用に合わせる）。会話は 1:N でメッセージを持つ（<code>cascade="all, delete-orphan"</code>）。会話 ID は推測困難な UUID（文字列 PK）で、未ログインでも端末の <code>localStorage</code> に UUID を保持することでパネル再オープン時に会話を継続できる。</p>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>テーブル</th><th>主なカラム</th><th>役割 / 制約</th></tr></thead>
+        <tbody>
+          <tr><td><code>assistant_conversations</code><br>AssistantConversation</td><td><code>id</code> PK（UUID 文字列）/ <code>user_id</code> FK users.id nullable,index（ゲスト会話は NULL）/ <code>created_at</code> / <code>updated_at</code>（onupdate）</td><td>messages（1:N, cascade, id 昇順）。ログイン会話は本人のみアクセス可、ゲスト会話は UUID 保持が認可。ゲスト会話中にログインすると以降 <code>user_id</code> を紐付け（引き継ぎ）</td></tr>
+          <tr><td><code>assistant_messages</code><br>AssistantMessage</td><td><code>id</code> PK / <code>conversation_id</code> FK,index / <code>role</code>（<code>user</code> / <code>assistant</code>）/ <code>content</code> / <code>product_ids</code> JSONB（提案商品ID配列、user 行は空）/ <code>source</code> nullable（<code>llm</code> / <code>fallback</code>、assistant 行のみ）/ <code>created_at</code></td><td>conversation（N:1）。<code>product_ids</code> は履歴復元時にカードを引き直すためのもので、復元時に <code>LISTED_STATUSES</code> を再確認し非公開化された商品は落とす</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">5.7</span>商品Q&amp;A テーブル</h3>
+    <p>商品ページの購入前Q&amp;A（§8.8）を永続化する新規 1 テーブル。既存テーブルにはカラムを足さない運用に合わせる。1 質問 = 1 AI 回答で 1 行を持ち、回答は生成時点のスナップショット（<code>OrderItem</code> と同じ思想で、商品説明やレビューが後から変わっても再生成しない）。</p>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>テーブル</th><th>主なカラム</th><th>役割 / 制約</th></tr></thead>
+        <tbody>
+          <tr><td><code>product_questions</code><br>ProductQuestion</td><td><code>id</code> PK（推測困難な UUID 文字列）/ <code>product_id</code> FK products.id,index / <code>user_id</code> FK users.id / <code>question</code> Text / <code>answer</code> Text / <code>source</code>（<code>llm</code> / <code>fallback</code>）/ <code>answerable</code> Boolean（false = 根拠不足で「情報不足」表示）/ <code>created_at</code></td><td>質問できるのはログインユーザーのみ（レビューと同じ権限モデル）だが、蓄積された Q&amp;A は誰でも閲覧できる（社会的証明）。可視性は <code>Product.is_viewable</code> に従う</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="04-architecture.html">← <span class="n">04</span> アーキテクチャ全体像</a>
+    <a class="next" href="06-api.html"><span class="n">06</span> API 設計 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>

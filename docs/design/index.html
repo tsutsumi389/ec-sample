@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC 機能設計書</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 機能設計書</a><small>機能別 設計書 索引</small></div>
+    <ol>
+      <li><a href="ai-assistant.html">AIショッピングアシスタント 設計書</a></li>
+      <li><a href="search-uiux.html">商品検索 UI/UX 改善 設計書</a></li>
+      <li><a href="feature-additions.html">機能追加設計書 — 一般的なEC標準機能の拡充</a></li>
+      <li><a href="../system-design/index.html">システム設計書（全 11 章）</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <header class="cover" id="top">
+    <div class="kicker">Design Documents</div>
+    <h1>Hibino EC 機能設計書</h1>
+    <div class="subtitle">個別機能の設計判断・API 仕様・実装フェーズを機能単位でまとめた設計書の索引</div>
+    <div class="meta-grid">
+      <div class="cell"><div class="k">ドキュメント</div><div class="v">機能設計書 索引</div></div>
+      <div class="cell"><div class="k">対象システム</div><div class="v">Hibino（EC サンプル）</div></div>
+      <div class="cell"><div class="k">収録</div><div class="v">3 文書</div></div>
+      <div class="cell"><div class="k">更新日</div><div class="v">2026-07-20</div></div>
+    </div>
+  </header>
+
+  <section id="contents">
+    <h2>目次</h2>
+    <div class="ch-list">
+      <a class="ch-card" href="ai-assistant.html"><span class="n">01</span><span class="t">AIショッピングアシスタント 設計書</span><span class="d">全ページ常駐のチャット型ショッピングアシスタント「Hibinoの店員AI」。RAG による商品グラウンディング、SID 検証、フォールバック設計。</span></a>
+      <a class="ch-card" href="search-uiux.html"><span class="n">02</span><span class="t">商品検索 UI/UX 改善 設計書</span><span class="d">IME 対応・検索履歴・商品ダイレクト候補・関連度順の一致・モバイルフィルタドロワーなど、検索体験 10 項目の改善設計。</span></a>
+      <a class="ch-card" href="feature-additions.html"><span class="n">03</span><span class="t">機能追加設計書 — 一般的なEC標準機能の拡充</span><span class="d">カテゴリ・レビュー・お気に入り・住所帳・クーポン・注文キャンセルなど、EC 標準機能 8 件の追加設計と実装分担。</span></a>
+    </div>
+  </section>
+
+  <section id="related">
+    <h2>関連ドキュメント</h2>
+    <div class="ch-list">
+      <a class="ch-card" href="../system-design/index.html"><span class="n">SYSTEM</span><span class="t">Hibino EC システム設計書</span><span class="d">コードベースの構造化分析に基づく統合設計書（全 11 章）。データモデル・API・処理フロー・AI 設計を横断的に扱う。</span></a>
+    </div>
+  </section>
+
+  <footer class="docfoot">
+    Hibino EC 機能設計書 索引 / スタイル・スクリプトは <code>../system-design/assets/</code> と共通
+  </footer>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>

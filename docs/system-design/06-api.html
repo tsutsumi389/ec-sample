@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書 — 06 API 設計</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html">ドキュメント概要</a></li>
+      <li><a href="02-system.html">システム概要</a></li>
+      <li><a href="03-tech-stack.html">技術スタック</a></li>
+      <li><a href="04-architecture.html">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html">データモデル設計</a></li>
+      <li><a href="06-api.html" class="active">API 設計</a></li>
+      <li><a href="07-flows.html">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html">認証・認可設計</a></li>
+      <li><a href="10-frontend.html">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s6">
+    <h2><span class="num">06</span>API 設計</h2>
+    <p>バックエンドの全ルートは <code>/api</code> プレフィックス配下に一括登録される（<code>main.py</code>）。認証要件は <span class="badge a-none">none</span> 認証不要 / <span class="badge a-user">user</span> ログイン必須 / <span class="badge a-admin">admin</span> 管理者のみ、で示す。</p>
+
+    <h3><span class="num">6.1</span>認証（<code>/api/auth</code>）</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Method</th><th>Path</th><th>認証</th><th>概要</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/auth/register</code></td><td><span class="badge a-none">none</span></td><td>新規登録。メール重複は 400。bcrypt ハッシュ、role=user で作成、201 で UserOut</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/auth/login</code></td><td><span class="badge a-none">none</span></td><td>認証。不一致/不在は一律 401。成功で 24h トークン（Token）を発行</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/auth/me</code></td><td><span class="badge a-user">user</span></td><td>認証中ユーザー自身の情報（UserOut）</td></tr>
+        <tr><td><span class="badge m-put">PUT</span></td><td><code>/api/auth/me</code></td><td><span class="badge a-user">user</span></td><td>name を更新して UserOut を返す</td></tr>
+        <tr><td><span class="badge m-put">PUT</span></td><td><code>/api/auth/me/password</code></td><td><span class="badge a-user">user</span></td><td>パスワード変更。current_password 検証（不一致 400）、既存トークン失効、204</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3><span class="num">6.2</span>商品・カテゴリ・レビュー・お気に入り</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Method</th><th>Path</th><th>認証</th><th>概要</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products</code></td><td><span class="badge a-none">任意</span></td><td>商品一覧。search / category_id / sort（newest / price_asc / price_desc / rating / recommended）/ min_price / max_price / page（既定 1）/ limit（既定 12, 1-100）。LISTED_STATUSES のみ、平均評価・件数・total 付き。<code>search</code> はハイブリッド検索: <code>name ILIKE</code> ∪ pgvector 意味的候補（クエリ埋め込みのコサイン近傍・動的カットオフ）。検索中に sort 未指定なら関連度順（ILIKE 一致優先 → 意味的距離）で並び、sort 明示時はセマンティックはフィルタとしてのみ作用。<code>sort=recommended</code> はログイン時プロフィール近傍、非ログイン・不能時は人気順（任意認証・詳細は §8.6）</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products/suggest</code></td><td><span class="badge a-none">none</span></td><td>検索サジェスト。<code>q</code>（2 文字未満は DB を引かず即空返し）/ <code>limit</code>（既定 8, 1-20）。LISTED 商品名への ILIKE のみの軽量クエリで、キーワード候補 <code>suggestions</code>（同名は畳む）と商品ダイレクト候補 <code>products</code>（最大 3 件: id / name / image_url / price / sale_price / effective_price）を同じ関連度順（strpos → 名前長 → 名前）で返す。入力中の高頻度呼び出しに耐えるため埋め込みは使わない。詳細は <code>docs/design/search-uiux.html</code></td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products/{id}</code></td><td><span class="badge a-none">none</span></td><td>商品詳細。viewable でなければ 404。平均評価・件数付き</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/products/{id}/view</code></td><td><span class="badge a-none">任意</span></td><td>閲覧記録（パーソナライズのシグナル収集）。ゲストは no-op で 204、viewable でなければ 404。<code>INSERT … ON CONFLICT DO UPDATE</code> で view_count+1／viewed_at 更新の upsert（並行初回閲覧の競合を吸収）。204</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products/{id}/related</code></td><td><span class="badge a-none">none</span></td><td>関連商品。同カテゴリの LISTED を自身除外・id 昇順で最大 4 件</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products/{id}/recommendations</code></td><td><span class="badge a-none">none</span></td><td>類似おすすめ。pgvector コサイン近傍、無ければ同カテゴリフォールバック。limit 既定 4（1-20）</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products/{id}/reviews</code></td><td><span class="badge a-none">none</span></td><td>レビュー一覧。投稿者名付き、created_at 降順・id 降順</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/products/{id}/reviews</code></td><td><span class="badge a-user">user</span></td><td>レビュー投稿。購入者（cancelled 以外の注文で購入）のみ、1 商品 1 件。201</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/products/{id}/questions</code></td><td><span class="badge a-none">none</span></td><td>商品Q&amp;A 一覧。新しい順・最大 100 件、質問者名付き。viewable でなければ 404</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/products/{id}/questions</code></td><td><span class="badge a-user">user</span></td><td>質問投稿（1〜300 字）。その商品の説明文＋レビューだけを根拠に AI 回答を同期生成して永続化。Ollama 失敗時も <code>source="fallback"</code> の定型文で必ず 201（§8.8）</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/categories</code></td><td><span class="badge a-none">none</span></td><td>カテゴリ一覧。名前昇順で全件</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/wishlist</code></td><td><span class="badge a-user">user</span></td><td>自分のお気に入り一覧。created_at 降順・id 降順</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/wishlist/items</code></td><td><span class="badge a-user">user</span></td><td>お気に入り追加。viewable でない商品は 404、重複時は既存返却（冪等）。201</td></tr>
+        <tr><td><span class="badge m-del">DELETE</span></td><td><code>/api/wishlist/items/{product_id}</code></td><td><span class="badge a-user">user</span></td><td>お気に入り削除。存在しなくても 204（冪等）</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3><span class="num">6.3</span>カート・注文・住所帳・クーポン</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Method</th><th>Path</th><th>認証</th><th>概要</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/cart</code></td><td><span class="badge a-user">user</span></td><td>カート内容と合計金額を取得</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/cart/items</code></td><td><span class="badge a-user">user</span></td><td>カート追加。is_viewable かつ status==on_sale、合算後数量が在庫以下を検証。既存行は数量合算。201</td></tr>
+        <tr><td><span class="badge m-put">PUT</span></td><td><code>/api/cart/items/{item_id}</code></td><td><span class="badge a-user">user</span></td><td>数量更新。在庫充足を検証。自分の明細のみ</td></tr>
+        <tr><td><span class="badge m-del">DELETE</span></td><td><code>/api/cart/items/{item_id}</code></td><td><span class="badge a-user">user</span></td><td>明細削除しカート全体を返す。自分の明細のみ</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/orders</code></td><td><span class="badge a-user">user</span></td><td>注文確定。在庫ロック→在庫チェック→スナップショット→在庫減算→クーポン適用→カート削除を 1 トランザクション。201</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/orders</code></td><td><span class="badge a-user">user</span></td><td>自分の注文一覧。created_at 降順・id 降順</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/orders/{order_id}</code></td><td><span class="badge a-user">user</span></td><td>自分の注文詳細。他人の注文は 404</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/orders/{order_id}/cancel</code></td><td><span class="badge a-user">user</span></td><td>キャンセル。pending / paid のみ許可。在庫を数量分戻して status=cancelled</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/addresses</code></td><td><span class="badge a-user">user</span></td><td>住所一覧。is_default 降順・id 降順</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/addresses</code></td><td><span class="badge a-user">user</span></td><td>住所作成。is_default が真なら他のデフォルトを解除。201</td></tr>
+        <tr><td><span class="badge m-put">PUT</span></td><td><code>/api/addresses/{address_id}</code></td><td><span class="badge a-user">user</span></td><td>住所部分更新（exclude_unset）。is_default 真で他を解除。自分のみ</td></tr>
+        <tr><td><span class="badge m-del">DELETE</span></td><td><code>/api/addresses/{address_id}</code></td><td><span class="badge a-user">user</span></td><td>住所削除。204。自分のみ</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/coupons/validate</code></td><td><span class="badge a-user">user</span></td><td>code と subtotal を受け取り有効性・割引額・メッセージを返す。認証必須</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3><span class="num">6.4</span>レコメンド・ホーム</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Method</th><th>Path</th><th>認証</th><th>概要</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/recommendations/home</code></td><td><span class="badge a-none">任意</span></td><td>単一のおすすめ枠。ログイン時は ready かつ profile_hash 一致のキャッシュを rank 順で返却、無ければ人気順を即返しつつ生成をスケジュール。未ログインは人気順のみ。source で llm / fallback を区別</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/home</code></td><td><span class="badge a-none">任意</span></td><td>ホーム画面のレーン構成（Netflix 型）。<code>recently_viewed_ids</code>（"12,7,3" 形式・先頭 10 件）/ <code>max_lanes</code>（既定 8, 1-12）を受け取り、複数レーンを stage-wise 貪欲法で並べた <code>HomeOut</code>（<code>source</code> = personalized / popular ＋ <code>sections[]</code>）を返す。LLM キャッシュ陳腐化時は <code>/recommendations/home</code> と同流儀で再生成をスケジュール（レスポンスはブロックしない）。多層フォールバックで常に 200。詳細は §8.7</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3><span class="num">6.5</span>管理者（<code>/api/admin</code>・全て admin 認証）</h3>
+    <div class="tw"><table>
+      <thead><tr><th>Method</th><th>Path</th><th>認証</th><th>概要</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/admin/products</code></td><td><span class="badge a-admin">admin</span></td><td>全商品を id 順で一覧（archived 含む）</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/admin/products</code></td><td><span class="badge a-admin">admin</span></td><td>商品作成＋ギャラリー画像登録、埋め込み非同期更新。201</td></tr>
+        <tr><td><span class="badge m-put">PUT</span></td><td><code>/api/admin/products/{id}</code></td><td><span class="badge a-admin">admin</span></td><td>商品部分更新（image_urls は None=変更なし / 配列=丸ごと置換）、埋め込み非同期更新</td></tr>
+        <tr><td><span class="badge m-del">DELETE</span></td><td><code>/api/admin/products/{id}</code></td><td><span class="badge a-admin">admin</span></td><td>論理削除（status を archived に変更）</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/admin/recommendations/rebuild</code></td><td><span class="badge a-admin">admin</span></td><td>全商品の埋め込み+SID を強制再構築、即 202</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/admin/orders</code></td><td><span class="badge a-admin">admin</span></td><td>全注文を作成日時降順で一覧（ユーザー情報付き）</td></tr>
+        <tr><td><span class="badge m-put">PUT</span></td><td><code>/api/admin/orders/{id}/status</code></td><td><span class="badge a-admin">admin</span></td><td>注文ステータス更新（有効値以外は 400）</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/admin/users</code></td><td><span class="badge a-admin">admin</span></td><td>全ユーザーを id 順で一覧（created_at 含む）</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/admin/categories</code></td><td><span class="badge a-admin">admin</span></td><td>全カテゴリを id 順で一覧</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/admin/categories</code></td><td><span class="badge a-admin">admin</span></td><td>カテゴリ作成（slug 重複は 400）。201</td></tr>
+        <tr><td><span class="badge m-put">PUT</span></td><td><code>/api/admin/categories/{id}</code></td><td><span class="badge a-admin">admin</span></td><td>カテゴリ部分更新（slug 重複は 400）</td></tr>
+        <tr><td><span class="badge m-del">DELETE</span></td><td><code>/api/admin/categories/{id}</code></td><td><span class="badge a-admin">admin</span></td><td>カテゴリ削除。所属商品は category_id を NULL に付け替え</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/admin/coupons</code></td><td><span class="badge a-admin">admin</span></td><td>全クーポンを id 順で一覧</td></tr>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/admin/coupons</code></td><td><span class="badge a-admin">admin</span></td><td>クーポン作成（code 重複は 400）。201</td></tr>
+        <tr><td><span class="badge m-put">PUT</span></td><td><code>/api/admin/coupons/{id}</code></td><td><span class="badge a-admin">admin</span></td><td>クーポン部分更新（code 重複は 400）</td></tr>
+        <tr><td><span class="badge m-del">DELETE</span></td><td><code>/api/admin/coupons/{id}</code></td><td><span class="badge a-admin">admin</span></td><td>クーポンを物理削除</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/health</code></td><td><span class="badge a-none">none</span></td><td>疎通確認。<code>{status: ok}</code> を返す（main.py 直定義）</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3><span class="num">6.6</span>AI アシスタント（<code>/api/assistant</code>）</h3>
+    <p>チャット型ショッピングアシスタント。認証は <span class="badge a-none">任意</span>（<code>get_current_user_optional</code>）で未ログインでもゲスト会話として利用できる。Ollama 失敗時も <code>source="fallback"</code> で 200 応答し、<b>この API がユーザーに 500 を返すことはない</b>。</p>
+    <div class="tw"><table>
+      <thead><tr><th>Method</th><th>Path</th><th>認証</th><th>概要</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge m-post">POST</span></td><td><code>/api/assistant/chat</code></td><td><span class="badge a-none">任意</span></td><td>相談文を受け取り応答＋提案商品カードを返す。<code>conversation_id</code>=null なら新規会話作成、既存 UUID は所有チェック（他人/不在は 404）。<code>message</code> は 1〜500 字、会話上限 50 メッセージ（超過は 400）。<code>source</code> で <code>llm</code> / <code>fallback</code> を区別</td></tr>
+        <tr><td><span class="badge m-get">GET</span></td><td><code>/api/assistant/conversations/{id}/messages</code></td><td><span class="badge a-none">任意</span></td><td>ウィジェット再オープン時の履歴復元。所有チェック後に id 昇順で全メッセージを返す。assistant 行は <code>product_ids</code> から商品を引き直し、<code>LISTED_STATUSES</code> を再確認して非公開化された商品はカードから落とす</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><span class="lbl">認可</span><p style="margin:.3em 0 0">ログインユーザーの会話（<code>user_id</code> あり）は本人のみアクセス可、それ以外には存在を秘匿して 404。ゲスト会話（<code>user_id</code> NULL）は UUID を知っていることが認可（サンプルとして許容、詳細は §11）。ゲスト会話中にログインすると <code>chat</code> 側で <code>user_id</code> を紐付けて引き継ぐ。</p></div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="05-data-model.html">← <span class="n">05</span> データモデル設計</a>
+    <a class="next" href="07-flows.html"><span class="n">07</span> 主要処理フロー →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>

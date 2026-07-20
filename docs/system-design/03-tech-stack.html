@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書 — 03 技術スタック</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html">ドキュメント概要</a></li>
+      <li><a href="02-system.html">システム概要</a></li>
+      <li><a href="03-tech-stack.html" class="active">技術スタック</a></li>
+      <li><a href="04-architecture.html">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html">データモデル設計</a></li>
+      <li><a href="06-api.html">API 設計</a></li>
+      <li><a href="07-flows.html">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html">認証・認可設計</a></li>
+      <li><a href="10-frontend.html">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s3">
+    <h2><span class="num">03</span>技術スタック</h2>
+    <div class="tw">
+      <table>
+        <thead><tr><th>レイヤー</th><th>技術</th><th>役割・補足</th></tr></thead>
+        <tbody>
+          <tr><td>フロントエンド</td><td>Next.js 14（App Router）/ React / TypeScript / Tailwind CSS</td><td>全ページ <code>'use client'</code> の SPA 的構成。共通レイアウト＋認証 Context。</td></tr>
+          <tr><td>バックエンド</td><td>FastAPI / SQLAlchemy 2.0（<code>Mapped</code>/<code>mapped_column</code>）/ Pydantic</td><td>全ルートは <code>/api</code> プレフィックス配下。依存注入で認証・DB セッションを供給。</td></tr>
+          <tr><td>データベース</td><td>PostgreSQL 16 + pgvector 拡張</td><td>17 モデル。ベクトル検索（コサイン距離）に pgvector を利用。</td></tr>
+          <tr><td>AI / 埋め込み</td><td>Ollama（埋め込み + チャット）</td><td>埋め込み <code>embeddinggemma</code>（768 次元）、チャットモデルで理由生成。</td></tr>
+          <tr><td>認証</td><td>JWT（HS256, PyJWT）/ passlib bcrypt</td><td>Bearer トークン、有効期限 24h、パスワードは bcrypt ハッシュ。</td></tr>
+          <tr><td>実行基盤</td><td>Docker / docker-compose / Makefile</td><td>開発操作は <code>Makefile</code> に集約（<code>make up</code> / <code>make reset</code> 等）。</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3><span class="num">3.1</span>docker-compose サービス構成</h3>
+    <div class="cards">
+      <div class="card"><h4><code>db</code></h4><p>PostgreSQL 16 + pgvector。<code>DATABASE_URL</code> のデフォルトは <code>postgresql://ec:ecpass@db:5432/ecdb</code>。</p></div>
+      <div class="card"><h4><code>backend</code></h4><p>FastAPI（<code>EC Sample API</code>）。起動時 lifespan でテーブル生成・シード投入・埋め込み同期を実行。CORS は <code>http://localhost:3000</code> のみ許可。</p></div>
+      <div class="card"><h4><code>frontend</code></h4><p>Next.js。<code>NEXT_PUBLIC_API_URL</code>（既定 <code>http://localhost:8000</code>）+ <code>/api</code> に通信。</p></div>
+    </div>
+    <div class="note"><span class="lbl">外部連携</span><p style="margin:.3em 0 0">Ollama は <code>OLLAMA_BASE_URL</code>（既定 <code>http://host.docker.internal:11434</code>）で参照する。未起動・未 pull でもアプリ起動と API 応答は止まらない（フォールバック動作、詳細は §8）。</p></div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="02-system.html">← <span class="n">02</span> システム概要</a>
+    <a class="next" href="04-architecture.html"><span class="n">04</span> アーキテクチャ全体像 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>

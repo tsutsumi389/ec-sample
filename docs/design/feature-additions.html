@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>機能追加設計書 — 一般的なEC標準機能の拡充</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 機能設計書</a><small>機能追加設計書 / 2026-07-06</small></div>
+    <ol>
+      <li><a href="#s1">前提・不変条件（CLAUDE.md 準拠）</a></li>
+      <li><a href="#s2">追加機能一覧</a></li>
+      <li><a href="#s3">データモデル追加</a></li>
+      <li><a href="#s4">API 追加（すべて /api 配下）</a></li>
+      <li><a href="#s5">実装フェーズ（Workflow）</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <header class="cover" id="top">
+    <div class="kicker">Design Document</div>
+    <h1>機能追加設計書 — 一般的なEC標準機能の拡充</h1>
+    <div class="subtitle">「商品閲覧・カート・注文・管理」の最小構成に、一般的なECサイトで標準的に期待される 8 機能を追加する</div>
+    <div class="meta-grid">
+      <div class="cell"><div class="k">ドキュメント</div><div class="v">機能設計書</div></div>
+      <div class="cell"><div class="k">対象</div><div class="v">EC 標準機能の拡充（A〜H の 8 機能）</div></div>
+      <div class="cell"><div class="k">更新日</div><div class="v">2026-07-06</div></div>
+      <div class="cell"><div class="k">体制</div><div class="v">設計 Opus / 実装 Sonnet エージェント（Workflow）</div></div>
+    </div>
+  </header>
+
+  <p class="lead">現状の Hibino は「商品閲覧・カート・注文・管理」の最小構成。ここに、一般的なECサイトで標準的に期待される機能を追加する。設計は Opus、実装は Sonnet エージェント（Workflow）が担当。</p>
+
+  <section id="s1">
+    <h2><span class="num">01</span>前提・不変条件（CLAUDE.md 準拠）</h2>
+    <ul>
+      <li>マイグレーションツールは導入しない。モデル変更後は <code>make reset</code> で DB 再作成（<code>Base.metadata.create_all</code> + シード）。</li>
+      <li>商品は論理削除のみ（<code>is_active=False</code>）。物理削除禁止。</li>
+      <li>注文明細（<code>OrderItem</code>）は注文時点のスナップショット。商品マスタから再計算しない。</li>
+      <li>全 API は <code>/api</code> プレフィックス配下。CORS 許可は <code>http://localhost:3000</code> のみ。</li>
+      <li>フロント変更後は <code>make lint</code>、バックエンド変更後は <code>make up-d</code> → <code>make logs-backend</code> で起動確認。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="num">02</span>追加機能一覧</h2>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>機能</th><th>概要</th></tr></thead>
+        <tbody>
+          <tr><td>A</td><td>商品カテゴリ</td><td>カテゴリ分類・絞り込み・並び替え・価格帯フィルタ。管理者によるカテゴリCRUD。</td></tr>
+          <tr><td>B</td><td>レビュー・星評価</td><td>購入者による5段階評価＋コメント。平均評価を一覧/詳細に表示。</td></tr>
+          <tr><td>C</td><td>お気に入り（ウィッシュリスト）</td><td>ハートトグルで登録、お気に入り一覧ページ。</td></tr>
+          <tr><td>D</td><td>配送先住所帳</td><td>住所の登録・編集・既定設定。チェックアウトで選択。</td></tr>
+          <tr><td>E</td><td>クーポン・割引</td><td>コード適用（定率/定額）。注文に割引額を記録。管理者によるクーポンCRUD。</td></tr>
+          <tr><td>F</td><td>注文キャンセル</td><td>ユーザーが pending/paid の注文をキャンセル（在庫戻し）。</td></tr>
+          <tr><td>G</td><td>プロフィール編集</td><td>氏名変更・パスワード変更。</td></tr>
+          <tr><td>H</td><td>関連商品</td><td>同一カテゴリのおすすめを商品詳細に表示。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="num">03</span>データモデル追加</h2>
+    <ul>
+      <li><strong>Category</strong>(id, name, slug[unique], created_at) — <code>Product.category_id</code>(FK, nullable) を追加。</li>
+      <li><strong>Review</strong>(id, product_id[FK], user_id[FK], rating[1-5], comment[Text,null], created_at) — <code>UniqueConstraint(user_id, product_id)</code>。</li>
+      <li><strong>WishlistItem</strong>(id, user_id[FK], product_id[FK], created_at) — <code>UniqueConstraint(user_id, product_id)</code>。</li>
+      <li><strong>Address</strong>(id, user_id[FK], recipient_name, postal_code, prefecture, city, address_line, phone, is_default[bool], created_at)。</li>
+      <li><strong>Coupon</strong>(id, code[unique], discount_type['percent'|'fixed'], discount_value, min_order_amount, is_active, expires_at[null], created_at)。</li>
+      <li><strong>Order</strong> に列追加: <code>discount_amount</code>(int, default 0), <code>coupon_code</code>(str, null)。<code>total_amount</code> は割引後の金額。</li>
+    </ul>
+    <p>レビュー投稿の資格: 当該ユーザーが cancelled 以外の注文で当該商品を購入済みであること。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="num">04</span>API 追加（すべて <code>/api</code> 配下）</h2>
+    <ul>
+      <li>カテゴリ: <code>GET /categories</code>、商品一覧に <code>category_id</code>/<code>sort(newest|price_asc|price_desc|rating)</code>/<code>min_price</code>/<code>max_price</code> を追加。</li>
+      <li>レビュー: <code>GET /products/{id}/reviews</code>、<code>POST /products/{id}/reviews</code>。商品出力に <code>avg_rating</code>/<code>review_count</code> を付与。</li>
+      <li>関連商品: <code>GET /products/{id}/related</code>。</li>
+      <li>お気に入り: <code>GET /wishlist</code>、<code>POST /wishlist/items</code>、<code>DELETE /wishlist/items/{product_id}</code>。</li>
+      <li>住所帳: <code>GET/POST /addresses</code>、<code>PUT/DELETE /addresses/{id}</code>。</li>
+      <li>クーポン: <code>POST /coupons/validate</code>（コード＋小計→割引プレビュー）。注文作成が <code>coupon_code</code>/<code>address_id</code> を受理。</li>
+      <li>注文キャンセル: <code>POST /orders/{id}/cancel</code>。</li>
+      <li>プロフィール: <code>PUT /auth/me</code>（氏名）、<code>PUT /auth/me/password</code>。</li>
+      <li>管理: <code>GET/POST/PUT/DELETE /admin/categories</code>、<code>GET/POST/PUT/DELETE /admin/coupons</code>。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="num">05</span>実装フェーズ（Workflow）</h2>
+    <ol>
+      <li><strong>Backend</strong> — モデル/スキーマ/ルーター/シード/登録を単一エージェントで一貫実装。API仕様を <code>docs/api/new-features.md</code> に出力。</li>
+      <li><strong>Frontend 基盤</strong> — <code>types.ts</code>/<code>api.ts</code>/<code>Header</code> と共有UI（<code>RatingStars</code>/<code>WishlistButton</code>）を整備。</li>
+      <li><strong>Frontend 各画面（並列）</strong> — 一覧絞り込み・商品詳細レビュー・お気に入り・アカウント・カート/クーポン・注文キャンセル・管理画面をファイル分担で並列実装。</li>
+      <li><strong>検証</strong> — <code>make reset</code> で起動、<code>make lint</code>、ログのエラー確認。問題があれば修正。</li>
+    </ol>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="search-uiux.html">← <span class="n">02</span> 商品検索 UI/UX 改善 設計書</a>
+    <a class="next" href="index.html"><span class="n">目次</span> 機能設計書 索引 →</a>
+  </nav>
+
+  <footer class="docfoot">
+    Hibino EC 機能設計書 — 機能追加設計書 / 最終更新 2026-07-06 / <a href="index.html">機能設計書 索引へ戻る</a>
+  </footer>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書 — 11 設計上の決定・運用ルール</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html">ドキュメント概要</a></li>
+      <li><a href="02-system.html">システム概要</a></li>
+      <li><a href="03-tech-stack.html">技術スタック</a></li>
+      <li><a href="04-architecture.html">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html">データモデル設計</a></li>
+      <li><a href="06-api.html">API 設計</a></li>
+      <li><a href="07-flows.html">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html">認証・認可設計</a></li>
+      <li><a href="10-frontend.html">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html" class="active">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s11">
+    <h2><span class="num">11</span>重要な設計上の決定・運用ルール</h2>
+    <p>コードに現れにくい暗黙の前提を含め、本システムを貫く設計判断をまとめる。改修時はこれらを厳守すること。</p>
+    <div class="tw"><table>
+      <thead><tr><th>決定</th><th>内容 / 理由</th></tr></thead>
+      <tbody>
+        <tr><td>マイグレーション未導入</td><td>Alembic 等は入れない。テーブルは <code>main.py</code> lifespan の <code>Base.metadata.create_all</code> で自動生成（OperationalError で最大 10 回リトライ）。モデル変更は <code>make reset</code> で DB 作り直さないと反映されない</td></tr>
+        <tr><td>既存テーブルへの追加は不可</td><td>マイグレーション未導入のため、レコメンド機能は既存テーブルにカラムを足さず新規 5 テーブル（埋め込み・SID・キャッシュ 4 ＋ 閲覧履歴 <code>product_views</code>）に分離。将来の拡張も新規テーブル追加で行う</td></tr>
+        <tr><td>パーソナライズ信号の分離と時間減衰</td><td>閲覧履歴は専用テーブル <code>product_views</code>（1 ユーザー×1 商品 1 行の upsert）に持ち既存テーブルを汚さない。行動重みは半減期 30 日で時間減衰させ「今の好み」を優先。<code>profile_hash</code> には <code>種別:product_id</code> の集合のみを入れ重み・時刻は含めない（時間経過だけでキャッシュが陳腐化しないため）。§8.6</td></tr>
+        <tr><td>商品は論理削除のみ</td><td>Product を物理削除してはならない。<code>status="archived"</code> にする。過去注文のスナップショットは不変に保たれる</td></tr>
+        <tr><td>status が可視性・購入可否の唯一の源</td><td>6 状態から <code>is_listed</code>/<code>is_viewable</code>/<code>purchasable</code> を導出。個別の真偽フラグを増やさない（旧 is_active は archived に統合）</td></tr>
+        <tr><td>実売価格は effective_price</td><td>sale_price があればそれ、なければ price。カート小計・注文金額・OrderItem スナップショットは全て effective_price を使い price を直接使わない</td></tr>
+        <tr><td>注文明細はスナップショット</td><td>OrderItem は注文時点の product_name / price を保持。Order も coupon_code を文字列で、discount_amount / total_amount を確定値で持つ。商品マスタを再参照しない</td></tr>
+        <tr><td>在庫整合性</td><td>注文確定・キャンセルとも対象商品行を <code>with_for_update</code> で行ロックしてから在庫を増減し、同時実行による超過販売を防止</td></tr>
+        <tr><td>リソース所有権の限定</td><td>カート・注文・住所の各操作は必ず <code>user_id == current_user.id</code> でフィルタし、他人のリソースは 404 で隠蔽</td></tr>
+        <tr><td>API プレフィックス</td><td>全ルートは <code>/api</code> 配下（main.py で一括登録）。admin ルーターは実効パス <code>/api/admin/...</code></td></tr>
+        <tr><td>CORS</td><td>許可オリジンは <code>http://localhost:3000</code> のみ（allow_credentials=True、methods/headers は全許可）</td></tr>
+        <tr><td>耐障害起動</td><td>pgvector 拡張が使えない環境では product_embeddings を作成除外。Ollama が使えなくても埋め込み同期をスキップし警告ログのみで起動継続</td></tr>
+        <tr><td>非同期処理</td><td>商品作成/更新後の埋め込み更新、LLM レコメンド生成は BackgroundTasks で非同期実行し、失敗を本体処理に影響させない</td></tr>
+        <tr><td>検索サジェストは軽量クエリのみ</td><td><code>/api/products/suggest</code> は入力中の高頻度呼び出しに耐えるため、LISTED 商品名への ILIKE（エスケープ済み）だけで応答し、埋め込み・レビュー集計等の重い処理は一切呼ばない。2 文字未満は DB も引かず即空返し。セマンティック検索は確定後の <code>GET /products?search=</code> だけが担う</td></tr>
+        <tr><td>アシスタント API は 500 を返さない</td><td><code>/api/assistant/chat</code> は Ollama 接続不可・タイムアウト・parse 失敗・候補ゼロのいずれでも例外を握り、キーワード検索（0 件なら人気順）＋定型文の <code>source="fallback"</code> で必ず 200 応答する。レコメンドの「絶対に止めない」思想の踏襲。商品Q&amp;A（<code>POST /products/{id}/questions</code>）も同じ思想でフォールバック定型文を保存して必ず 201</td></tr>
+        <tr><td>Q&amp;A 回答はスナップショット</td><td><code>product_questions</code> の回答は生成時点のまま永続化し、商品説明・レビューが後から変わっても再生成しない（OrderItem と同じ思想）。既存テーブルにカラムは足さず新規 1 テーブルのみ追加。<code>answerable=false</code>（根拠不足）も正直にそのまま保存・公開する</td></tr>
+        <tr><td>アシスタントは同期パス</td><td>レコメンドと異なりユーザーが応答を待つ対話のため、候補抽出・LLM 生成をリクエスト同期パスで実行する（threadpool）。将来は <code>ollama.AsyncClient</code> 化で解消可能</td></tr>
+        <tr><td>ゲスト会話の認可</td><td>ログイン会話は本人のみ。ゲスト会話（user_id NULL）は UUID を知っていること自体が認可（サンプルとして許容）。本番想定なら署名付きセッション（HttpOnly Cookie 等）でゲスト会話を端末に束縛する必要がある旨をコードコメントに明記</td></tr>
+        <tr><td>reply 本文に SID を出さない</td><td>system プロンプトで「本文に SID を書かない」と指示した上で、防御的に <code>strip_sids_from_reply</code> の正規表現後処理で <code>SID x-y-z</code> 表記を除去（小型モデルはプロンプト指示だけでは漏れが残るため二段構え）</td></tr>
+        <tr><td>SID 照合・カタログ整形の共通化</td><td>ハルシネーション対策の SID→Product 照合とカタログ 1 行表現は <code>services/llm_catalog.py</code> に集約し、レコメンドとアシスタントで共用（重複実装しない）</td></tr>
+        <tr><td>ホームは 1 レーン = 1 アルゴリズム</td><td>各ビルダーは <code>HomeContext</code> から候補レーンを返すだけの純粋関数で、ページ全体の都合を知らない。1 本のレーンが複数アルゴリズムの混合物になることを型と <code>BUILDERS</code> レジストリで構造的に禁じる。レーン追加はビルダー関数の追加のみで行う（§8.7）</td></tr>
+        <tr><td>ホームは stage-wise 貪欲法で組む</td><td>row-ranking ではなく「既出レーン・既出商品」込みでスコアし 1 本選ぶたびに再スコアする。<code>score = relevance × prior × novelty</code>（乗算で 1 要素が致命的に低い棚の救済を防ぐ）。重複排除は目的関数に埋めず明示フィルタ工程にして「同一商品が 2 セクションに出ない」を保証にする。<code>max_lanes</code> 上限より先に score 閾値 0.20 で打ち切ることを許容</td></tr>
+        <tr><td>ホームは何があっても 200</td><td>pgvector 不在・Ollama 停止・埋め込み 0 件・プロフィール構築不能でも、載せられるレーンだけでページを組んで返す。<code>_safe</code> / <code>_safe_build</code> で各処理を隔離し失敗時は必ず <code>rollback</code>（残すと以後同一セッションが InFailedSqlTransaction で連鎖失敗）。コールドスタートは新着レーンが最後の砦</td></tr>
+        <tr><td>プロフィールは 1 リクエスト 1 回</td><td>ホームの全ビルダーが共有するプロフィール・除外 ID・LLM キャッシュ鮮度は <code>build_context</code> で 1 回だけ構築して使い回す（ビルダーごとに <code>build_profile</code> を呼ぶとレーン本数ぶん重複実行される）。ゲストは <code>recently_viewed_ids</code> の位置減衰加重平均で擬似プロフィールを作りパーソナライズする</td></tr>
+        <tr><td>冪等性</td><td>seed_data は users が非空なら即 return。お気に入り追加は重複時に既存返却、削除は非存在時 204</td></tr>
+        <tr><td>テスト未整備</td><td>テストコードは無い。追加する場合は <code>backend/</code>（pytest 想定）から</td></tr>
+      </tbody>
+    </table></div>
+
+    <footer class="docfoot">
+      Hibino EC システム設計書 — 更新日 2026-07-20 ／ 本書はコードベースの構造化分析（7 サブシステム）に基づく統合設計書である。
+      <div style="margin-top:8px"><a href="#">▲ ページ先頭へ戻る</a></div>
+    </footer>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="10-frontend.html">← <span class="n">10</span> フロントエンド設計</a>
+    <a class="next" href="index.html">目次へ戻る →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC システム設計書 — 04 アーキテクチャ全体像</title>
+<link rel="stylesheet" href="assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC</a><small>システム設計書 / 2026-07-16</small></div>
+    <ol>
+      <li><a href="01-overview.html">ドキュメント概要</a></li>
+      <li><a href="02-system.html">システム概要</a></li>
+      <li><a href="03-tech-stack.html">技術スタック</a></li>
+      <li><a href="04-architecture.html" class="active">アーキテクチャ全体像</a></li>
+      <li><a href="05-data-model.html">データモデル設計</a></li>
+      <li><a href="06-api.html">API 設計</a></li>
+      <li><a href="07-flows.html">主要処理フロー</a></li>
+      <li><a href="08-ai.html">AI レコメンド・アシスタント設計</a></li>
+      <li><a href="09-auth.html">認証・認可設計</a></li>
+      <li><a href="10-frontend.html">フロントエンド設計</a></li>
+      <li><a href="11-decisions.html">設計上の決定・運用ルール</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s4">
+    <h2><span class="num">04</span>アーキテクチャ全体像</h2>
+    <p>ブラウザ（Next.js SPA）→ FastAPI（<code>/api</code>）→ PostgreSQL の 3 層に、AI レコメンド用の Ollama を側面連携させた構成である。フロントは fetch ラッパ経由で JWT を自動付与し、バックエンドは依存注入で認証・DB を供給する。埋め込み生成・LLM 推論は同期パスに載せず、起動時スレッドや <code>BackgroundTasks</code> で非同期に走らせる。</p>
+
+    <div class="arch">
+      <div class="tier">
+        <span class="tlabel">Client</span>
+        <div class="row">
+          <div class="box"><b>Next.js 14 SPA</b><span>店頭画面 / 管理画面（<code>'use client'</code>）</span></div>
+          <div class="box"><b>AuthProvider</b><span>React Context・JWT を localStorage 保持</span></div>
+          <div class="box"><b>lib/api.ts</b><span>fetch ラッパ・<code>Authorization: Bearer</code> 自動付与</span></div>
+        </div>
+      </div>
+      <div class="flowdown">▼ &nbsp; HTTP / JSON（<code>NEXT_PUBLIC_API_URL</code> + <code>/api</code>）&nbsp; ▼</div>
+      <div class="tier">
+        <span class="tlabel">Application</span>
+        <div class="row">
+          <div class="box"><b>FastAPI ルーター群</b><span>auth / products / cart / orders / addresses / coupons / wishlist / recommendations / assistant / home / admin</span></div>
+          <div class="box"><b>依存注入</b><span>get_current_user / _optional / get_current_admin / get_db</span></div>
+          <div class="box"><b>services</b><span>embedding / semantic_id / recommendation / llm_catalog / assistant / home_page</span></div>
+        </div>
+        <div class="row">
+          <div class="box side"><b>lifespan（起動時）</b><span>pgvector 有効化 → create_all → seed_data → 埋め込み同期スレッド</span></div>
+          <div class="box side"><b>BackgroundTasks</b><span>単一商品埋め込み更新 / LLM レコメンド生成（非同期）</span></div>
+        </div>
+      </div>
+      <div class="flowdown">▼ &nbsp; SQLAlchemy（<code>SessionLocal</code> / <code>pool_pre_ping</code>）&nbsp; ▼</div>
+      <div class="tier">
+        <span class="tlabel">Data</span>
+        <div class="row">
+          <div class="box"><b>PostgreSQL 16</b><span>EC 中核 10 テーブル（users / products / orders …）</span></div>
+          <div class="box"><b>pgvector</b><span>product_embeddings（Vector 768）・コサイン近傍検索</span></div>
+          <div class="box"><b>レコメンド状態</b><span>semantic_id_codebooks / user_recommendations / recommendation_states</span></div>
+        </div>
+      </div>
+      <div class="flowdown" style="color:var(--accent)">◀ &nbsp; 埋め込み・チャット（例外は握って警告ログのみ）&nbsp; ▶</div>
+      <div class="tier" style="border-style:dashed;border-color:var(--accent)">
+        <span class="tlabel">AI（外部）</span>
+        <div class="row">
+          <div class="box"><b>Ollama</b><span>埋め込み <code>embeddinggemma</code>（768d）</span></div>
+          <div class="box"><b>Ollama Chat</b><span>おすすめ理由生成（JSON schema 強制）</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="note"><span class="lbl">耐障害性</span><p style="margin:.3em 0 0">pgvector 拡張が使えない環境では <code>product_embeddings</code> を作成対象から除外して起動継続。Ollama が未稼働でも埋め込み・SID 再割り当て・LLM 生成の失敗はすべて握られ、人気順フォールバックで API は常に応答する。</p></div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="03-tech-stack.html">← <span class="n">03</span> 技術スタック</a>
+    <a class="next" href="05-data-model.html"><span class="n">05</span> データモデル設計 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/design.js"></script>
+</body>
+</html>

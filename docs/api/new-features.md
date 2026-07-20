@@ -1,6 +1,6 @@
 # 追加機能 API 仕様
 
-`docs/FEATURE_ADDITIONS.md` に基づき追加したバックエンド API の一覧。すべて `/api` プレフィックス配下。
+`docs/design/feature-additions.html` に基づき追加したバックエンド API の一覧。すべて `/api` プレフィックス配下。
 認可は `Authorization: Bearer <token>` ヘッダ（`app.auth.get_current_user` / `get_current_admin`）。
 
 型名は `backend/app/schemas.py` に対応する Pydantic モデル。
@@ -25,7 +25,7 @@
 - `ProductOut` 追加フィールド: `category_id: int | None`, `avg_rating: float | None`, `review_count: int`
 - **注**: 本書は追加当時の仕様。その後 `search` はセマンティック（ハイブリッド）検索になり、
   `sort` には `"recommended"` が追加、検索中の sort 未指定時は関連度順で並ぶ。
-  検索・サジェスト（`GET /products/suggest`）の現行仕様は `docs/SEARCH_UIUX_DESIGN.md` を参照。
+  検索・サジェスト（`GET /products/suggest`）の現行仕様は `docs/design/search-uiux.html` を参照。
 
 ### GET /products/{id} （拡張）
 - レスポンス `ProductOut` に `avg_rating` / `review_count` を含む。
