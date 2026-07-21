@@ -358,6 +358,19 @@ class OrderDetailOut(OrderSummaryOut):
     items: list[OrderItemOut]
 
 
+class ReorderItemOut(BaseModel):
+    product_id: int
+    product_name: str
+    quantity: int  # 実際にカートへ追加した数（skipped の場合は 0）
+    reason: str | None = None  # スキップ/減数の理由。問題なく追加できた場合は None
+
+
+class ReorderResultOut(BaseModel):
+    cart: CartOut
+    added: list[ReorderItemOut]
+    skipped: list[ReorderItemOut]
+
+
 class OrderStatusUpdate(BaseModel):
     status: str
 
