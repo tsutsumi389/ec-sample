@@ -14,6 +14,7 @@ import Badge from '@/components/Badge';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import EmptyState from '@/components/EmptyState';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import ReorderButton from '@/components/ReorderButton';
 import { Skeleton } from '@/components/Skeleton';
 import { ClipboardListIcon } from '@/components/Icons';
 
@@ -166,8 +167,9 @@ export default function OrdersPage() {
                     />
                   </div>
                 </div>
-                {CANCELLABLE_STATUSES.includes(order.status) && (
-                  <div className="mt-3 border-t border-gray-100 pt-3">
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+                  <ReorderButton orderId={order.id} variant="compact" />
+                  {CANCELLABLE_STATUSES.includes(order.status) && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -179,8 +181,8 @@ export default function OrdersPage() {
                     >
                       注文をキャンセル
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </Link>
             );
           })}

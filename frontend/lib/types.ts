@@ -176,6 +176,20 @@ export interface Order {
   items?: OrderItem[];
 }
 
+export interface ReorderItem {
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  /** 追加できなかった理由・一部のみ追加した理由。通常の追加成功時は null。 */
+  reason: string | null;
+}
+
+export interface ReorderResult {
+  cart: Cart;
+  added: ReorderItem[];
+  skipped: ReorderItem[];
+}
+
 export interface AdminOrderUser {
   id: number;
   email: string;

@@ -4,8 +4,15 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Address, CartItem, Order, OrderItem, Product, User
+from app.routers.cart import _get_cart
 from app.routers.coupons import evaluate_coupon, get_coupon_by_code
-from app.schemas import OrderCreate, OrderDetailOut, OrderSummaryOut
+from app.schemas import (
+    OrderCreate,
+    OrderDetailOut,
+    OrderSummaryOut,
+    ReorderItemOut,
+    ReorderResultOut,
+)
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -155,6 +162,130 @@ def get_order(
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     return order
+
+
+@router.post("/{order_id}/reorder", response_model=ReorderResultOut)
+def reorder(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ReorderResultOut:
+    """過去の注文明細をカートへ再投入する（もう一度買う）。
+
+    購入できない明細はエラーにせずスキップし、理由とともに返す。
+    キャンセル済みの注文からの再注文も許可する。
+    """
+    order = (
+        db.query(Order)
+        .filter(Order.id == order_id, Order.user_id == current_user.id)
+        .first()
+    )
+    if order is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    added: list[ReorderItemOut] = []
+    skipped: list[ReorderItemOut] = []
+
+    try:
+        product_ids = [item.product_id for item in order.items]
+        # 在庫判定中に他の注文と競合しないよう、対象商品の行をロックする。
+        products = (
+            db.query(Product)
+            .filter(Product.id.in_(product_ids))
+            .order_by(Product.id)
+            .with_for_update()
+            .all()
+        )
+        products_by_id = {p.id: p for p in products}
+
+        cart_items_by_product = {
+            item.product_id: item
+            for item in db.query(CartItem).filter(CartItem.user_id == current_user.id).all()
+        }
+        # 同一注文に同じ商品の明細が複数ある場合は、この dict の数量が加算済みなので
+        # 2 件目以降の在庫判定にもこのリクエストでの追加分が反映される。
+
+        for item in order.items:
+            # 商品名は注文時点のスナップショットを使う（商品が消えていても名前を出せる）。
+            product = products_by_id.get(item.product_id)
+            if product is None or not product.is_viewable:
+                skipped.append(
+                    ReorderItemOut(
+                        product_id=item.product_id,
+                        product_name=item.product_name,
+                        quantity=0,
+                        reason="お取り扱いが終了しました",
+                    )
+                )
+                continue
+            if product.status != "on_sale":
+                skipped.append(
+                    ReorderItemOut(
+                        product_id=item.product_id,
+                        product_name=item.product_name,
+                        quantity=0,
+                        reason="現在購入できません",
+                    )
+                )
+                continue
+            if product.stock <= 0:
+                skipped.append(
+                    ReorderItemOut(
+                        product_id=item.product_id,
+                        product_name=item.product_name,
+                        quantity=0,
+                        reason="在庫切れです",
+                    )
+                )
+                continue
+
+            cart_item = cart_items_by_product.get(item.product_id)
+            in_cart = cart_item.quantity if cart_item else 0
+            addable = product.stock - in_cart
+            if addable <= 0:
+                skipped.append(
+                    ReorderItemOut(
+                        product_id=item.product_id,
+                        product_name=item.product_name,
+                        quantity=0,
+                        reason="すでにカートに在庫数分入っています",
+                    )
+                )
+                continue
+
+            add_quantity = min(item.quantity, addable)
+            reason = (
+                None
+                if add_quantity == item.quantity
+                else f"在庫が不足するため{add_quantity}点のみ追加しました"
+            )
+
+            if cart_item is not None:
+                cart_item.quantity += add_quantity
+            else:
+                cart_item = CartItem(
+                    user_id=current_user.id,
+                    product_id=item.product_id,
+                    quantity=add_quantity,
+                )
+                db.add(cart_item)
+                cart_items_by_product[item.product_id] = cart_item
+
+            added.append(
+                ReorderItemOut(
+                    product_id=item.product_id,
+                    product_name=item.product_name,
+                    quantity=add_quantity,
+                    reason=reason,
+                )
+            )
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return ReorderResultOut(cart=_get_cart(db, current_user), added=added, skipped=skipped)
 
 
 @router.post("/{order_id}/cancel", response_model=OrderDetailOut)

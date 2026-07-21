@@ -18,6 +18,7 @@ import Price from '@/components/Price';
 import Badge from '@/components/Badge';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import ReorderButton from '@/components/ReorderButton';
 import { Skeleton } from '@/components/Skeleton';
 import { ArrowLeftIcon, CheckCircleIcon } from '@/components/Icons';
 
@@ -243,8 +244,9 @@ function OrderDetailContent() {
           {order.shipping_address}
         </p>
 
-        {CANCELLABLE_STATUSES.includes(order.status) && (
-          <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <ReorderButton orderId={order.id} variant="primary" />
+          {CANCELLABLE_STATUSES.includes(order.status) && (
             <button
               type="button"
               onClick={() => setCancelOpen(true)}
@@ -252,8 +254,8 @@ function OrderDetailContent() {
             >
               注文をキャンセル
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="mt-6 divide-y divide-gray-200 border-t border-gray-200">
           {(order.items ?? []).map((item) => (
