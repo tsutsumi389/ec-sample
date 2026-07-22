@@ -152,7 +152,7 @@ export default function ProductDetailPage() {
           {notFound ? '商品が見つかりませんでした。' : error || '商品情報の取得に失敗しました。'}
         </p>
         <Link
-          href="/"
+          href="/products"
           className="mt-2 inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline"
         >
           <ArrowLeftIcon className="w-4 h-4" />
@@ -181,7 +181,7 @@ export default function ProductDetailPage() {
   const breadcrumbItems: BreadcrumbItem[] = [
     { label: 'ホーム', href: '/' },
     ...(product.category_id && categoryName
-      ? [{ label: categoryName, href: `/?category_id=${product.category_id}` }]
+      ? [{ label: categoryName, href: `/categories/${product.category_id}` }]
       : []),
     { label: product.name },
   ];

@@ -77,8 +77,8 @@ export default function SearchBox({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // URL の search パラメータを初期値にする（/?search=傘 を直接開いた／リロードした
-  // ときに検索欄へ反映するため）。以降の URL 変化は下の同期 effect で拾う。
+  // URL の search パラメータを初期値にする（/products?search=傘 を直接開いた／リロード
+  // したときに検索欄へ反映するため）。以降の URL 変化は下の同期 effect で拾う。
   const initialSearch = searchParams.get('search') ?? '';
 
   const [query, setQuery] = useState(initialSearch);
@@ -94,7 +94,7 @@ export default function SearchBox({
   const rootRef = useRef<HTMLDivElement>(null);
   // 候補確定で query を書き換えた直後の 1 回だけサジェスト取得を抑止するフラグ。
   // これが無いと setQuery → useEffect 再発火でドロップダウンが開き直してしまう
-  // （ホーム上の確定は pathname が変わらず、遷移による自動クローズも効かないため）。
+  // （/products 上での再検索は pathname が変わらず、遷移による自動クローズも効かないため）。
   // URL 由来の初期値がある場合も、マウント直後に勝手に開かないよう最初から立てておく。
   const suppressFetchRef = useRef(initialSearch.length > 0);
   // URL 同期で「前回見た search パラメータ」を覚えておく。入力中のタイピングを
@@ -217,7 +217,8 @@ export default function SearchBox({
     if (trimmed) {
       params.set('search', trimmed);
     }
-    router.push(params.toString() ? `/?${params.toString()}` : '/');
+    // 検索結果は独立ページ /products で表示する（URL を共有できるようにするため）。
+    router.push(params.toString() ? `/products?${params.toString()}` : '/products');
     onSubmitted?.();
   };
 
