@@ -34,7 +34,7 @@ export default function NotFound() {
         <Link href="/" className={btnPrimary}>
           トップへ戻る
         </Link>
-        <Link href="/?sort=newest" className="text-sm text-brand-600 font-medium hover:underline">
+        <Link href="/products" className="text-sm text-brand-600 font-medium hover:underline">
           新着の道具を見る →
         </Link>
       </div>

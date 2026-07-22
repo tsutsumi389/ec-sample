@@ -29,7 +29,10 @@ function getPageTitle(pathname: string): string {
   if (pathname === '/cart') return `カート | ${SITE_NAME}`;
   if (pathname === '/orders') return `注文履歴 | ${SITE_NAME}`;
   if (/^\/orders\/[^/]+$/.test(pathname)) return `注文詳細 | ${SITE_NAME}`;
+  if (pathname === '/products') return `商品一覧 | ${SITE_NAME}`;
   if (/^\/products\/[^/]+$/.test(pathname)) return `商品詳細 | ${SITE_NAME}`;
+  // カテゴリ名はクライアント側で解決するため、タイトルは固定文言に留める。
+  if (/^\/categories\/[^/]+$/.test(pathname)) return `カテゴリ | ${SITE_NAME}`;
   if (pathname === '/admin') return `管理画面 | ${SITE_NAME}`;
   if (pathname === '/admin/products') return `商品管理 | ${SITE_NAME}`;
   if (pathname === '/admin/orders') return `注文管理 | ${SITE_NAME}`;

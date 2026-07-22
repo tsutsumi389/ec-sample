@@ -160,6 +160,16 @@ export default function Header() {
 
           {/* ナビ（sm以上） */}
           <nav className="hidden items-center gap-1 whitespace-nowrap text-sm sm:flex">
+            {/* 一覧・検索が /products に独立したため、常設の入口をナビに置く。
+                前方一致の isActive により /products/[id]（商品詳細）閲覧中もアクティブ扱いになる。 */}
+            <Link
+              href="/products"
+              className={pillClass('/products')}
+              aria-current={isActive('/products') ? 'page' : undefined}
+            >
+              <BoxIcon className="h-5 w-5" />
+              商品一覧
+            </Link>
             <Link
               href="/cart"
               className={`relative ${pillClass('/cart')}`}
@@ -319,7 +329,8 @@ export default function Header() {
           )}
 
           <nav className="flex-1 overflow-y-auto p-2">
-            <Link href="/" className={drawerLinkClass('/')}>
+            {/* 一覧・検索は /products に独立した。ホーム自体へはロゴから戻れる。 */}
+            <Link href="/products" className={drawerLinkClass('/products')}>
               <BoxIcon className="h-5 w-5 text-gray-400" />
               <span className="flex-1">商品一覧</span>
               <ChevronRightIcon className="h-4 w-4 text-gray-300" />
