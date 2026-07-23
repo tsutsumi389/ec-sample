@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, get_visitor_id
 from app.database import get_db
 from app.models import Address, CartItem, Order, OrderItem, Product, User
 from app.routers.cart import _get_cart
@@ -13,6 +13,7 @@ from app.schemas import (
     ReorderItemOut,
     ReorderResultOut,
 )
+from app.services import analytics
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -29,6 +30,7 @@ def _format_shipping_address(address: Address) -> str:
 def create_order(
     payload: OrderCreate,
     current_user: User = Depends(get_current_user),
+    visitor_id: str | None = Depends(get_visitor_id),
     db: Session = Depends(get_db),
 ) -> Order:
     cart_items = (
@@ -132,6 +134,25 @@ def create_order(
         raise
 
     db.refresh(order)
+
+    # 購入をサーバー側で記録する。A/Bテストの主要指標であり、フロントの計測呼び出しに
+    # 依存させると離脱・通信断・実装漏れでそのまま成果の欠損になるため、注文が確定した
+    # この時点で確実に 1 件残す。value に注文金額を入れておくと、CV数と売上の両方を
+    # このイベント 1 種類から集計できる。
+    if visitor_id:
+        analytics.record_server_event(
+            db,
+            visitor_id=visitor_id,
+            name=analytics.EVENT_PURCHASE,
+            user_id=current_user.id,
+            value=float(order.total_amount),
+            props={
+                "order_id": order.id,
+                "item_count": sum(item.quantity for item in order.items),
+                "coupon_code": coupon_code,
+            },
+        )
+
     return order
 
 

@@ -16,6 +16,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { Skeleton } from '@/components/Skeleton';
 import { CartIcon, TrashIcon, ChevronRightIcon } from '@/components/Icons';
 import { btnPrimary } from '@/lib/buttonStyles';
+import { EVENT_BEGIN_CHECKOUT, track } from '@/lib/analytics';
 
 /** 数量セレクト用の自前シェブロン（appearance-none と組で使う） */
 const SELECT_CHEVRON =
@@ -217,6 +218,9 @@ export default function CartPage() {
     setAddressError('');
     setSubmitting(true);
     setError('');
+    // ファネルの中間段。入力が揃って実際に注文処理へ進んだ時点を記録する
+    // （カートを開いただけの人と、購入まで踏み込んだ人を区別するため）。
+    track(EVENT_BEGIN_CHECKOUT, { value: total });
     try {
       const payload: Record<string, unknown> = {};
       if (useSavedAddress) {

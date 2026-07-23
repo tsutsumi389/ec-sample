@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, get_visitor_id
 from app.database import get_db
 from app.models import CartItem, Product, User
 from app.schemas import CartItemCreate, CartItemOut, CartItemUpdate, CartOut, ProductOut
+from app.services import analytics
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
@@ -42,6 +43,7 @@ def get_cart(
 def add_cart_item(
     payload: CartItemCreate,
     current_user: User = Depends(get_current_user),
+    visitor_id: str | None = Depends(get_visitor_id),
     db: Session = Depends(get_db),
 ) -> CartOut:
     product = db.get(Product, payload.product_id)
@@ -68,6 +70,20 @@ def add_cart_item(
         db.add(CartItem(user_id=current_user.id, product_id=payload.product_id, quantity=new_quantity))
 
     db.commit()
+
+    # カート投入をサーバー側で記録する（ファネルの中間指標）。カート追加は要ログインの
+    # ため、未ログインのボタン押下はここには現れない。それはフロントの click イベント
+    # （element_key = add_to_cart）として別名で記録するので、二重計上にはならない。
+    if visitor_id:
+        analytics.record_server_event(
+            db,
+            visitor_id=visitor_id,
+            name=analytics.EVENT_ADD_TO_CART,
+            user_id=current_user.id,
+            value=float(product.effective_price * payload.quantity),
+            props={"product_id": product.id, "quantity": payload.quantity},
+        )
+
     return _get_cart(db, current_user)
 
 

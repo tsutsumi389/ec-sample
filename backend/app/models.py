@@ -2,9 +2,12 @@ from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -486,3 +489,173 @@ class ProductQuestion(Base):
 
     product: Mapped["Product"] = relationship()
     user: Mapped["User"] = relationship()
+
+
+# ---------- A/Bテスト（実験）と行動イベントログ ----------
+#
+# 実験の割り当ては DB に持たず、visitor_id と実験の salt から決定論的ハッシュで毎回
+# 計算する（services/experiment.py）。ここに置くのは「何を実験しているか（定義）」と
+# 「誰にどの variant を見せたか（曝露）」と「誰が何をしたか（イベント）」の3種類だけ。
+#
+# 成果は実験専用テーブルではなく汎用の analytics_events に集約し、分析時に曝露と
+# JOIN して variant 別に切り出す。こうすると実験を作る前から貯まったログを後から
+# 任意の指標で振り返れる（実験専用の計測にすると、指標を思いついた時点より前の
+# データが存在しないという致命的な制約を抱えるため）。
+
+
+# 実験の状態機械。Product.status と同じく、可視性・稼働可否はこの単一の状態から導出する。
+EXPERIMENT_STATUSES = (
+    "draft",  # 下書き。誰にも配信されない（設定変更が自由にできる状態）
+    "running",  # 実施中。割り当てと曝露記録が行われる唯一の状態
+    "paused",  # 一時停止。新規の割り当てを止める（既存データは保持）
+    "completed",  # 終了。結果は参照できるが配信はしない
+)
+
+# 実際に配信対象となる状態。実験は物理削除せず completed にする（結果を失わないため）。
+ACTIVE_EXPERIMENT_STATUSES = ("running",)
+
+
+class Experiment(Base):
+    """A/Bテストの実験定義。1 実験 = 複数 variant。
+
+    key はコード側（useVariant('...')）から参照する識別子で、後から変えない。
+    salt は割り当てハッシュに混ぜる文字列。実験ごとに異なる salt を持たせることで、
+    「実験Aで control だった人が実験Bでも control になる」というキャリーオーバー相関を
+    防ぐ。同じ実験をやり直したいときも salt を変えれば再抽選できる。
+    """
+
+    __tablename__ = "experiments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 配信可否の唯一の源。個別の真偽フラグは増やさない。新規作成時は draft（誤配信防止）。
+    status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
+    salt: Mapped[str] = mapped_column(String, nullable=False)
+    # 実験対象に含める訪問者の割合（0-100）。残りは実験対象外として variant を返さない。
+    # 小さく始めて（例: 10%）問題が無ければ広げる、という安全な展開に使う。
+    traffic_allocation: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    # 主要指標にするイベント名（analytics_events.name）。結果画面の既定の集計対象。
+    primary_metric: Mapped[str] = mapped_column(String, nullable=False, default="purchase")
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    variants: Mapped[list["ExperimentVariant"]] = relationship(
+        back_populates="experiment",
+        cascade="all, delete-orphan",
+        order_by="ExperimentVariant.id",
+    )
+
+    @property
+    def is_active(self) -> bool:
+        """いま新規の割り当て・曝露記録を行ってよいか。"""
+        return self.status in ACTIVE_EXPERIMENT_STATUSES
+
+
+class ExperimentVariant(Base):
+    """実験の枝（control / treatment ...）。
+
+    config は「その枝で使う設定値」を丸ごと持つ JSON。レイアウト実験ではカラム数や
+    セクション順序、CTA の文言などをここに入れる。フロントは config を読むだけで
+    済むため、枝を増やすたびにコードへ if を足す必要がなくなる。
+    """
+
+    __tablename__ = "experiment_variants"
+    __table_args__ = (
+        UniqueConstraint("experiment_id", "key", name="uq_experiment_variant_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    experiment_id: Mapped[int] = mapped_column(
+        ForeignKey("experiments.id"), nullable=False, index=True
+    )
+    key: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    # 枝の配分比率。合計が 100 である必要はなく、比率として正規化して使う。
+    weight: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
+    # 対照群かどうか。結果画面でリフト計算の基準にする 1 枝だけ True にする。
+    is_control: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    experiment: Mapped["Experiment"] = relationship(back_populates="variants")
+
+
+class ExperimentExposure(Base):
+    """「誰にどの variant を見せたか」の記録。1 訪問者 × 1 実験で 1 行。
+
+    ProductView と同じく再訪でも行を増やさず、初回だけ記録する（分母を訪問者数で
+    数えるため。同じ人を複数回数えると効果が薄まって見える）。
+
+    variant_key を実験IDと別に非正規化して保持しているのが要点で、あとから weight を
+    変更しても「当時どちらを見せたか」が失われない。分析は必ずこの列を使う。
+    """
+
+    __tablename__ = "experiment_exposures"
+    __table_args__ = (
+        UniqueConstraint(
+            "experiment_id", "visitor_id", name="uq_experiment_exposure_visitor"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    experiment_id: Mapped[int] = mapped_column(
+        ForeignKey("experiments.id"), nullable=False, index=True
+    )
+    variant_key: Mapped[str] = mapped_column(String, nullable=False)
+    # 割り当ての単位。未ログインでも計測できるよう端末の visitor_id を使う
+    # （user_id を単位にすると、カート投入前の大半を占める未ログイン行動を測れない）。
+    visitor_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    # 曝露時点でログインしていれば紐付ける。分析の切り口に使うだけで割り当てには使わない。
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    experiment: Mapped["Experiment"] = relationship()
+
+
+class AnalyticsEvent(Base):
+    """汎用の行動イベントログ。実験に紐づかない素のログとして貯める。
+
+    name はイベント種別（page_view / click / impression / add_to_cart / purchase ...）。
+    element_key は「どのUI要素か」を表す任意の識別子で、レイアウト実験では
+    これを軸にクリック分布の変化を見る。value は金額やスクロール率などの数値指標。
+    props には商品IDなど分析用の付随情報を入れる。
+    """
+
+    __tablename__ = "analytics_events"
+    __table_args__ = (
+        # 指標ごとの期間集計（結果画面の主クエリ）。
+        Index("ix_analytics_events_name_occurred", "name", "occurred_at"),
+        # 曝露との JOIN（訪問者 × 指標）。
+        Index("ix_analytics_events_visitor_name", "visitor_id", "name"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    visitor_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    # 1 回の訪問（タブを開いてから閉じるまで）の識別子。回遊の分析に使う。
+    session_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    path: Mapped[str | None] = mapped_column(String, nullable=True)
+    element_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    props: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # クライアントで発生した時刻。曝露より前のイベントを成果に数えないための基準。
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    # サーバーが受け取った時刻。バッチ送信の遅延や端末時計のずれを調べる用。
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

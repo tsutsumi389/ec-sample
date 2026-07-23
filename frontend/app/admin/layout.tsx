@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: '/admin/coupons', label: 'クーポン管理' },
   { href: '/admin/orders', label: '注文管理' },
   { href: '/admin/users', label: 'ユーザー管理' },
+  { href: '/admin/experiments', label: 'A/Bテスト' },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {

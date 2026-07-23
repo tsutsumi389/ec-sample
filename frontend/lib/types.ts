@@ -278,3 +278,84 @@ export interface AssistantMessage {
   source?: AssistantSource | null;
   products?: AssistantProduct[] | null;
 }
+
+// ---------- A/Bテスト（実験）と行動ログ ----------
+
+export type ExperimentStatus = 'draft' | 'running' | 'paused' | 'completed';
+
+export interface ExperimentVariant {
+  id: number;
+  key: string;
+  name: string;
+  /** 配分比率。合計100である必要はなく、比として扱われる。 */
+  weight: number;
+  /** 対照群。リフト計算の基準になる枝で、実験内でちょうど1つ。 */
+  is_control: boolean;
+  /** 枝ごとの設定値。レイアウトや文言はここから読む。 */
+  config: Record<string, unknown> | null;
+}
+
+export interface Experiment {
+  id: number;
+  key: string;
+  name: string;
+  description: string | null;
+  status: ExperimentStatus;
+  /** 実験対象に含める訪問者の割合（%）。 */
+  traffic_allocation: number;
+  /** 主要指標にするイベント名。 */
+  primary_metric: string;
+  started_at: string | null;
+  ended_at: string | null;
+  created_at: string;
+  variants: ExperimentVariant[];
+}
+
+export interface VariantResult {
+  variant_key: string;
+  name: string;
+  is_control: boolean;
+  exposures: number;
+  conversions: number;
+  conversion_rate: number;
+  value_sum: number;
+  value_per_user: number;
+  /** 対照群比のリフト（%）。対照群自身は null。 */
+  lift: number | null;
+  lift_ci_low: number | null;
+  lift_ci_high: number | null;
+  p_value: number | null;
+  is_significant: boolean;
+}
+
+export interface FunnelStep {
+  name: string;
+  /** variant_key -> 到達訪問者数。 */
+  counts: Record<string, number>;
+}
+
+export interface SrmCheck {
+  expected: Record<string, number>;
+  observed: Record<string, number>;
+  p_value: number | null;
+  /** true なら割り当てか計測に不具合の疑いがあり、結果を信用してはいけない。 */
+  is_mismatch: boolean;
+}
+
+export interface ExperimentResult {
+  experiment: Experiment;
+  metric: string;
+  total_exposures: number;
+  variants: VariantResult[];
+  funnel: FunnelStep[];
+  srm: SrmCheck;
+}
+
+/** 実験作成時の枝の入力値。 */
+export interface ExperimentVariantInput {
+  key: string;
+  name: string;
+  weight: number;
+  is_control: boolean;
+  config: Record<string, unknown> | null;
+}

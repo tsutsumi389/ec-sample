@@ -7,9 +7,11 @@ import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 import { CartProvider } from '@/lib/cart-context';
 import { ToastProvider } from '@/lib/toast-context';
+import { ExperimentProvider } from '@/lib/experiment-context';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AssistantWidget from '@/components/assistant/AssistantWidget';
+import AnalyticsTracker from '@/components/AnalyticsTracker';
 
 const notoSansJP = Noto_Sans_JP({
   weight: ['400', '500', '700'],
@@ -37,6 +39,8 @@ function getPageTitle(pathname: string): string {
   if (pathname === '/admin/products') return `商品管理 | ${SITE_NAME}`;
   if (pathname === '/admin/orders') return `注文管理 | ${SITE_NAME}`;
   if (pathname === '/admin/users') return `会員管理 | ${SITE_NAME}`;
+  if (pathname === '/admin/experiments') return `A/Bテスト | ${SITE_NAME}`;
+  if (/^\/admin\/experiments\/[^/]+$/.test(pathname)) return `実験結果 | ${SITE_NAME}`;
   return SITE_NAME;
 }
 
@@ -55,14 +59,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${notoSansJP.className} min-h-screen bg-gray-50 text-gray-900 flex flex-col`}>
         <AuthProvider>
-          <CartProvider>
-            <ToastProvider>
-              <Header />
-              <main className="flex-1">{children}</main>
-              <Footer />
-              <AssistantWidget />
-            </ToastProvider>
-          </CartProvider>
+          {/* 実験の割り当てはログイン状態に応じて取り直すため AuthProvider の内側に置く。 */}
+          <ExperimentProvider>
+            <CartProvider>
+              <ToastProvider>
+                <AnalyticsTracker />
+                <Header />
+                <main className="flex-1">{children}</main>
+                <Footer />
+                <AssistantWidget />
+              </ToastProvider>
+            </CartProvider>
+          </ExperimentProvider>
         </AuthProvider>
       </body>
     </html>

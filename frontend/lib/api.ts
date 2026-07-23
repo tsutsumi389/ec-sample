@@ -1,6 +1,11 @@
 import type { AssistantChatResponse, AssistantMessage, ProductQuestion } from './types';
+import { getVisitorId } from './visitor';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// 計測用の送信（lib/analytics.ts）が keepalive 付きの独自 fetch を使うため公開する。
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+// 端末の匿名IDを運ぶヘッダ。バックエンドの auth.get_visitor_id と対になる。
+export const VISITOR_ID_HEADER = 'X-Visitor-Id';
 
 const TOKEN_KEY = 'token';
 
@@ -113,10 +118,13 @@ async function parseErrorMessage(res: Response): Promise<string> {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
+  // 未ログインの行動もA/Bテストの割り当て・計測の対象にするため、全リクエストに付ける。
+  const visitorId = getVisitorId();
 
   const headers: HeadersInit = {
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(visitorId ? { [VISITOR_ID_HEADER]: visitorId } : {}),
     ...(options.headers || {}),
   };
 

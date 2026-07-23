@@ -11,4 +11,7 @@ ollama>=0.4,<1.0
 pgvector>=0.3,<1.0
 numpy>=1.26,<3.0
 scikit-learn>=1.4,<2.0
+# A/Bテストの検定（Z検定・カイ二乗）で直接 import する。scikit-learn の依存として
+# 既に入るが、間接依存に頼らず明示しておく。
+scipy>=1.11,<2.0
 pytest>=8,<9
