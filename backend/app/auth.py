@@ -1,8 +1,9 @@
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -102,6 +103,29 @@ def get_current_user_optional(
         # 任意認証エンドポイント（/recommendations/home 等）がフォールバック応答を
         # 返し続けられるようにするため（暗黙ログアウトやセクション消失を防ぐ）。
         return None
+
+
+# 端末ごとの匿名識別子を運ぶヘッダ。フロントが localStorage の UUID を全リクエストに付ける。
+VISITOR_ID_HEADER = "X-Visitor-Id"
+# 想定するのは UUID。任意文字列を通すと分析データを汚染されるため文字種と長さを絞る。
+_VISITOR_ID_PATTERN = re.compile(r"^[0-9a-zA-Z-]{8,64}$")
+
+
+def get_visitor_id(
+    x_visitor_id: str | None = Header(default=None, alias=VISITOR_ID_HEADER),
+) -> str | None:
+    """A/Bテストの割り当て単位・行動ログの識別子。無効／未指定なら None。
+
+    ログイン前でも一貫した識別が必要なため user_id ではなくこちらを単位にする
+    （EC ではカート投入までの大半が未ログインで、user_id 単位にするとその区間の
+    効果が丸ごと測れなくなる）。認証には一切使わない、あくまで計測用の識別子。
+    """
+    if x_visitor_id is None:
+        return None
+    candidate = x_visitor_id.strip()
+    if not _VISITOR_ID_PATTERN.match(candidate):
+        return None
+    return candidate
 
 
 def get_current_admin(current_user: User = Depends(get_current_user)) -> User:

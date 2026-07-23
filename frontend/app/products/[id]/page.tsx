@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, type SyntheticEvent } from 'react';
+import { useEffect, useState, type ReactNode, type SyntheticEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError, getToken } from '@/lib/api';
 import type { Category, Product } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
+import { useVariant } from '@/lib/experiment-context';
 import { useToast } from '@/lib/toast-context';
 import { useCart } from '@/lib/cart-context';
 import Badge from '@/components/Badge';
@@ -25,6 +26,19 @@ import { iconButton } from '@/lib/buttonStyles';
 import { recordRecentlyViewed } from '@/lib/recentlyViewed';
 import { PRODUCT_STATUS_META } from '@/lib/productStatus';
 
+// 下部セクションの既定の並び。実験の config が無い・壊れている場合はこれを使う。
+const DEFAULT_SECTION_ORDER = ['recommendations', 'related', 'reviews', 'qa', 'recently'];
+
+/** 商品ページ下部の並び順を差し替える実験（seed の pdp_section_order）の config。 */
+interface SectionOrderConfig {
+  sections?: string[];
+}
+
+/** カート追加ボタンの文言を差し替える実験（seed の pdp_cta_copy）の config。 */
+interface CtaCopyConfig {
+  label?: string;
+}
+
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -41,6 +55,11 @@ export default function ProductDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
+
+  // A/Bテスト。どちらも「割り当てが無ければ既定の見た目」になるので、実験が止まって
+  // いても未取得でも画面は現行のまま動く。
+  const sectionOrderExperiment = useVariant<SectionOrderConfig>('pdp_section_order');
+  const ctaCopyExperiment = useVariant<CtaCopyConfig>('pdp_cta_copy');
 
   useEffect(() => {
     if (!id) return;
@@ -92,6 +111,19 @@ export default function ProductDetailPage() {
       cancelled = true;
     };
   }, [product?.category_id]);
+
+  // 曝露は「実験対象のUIを実際に描画した」時点で記録する。読み込み中や 404 の段階で
+  // 記録すると、見ていない人まで分母に入って効果が薄まって見えるため。
+  const { trackExposure: trackSectionExposure } = sectionOrderExperiment;
+  useEffect(() => {
+    if (product) trackSectionExposure();
+  }, [product, trackSectionExposure]);
+
+  const { trackExposure: trackCtaExposure } = ctaCopyExperiment;
+  useEffect(() => {
+    // 購入パネルは on_sale のときだけ描画されるので、それ以外は曝露にしない。
+    if (product?.status === 'on_sale') trackCtaExposure();
+  }, [product, trackCtaExposure]);
 
   const handleAddToCart = async () => {
     if (!user) {
@@ -177,6 +209,30 @@ export default function ProductDetailPage() {
     suspended: 'この商品は現在販売を停止しています。再開までお待ちください。',
     discontinued: 'この商品は販売を終了しました。',
   };
+
+  // 実験が指定した並び順。未指定・壊れた設定のときは既定の並びに戻す。
+  const configuredSections = sectionOrderExperiment.config?.sections;
+  const sectionOrder =
+    Array.isArray(configuredSections) && configuredSections.length > 0
+      ? configuredSections
+      : DEFAULT_SECTION_ORDER;
+
+  const sectionNodes: Record<string, ReactNode> = {
+    recommendations: <ProductRecommendations productId={product.id} />,
+    related: <RelatedProducts productId={product.id} />,
+    reviews: (
+      <ReviewSection
+        productId={product.id}
+        avgRating={product.avg_rating}
+        reviewCount={product.review_count}
+      />
+    ),
+    qa: <ProductQA productId={product.id} />,
+    recently: <RecentlyViewed excludeId={product.id} />,
+  };
+
+  // 文言だけを差し替える実験。config が無ければ現行の文言。
+  const addToCartLabel = ctaCopyExperiment.config?.label ?? 'カートに追加';
 
   const breadcrumbItems: BreadcrumbItem[] = [
     { label: 'ホーム', href: '/' },
@@ -311,9 +367,13 @@ export default function ProductDetailPage() {
                 type="button"
                 onClick={handleAddToCart}
                 disabled={adding || soldOut}
+                // 未ログインだとカート投入はサーバーに届かない（ログイン画面へ送られる）ため、
+                // ボタン押下そのものは click イベントとして別途記録する。
+                data-track-click="pdp_add_to_cart"
+                data-track-props={JSON.stringify({ product_id: product.id })}
                 className="mt-4 w-full sm:w-auto sm:px-8 bg-brand-600 hover:bg-brand-700 text-white px-6 py-3 text-sm font-medium rounded-md transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {soldOut ? '在庫切れ' : adding ? '追加中...' : 'カートに追加'}
+                {soldOut ? '在庫切れ' : adding ? '追加中...' : addToCartLabel}
               </button>
 
               {/* 配送・返品の安心情報 */}
@@ -344,19 +404,18 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      <ProductRecommendations productId={product.id} />
-
-      <RelatedProducts productId={product.id} />
-
-      <ReviewSection
-        productId={product.id}
-        avgRating={product.avg_rating}
-        reviewCount={product.review_count}
-      />
-
-      <ProductQA productId={product.id} />
-
-      <RecentlyViewed excludeId={product.id} />
+      {/* 下部セクションは実験の config が指定した順に描画する。順序は設定値なので、
+          枝を増やしてもここに分岐を足す必要はない。各セクションは data-track-view で
+          「実際に画面に入ったか」を記録し、並び替えの効果を追えるようにしている。 */}
+      {sectionOrder.map((key) => {
+        const node = sectionNodes[key];
+        if (!node) return null;
+        return (
+          <div key={key} data-track-view={`pdp_section_${key}`}>
+            {node}
+          </div>
+        );
+      })}
     </div>
   );
 }

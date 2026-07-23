@@ -7,6 +7,8 @@ from app.models import (
     CartItem,
     Category,
     Coupon,
+    Experiment,
+    ExperimentVariant,
     Order,
     OrderItem,
     Product,
@@ -694,6 +696,77 @@ SEED_COUPONS = [
 ]
 
 
+# ---------- A/Bテスト（動作確認用の実験）----------
+#
+# レイアウト実験の実例。どちらの枝も「並び順の配列」を config に持つだけで、フロント側は
+# その配列どおりに描画する。枝を増やしてもコードに if を足す必要がないのがこの持ち方の
+# 利点で、レイアウト変更の検証を設定だけで回せる。
+#
+# salt はシードでは固定値にする（起動のたびに割り当てが変わると動作確認しづらいため）。
+# 管理画面から新規作成する実験には UUID が自動採番される。
+
+SEED_EXPERIMENTS = [
+    {
+        "key": "pdp_section_order",
+        "name": "商品ページ下部セクションの並び順",
+        "description": (
+            "レビューとQ&Aを先に見せると購入率が上がるかを検証する。"
+            "社会的証明を先に置くほど後押しになる、という仮説。"
+        ),
+        "salt": "seed-pdp-section-order",
+        "status": "running",
+        "traffic_allocation": 100,
+        "primary_metric": "purchase",
+        "variants": [
+            {
+                "key": "control",
+                "name": "現行（おすすめ先行）",
+                "weight": 50,
+                "is_control": True,
+                "config": {
+                    "sections": ["recommendations", "related", "reviews", "qa", "recently"]
+                },
+            },
+            {
+                "key": "social_first",
+                "name": "レビュー・Q&A先行",
+                "weight": 50,
+                "is_control": False,
+                "config": {
+                    "sections": ["reviews", "qa", "recommendations", "related", "recently"]
+                },
+            },
+        ],
+    },
+    {
+        "key": "pdp_cta_copy",
+        "name": "カート追加ボタンの文言",
+        "description": "文言だけを変える実験の例。コード分岐なしで config の差し替えだけで回せる。",
+        "salt": "seed-pdp-cta-copy",
+        # 下書きのまま投入する。管理画面から「開始」を押して配信を始める流れを試せる。
+        "status": "draft",
+        "traffic_allocation": 100,
+        "primary_metric": "add_to_cart",
+        "variants": [
+            {
+                "key": "control",
+                "name": "カートに追加",
+                "weight": 50,
+                "is_control": True,
+                "config": {"label": "カートに追加"},
+            },
+            {
+                "key": "urgent",
+                "name": "いますぐカートに入れる",
+                "weight": 50,
+                "is_control": False,
+                "config": {"label": "いますぐカートに入れる"},
+            },
+        ],
+    },
+]
+
+
 def seed_data(db: Session) -> None:
     """Insert initial seed data if the users table is empty."""
     if db.query(User).first() is not None:
@@ -779,6 +852,31 @@ def seed_data(db: Session) -> None:
                 user_id=users_by_key[user_key].id,
                 rating=rating,
                 comment=comment,
+            )
+        )
+
+    for spec in SEED_EXPERIMENTS:
+        db.add(
+            Experiment(
+                key=spec["key"],
+                name=spec["name"],
+                description=spec["description"],
+                salt=spec["salt"],
+                status=spec["status"],
+                traffic_allocation=spec["traffic_allocation"],
+                primary_metric=spec["primary_metric"],
+                # 配信中で投入する実験だけ開始時刻を持たせる（結果画面の期間表示用）。
+                started_at=now if spec["status"] == "running" else None,
+                variants=[
+                    ExperimentVariant(
+                        key=v["key"],
+                        name=v["name"],
+                        weight=v["weight"],
+                        is_control=v["is_control"],
+                        config=v["config"],
+                    )
+                    for v in spec["variants"]
+                ],
             )
         )
 
