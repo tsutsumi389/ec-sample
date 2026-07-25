@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="470" rx="196" ry="20" fill="#E6DDCC"/>
+  <!-- bottom folded towel -->
+  <path d="M120 372 l360 0 q18 0 18 18 l0 44 q0 18 -18 18 l-360 0 q-18 0 -18 -18 l0 -44 q0 -18 18 -18 z" fill="#22574F"/>
+  <path d="M120 372 l360 0 q18 0 18 18 l0 12 -396 0 0 -12 q0 -18 18 -18 z" fill="#2A6B63"/>
+  <path d="M148 372 l0 80" fill="none" stroke="#2A6B63" stroke-width="7" stroke-linecap="round"/>
+  <!-- middle folded towel -->
+  <path d="M142 292 l316 0 q18 0 18 18 l0 44 q0 18 -18 18 l-316 0 q-18 0 -18 -18 l0 -44 q0 -18 18 -18 z" fill="#2A6B63"/>
+  <path d="M142 292 l316 0 q18 0 18 18 l0 12 -352 0 0 -12 q0 -18 18 -18 z" fill="#5FA19A"/>
+  <path d="M170 292 l0 80" fill="none" stroke="#5FA19A" stroke-width="7" stroke-linecap="round"/>
+  <!-- top folded towel -->
+  <path d="M164 212 l272 0 q18 0 18 18 l0 44 q0 18 -18 18 l-272 0 q-18 0 -18 -18 l0 -44 q0 -18 18 -18 z" fill="#5FA19A"/>
+  <path d="M164 212 l272 0 q18 0 18 18 l0 12 -308 0 0 -12 q0 -18 18 -18 z" fill="#8FC0BA"/>
+  <path d="M192 212 l0 80" fill="none" stroke="#8FC0BA" stroke-width="7" stroke-linecap="round"/>
+  <!-- woven texture on the top towel -->
+  <g stroke="#B9D9D5" stroke-width="6" stroke-linecap="round" opacity="0.85">
+    <path d="M244 262 l160 0"/>
+    <path d="M244 286 l160 0"/>
+  </g>
+  <!-- band -->
+  <rect x="292" y="200" width="30" height="264" rx="8" fill="#D97706"/>
+  <rect x="292" y="200" width="30" height="18" rx="8" fill="#B45309"/>
+</svg>

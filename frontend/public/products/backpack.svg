@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="504" rx="152" ry="18" fill="#E6DDCC"/>
+  <!-- shoulder straps -->
+  <path d="M232 176 q-58 44 -50 148" fill="none" stroke="#22574F" stroke-width="26" stroke-linecap="round"/>
+  <path d="M368 176 q58 44 50 148" fill="none" stroke="#22574F" stroke-width="26" stroke-linecap="round"/>
+  <!-- grab handle -->
+  <path d="M266 156 q34 -30 68 0" fill="none" stroke="#4B5563" stroke-width="14" stroke-linecap="round"/>
+  <!-- main body -->
+  <path d="M300 148 q118 0 118 122 l0 156 q0 62 -62 62 l-112 0 q-62 0 -62 -62 l0 -156 q0 -122 118 -122 z" fill="#2A6B63"/>
+  <!-- left highlight -->
+  <path d="M242 162 q-60 34 -60 108 l0 156 q0 62 44 62 l18 0 q-30 -14 -30 -62 l0 -156 q0 -78 28 -108 z" fill="#5FA19A" opacity="0.55"/>
+  <!-- lid flap -->
+  <path d="M182 268 q0 -120 118 -120 q118 0 118 120 l0 22 q-118 34 -236 0 z" fill="#22574F"/>
+  <!-- front pocket -->
+  <path d="M232 336 l136 0 q16 0 16 16 l0 74 q0 16 -16 16 l-136 0 q-16 0 -16 -16 l0 -74 q0 -16 16 -16 z" fill="#22574F"/>
+  <rect x="248" y="376" width="104" height="14" rx="7" fill="#8FC0BA"/>
+  <!-- compression straps -->
+  <g fill="#D97706">
+    <rect x="216" y="298" width="168" height="14" rx="7"/>
+    <rect x="286" y="292" width="28" height="26" rx="6" fill="#B45309"/>
+  </g>
+  <!-- side buckles -->
+  <g fill="#4B5563">
+    <rect x="186" y="360" width="22" height="18" rx="5"/>
+    <rect x="392" y="360" width="22" height="18" rx="5"/>
+  </g>
+</svg>

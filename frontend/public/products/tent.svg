@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="464" rx="220" ry="20" fill="#E6DDCC"/>
+  <!-- guy lines -->
+  <g stroke="#9CA3AF" stroke-width="5" stroke-linecap="round">
+    <path d="M300 128 l-190 328"/>
+    <path d="M300 128 l190 328"/>
+  </g>
+  <!-- right panel -->
+  <path d="M300 132 l186 324 -186 0 z" fill="#2A6B63"/>
+  <!-- left panel -->
+  <path d="M300 132 l-186 324 186 0 z" fill="#22574F"/>
+  <!-- ridge highlight -->
+  <path d="M300 132 l24 42 -24 282 z" fill="#5FA19A" opacity="0.5"/>
+  <!-- door -->
+  <path d="M300 224 l72 232 -144 0 z" fill="#F2ECE1"/>
+  <path d="M300 244 l56 192 -112 0 z" fill="#8FC0BA"/>
+  <path d="M300 244 l56 192 -28 0 -28 -128 z" fill="#B9D9D5"/>
+  <!-- zip -->
+  <path d="M300 224 l0 232" fill="none" stroke="#4B5563" stroke-width="5" stroke-dasharray="10 8"/>
+  <!-- pegs -->
+  <g fill="#D97706">
+    <rect x="98" y="446" width="30" height="12" rx="6"/>
+    <rect x="472" y="446" width="30" height="12" rx="6"/>
+  </g>
+  <!-- ground line -->
+  <path d="M96 456 l408 0" fill="none" stroke="#4B5563" stroke-width="8" stroke-linecap="round"/>
+</svg>

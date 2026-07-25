@@ -55,7 +55,7 @@ export default function AdminUsersPage() {
                     <td className="px-4 py-3 font-medium whitespace-nowrap">{u.name}</td>
                     <td className="px-4 py-3 whitespace-nowrap">{u.email}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <Badge variant={u.role === 'admin' ? 'info' : 'neutral'}>
+                      <Badge variant={u.role === 'admin' ? 'brand' : 'neutral'}>
                         {u.role === 'admin' ? '管理者' : '一般'}
                       </Badge>
                     </td>

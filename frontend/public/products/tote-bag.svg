@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="490" rx="176" ry="20" fill="#E6DDCC"/>
+  <!-- handles -->
+  <path d="M242 224 q0 -96 58 -96 q58 0 58 96" fill="none" stroke="#8F3F06" stroke-width="20" stroke-linecap="round"/>
+  <path d="M242 224 q0 -84 58 -84 q58 0 58 84" fill="none" stroke="#B45309" stroke-width="10" stroke-linecap="round"/>
+  <!-- body -->
+  <path d="M164 216 l272 0 q18 0 16 18 l-26 214 q-3 24 -28 24 l-196 0 q-25 0 -28 -24 l-26 -214 q-2 -18 16 -18 z" fill="#B45309"/>
+  <!-- lighter panel -->
+  <path d="M164 216 l64 0 -20 256 -20 0 q-25 0 -28 -24 l-26 -214 q-2 -18 16 -18 z" fill="#D97706" opacity="0.75"/>
+  <!-- stitching -->
+  <g fill="none" stroke="#F6E2C9" stroke-width="5" stroke-dasharray="14 12" stroke-linecap="round" opacity="0.85">
+    <path d="M186 250 l228 0"/>
+    <path d="M198 438 l204 0"/>
+  </g>
+  <!-- inner shadow at opening -->
+  <path d="M164 216 l272 0 q18 0 16 18 l-2 16 -300 0 -2 -16 q-2 -18 16 -18 z" fill="#8F3F06"/>
+  <!-- tag -->
+  <rect x="352" y="298" width="52" height="34" rx="8" fill="#F2ECE1"/>
+  <rect x="362" y="310" width="32" height="6" rx="3" fill="#8F3F06"/>
+</svg>

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300" role="img" aria-label="画像はありません">
-  <rect width="400" height="300" fill="#F3F4F6"/>
+  <rect width="400" height="300" fill="#F2ECE1"/>
   <g fill="none" stroke="#9CA3AF" stroke-width="2">
     <rect x="120" y="95" width="160" height="110" rx="8"/>
     <circle cx="160" cy="130" r="12"/>

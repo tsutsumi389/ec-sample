@@ -2,7 +2,8 @@
 
 import { FormEvent, useState } from 'react';
 import type { Address } from '@/lib/types';
-import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { btn } from '@/lib/buttonStyles';
+import { SELECT_CHEVRON } from '@/lib/selectChevron';
 
 export interface AddressFormValues {
   recipient_name: string;
@@ -46,13 +47,9 @@ const PREFECTURES = [
 
 /** テキスト入力の共通クラス（focus リングと accent 色を統一）。 */
 const inputClass = (hasError?: boolean) =>
-  `w-full rounded-md border px-3 py-2.5 text-sm accent-brand-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:border-brand-400 ${
-    hasError ? 'border-red-400' : 'border-gray-300'
+  `h-11 w-full rounded-md border bg-surface px-3 text-body accent-brand-600 transition-colors duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:border-brand-600 ${
+    hasError ? 'border-critical-400' : 'border-line-input'
   }`;
-
-/** 都道府県 select 用の自前シェブロン（appearance-none と組で使う）。 */
-const SELECT_CHEVRON =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m19.5 8.25-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E";
 
 interface ZipCloudResult {
   address1?: string;
@@ -149,11 +146,11 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
   };
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4 rounded-xl bg-surface p-6 shadow-paper">
       <div>
-        <label htmlFor="recipient_name" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="recipient_name" className="mb-1 block text-caption font-medium text-ink-soft">
           お届け先氏名
-          <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
+          <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
           <span className="sr-only">（必須）</span>
         </label>
         <input
@@ -165,16 +162,16 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
           className={inputClass(Boolean(fieldErrors.recipient_name))}
         />
         {fieldErrors.recipient_name && (
-          <p role="alert" className="text-xs text-red-600 mt-1">
+          <p role="alert" className="mt-1 text-caption text-critical-700">
             {fieldErrors.recipient_name}
           </p>
         )}
       </div>
 
       <div>
-        <label htmlFor="postal_code" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="postal_code" className="mb-1 block text-caption font-medium text-ink-soft">
           郵便番号
-          <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
+          <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
           <span className="sr-only">（必須）</span>
         </label>
         <input
@@ -188,11 +185,11 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
           onChange={(e) => handlePostalChange(e.target.value)}
           className={inputClass(Boolean(fieldErrors.postal_code))}
         />
-        <p id="postal_code-hint" className="mt-1 text-xs text-gray-500">
+        <p id="postal_code-hint" className="mt-1 text-caption text-ink-muted">
           7桁を入力すると住所を自動で補完します。
         </p>
         {fieldErrors.postal_code && (
-          <p role="alert" className="text-xs text-red-600 mt-1">
+          <p role="alert" className="mt-1 text-caption text-critical-700">
             {fieldErrors.postal_code}
           </p>
         )}
@@ -200,9 +197,9 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label htmlFor="prefecture" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="prefecture" className="mb-1 block text-caption font-medium text-ink-soft">
             都道府県
-            <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
+            <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
             <span className="sr-only">（必須）</span>
           </label>
           <select
@@ -211,7 +208,7 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
             value={values.prefecture}
             onChange={(e) => setField('prefecture', e.target.value)}
             style={{ backgroundImage: `url("${SELECT_CHEVRON}")` }}
-            className={`appearance-none bg-white bg-no-repeat bg-[right_0.5rem_center] bg-[length:1rem_1rem] pr-9 ${inputClass(
+            className={`appearance-none bg-surface bg-[length:1rem_1rem] bg-[right_0.625rem_center] bg-no-repeat pr-9 ${inputClass(
               Boolean(fieldErrors.prefecture)
             )}`}
           >
@@ -223,15 +220,15 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
             ))}
           </select>
           {fieldErrors.prefecture && (
-            <p role="alert" className="text-xs text-red-600 mt-1">
+            <p role="alert" className="mt-1 text-caption text-critical-700">
               {fieldErrors.prefecture}
             </p>
           )}
         </div>
         <div>
-          <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="city" className="mb-1 block text-caption font-medium text-ink-soft">
             市区町村
-            <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
+            <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
             <span className="sr-only">（必須）</span>
           </label>
           <input
@@ -243,7 +240,7 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
             className={inputClass(Boolean(fieldErrors.city))}
           />
           {fieldErrors.city && (
-            <p role="alert" className="text-xs text-red-600 mt-1">
+            <p role="alert" className="mt-1 text-caption text-critical-700">
               {fieldErrors.city}
             </p>
           )}
@@ -251,9 +248,9 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
       </div>
 
       <div>
-        <label htmlFor="address_line" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="address_line" className="mb-1 block text-caption font-medium text-ink-soft">
           番地・建物名
-          <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
+          <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
           <span className="sr-only">（必須）</span>
         </label>
         <input
@@ -265,16 +262,16 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
           className={inputClass(Boolean(fieldErrors.address_line))}
         />
         {fieldErrors.address_line && (
-          <p role="alert" className="text-xs text-red-600 mt-1">
+          <p role="alert" className="mt-1 text-caption text-critical-700">
             {fieldErrors.address_line}
           </p>
         )}
       </div>
 
       <div>
-        <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="phone" className="mb-1 block text-caption font-medium text-ink-soft">
           電話番号
-          <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
+          <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
           <span className="sr-only">（必須）</span>
         </label>
         <input
@@ -287,33 +284,33 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
           className={inputClass(Boolean(fieldErrors.phone))}
         />
         {fieldErrors.phone && (
-          <p role="alert" className="text-xs text-red-600 mt-1">
+          <p role="alert" className="mt-1 text-caption text-critical-700">
             {fieldErrors.phone}
           </p>
         )}
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-gray-700">
+      <label className="flex items-center gap-2 text-body text-ink-soft">
         <input
           type="checkbox"
           checked={values.is_default}
           onChange={(e) => setField('is_default', e.target.checked)}
-          className="rounded border-gray-300 accent-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+          className="rounded border-line-input accent-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
         />
         既定のお届け先にする
       </label>
 
       {error && (
-        <p role="alert" className="text-red-600 text-sm">
+        <p role="alert" className="text-body text-critical-700">
           {error}
         </p>
       )}
 
       <div className="flex items-center gap-3 pt-2">
-        <button type="submit" disabled={submitting} className={btnPrimary}>
+        <button type="submit" disabled={submitting} className={btn('primary', 'md')}>
           {submitting ? '保存中...' : submitLabel || '保存する'}
         </button>
-        <button type="button" onClick={onCancel} disabled={submitting} className={btnSecondary}>
+        <button type="button" onClick={onCancel} disabled={submitting} className={btn('secondary', 'md')}>
           キャンセル
         </button>
       </div>

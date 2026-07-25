@@ -59,12 +59,12 @@ export default function AssistantProductCard({ product, reason }: AssistantProdu
   const detailHref = `/products/${product.id}`;
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
+    <div className="flex flex-col gap-2 rounded-xl bg-surface p-3 shadow-paper transition-shadow duration-base ease-standard hover:shadow-lift">
       <div className="flex gap-3">
         <Link
           href={detailHref}
           aria-label={`${product.name}の詳細を見る`}
-          className="group relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+          className="group relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-tile focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -76,14 +76,14 @@ export default function AssistantProductCard({ product, reason }: AssistantProdu
               img.onerror = null;
               img.src = '/no-image.svg';
             }}
-            className="h-full w-full object-cover transition-transform duration-300 ease-out group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-slow ease-entrance group-hover:scale-[1.04] motion-reduce:group-hover:scale-100"
           />
         </Link>
         <div className="flex min-w-0 flex-1 flex-col">
-          <h4 className="text-sm font-medium leading-snug text-gray-900 line-clamp-2">
+          <h4 className="text-body font-medium leading-snug text-ink line-clamp-2 jp-name">
             <Link
               href={detailHref}
-              className="rounded hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+              className="rounded hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
             >
               {product.name}
             </Link>
@@ -99,13 +99,13 @@ export default function AssistantProductCard({ product, reason }: AssistantProdu
       </div>
 
       {reason && (
-        <p className="text-xs leading-relaxed text-gray-600 line-clamp-1">{reason}</p>
+        <p className="text-caption text-ink-muted line-clamp-1">{reason}</p>
       )}
 
       <div className="flex items-stretch gap-2">
         <Link
           href={detailHref}
-          className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1 rounded-full border border-brand-200 bg-white px-3 text-sm font-medium text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:min-h-0 sm:py-2"
+          className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1 rounded-full border border-brand-200 bg-surface px-3 text-body font-medium text-brand-700 transition-colors duration-fast ease-standard hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0 sm:py-2"
         >
           商品を見る
           <ArrowRightIcon className="h-4 w-4" />
@@ -116,7 +116,7 @@ export default function AssistantProductCard({ product, reason }: AssistantProdu
             onClick={handleAddToCart}
             disabled={adding}
             aria-label={`${product.name}をカートに追加`}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:min-h-0 sm:py-2"
+            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3 text-body font-medium text-white transition-colors duration-fast ease-standard hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0 sm:py-2"
           >
             {adding ? (
               <span
@@ -132,7 +132,7 @@ export default function AssistantProductCard({ product, reason }: AssistantProdu
             )}
           </button>
         ) : (
-          <span className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full bg-gray-100 px-3 text-sm font-medium text-gray-500 sm:min-h-0 sm:py-2">
+          <span className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-full bg-sunken px-3 text-body font-medium text-ink-muted sm:min-h-0 sm:py-2">
             在庫なし
           </span>
         )}

@@ -2,47 +2,354 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   1. ルート変数
+   ============================================================ */
+:root {
+  --header-h: 4rem;              /* Header の行を h-16 に固定するため exact */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 280ms;
+  --dur-reveal: 480ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* 段階的な出現（.stagger）の1枚あたりの遅れ。密な並びでは
+     `[--stagger-step:40ms]` のように呼び出し側で上書きしてよい。 */
+  --stagger-step: 70ms;
+
+  /* カタカナの字送り補正の既定値。0 = 補正なし。
+     明朝（.font-mincho / .jp-display）だけが負の値を与える。詳細は §2 の .kana を見ること。 */
+  --kana-track: 0em;
+  /* 小書き仮名（ァィゥェォッャュョヮヵヶ）に **追加で** かける詰め。
+     小書きは字面が全角の 4 割前後しかないのに、送りは他のカタカナと同じ全角で来る。
+     --kana-track だけでは「ドリッ プ」「キャ ンプ」のように小書きの前後だけが空く。 */
+  --kana-small: 0em;
+  /* 漢字↔カタカナの継ぎ目に **追加で** かける詰め（§2 の .kana-edge-*）。 */
+  --kana-edge: 0em;
+}
+
 html,
 body {
   padding: 0;
   margin: 0;
+  /* 版面の外へ出た装飾（裁ち落とした線画・オフキャンバスのドロワー）が
+     文書幅を広げて意味のない横スクロールを生むのを断つ。
+     overflow-x: hidden と違い clip は縦方向を visible のまま残すので、
+     position: sticky（フィルタ帯・カートのサマリー）が死なない。 */
+  overflow-x: clip;
 }
 
 body {
-  /* next/font (Noto Sans JP) のクラスが body に付与される想定。ここはフォールバック。 */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+  /* next/font の CSS 変数（--font-sans-jp）を先頭に置く。以降はフォールバック。 */
+  font-family: var(--font-sans-jp), -apple-system, BlinkMacSystemFont,
     'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
-  /* 本文の行間ベース */
-  line-height: 1.625;
+  line-height: 1.8;              /* 1.625 → 1.8。和文の呼吸を作る */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   2. 和文組版
+   ============================================================ */
+:lang(ja) {
+  font-feature-settings: 'palt' 1;   /* 約物アキを詰める */
+  line-break: strict;
+}
+
+/* ── 明朝（Zen Old Mincho）の字送り ──────────────────────────────────────
+   実測（Playwright / 評価と同じ Chromium）:
+     'ドリップケトル' を 100px で組んだときの幅は
+       normal / palt / pkna / pwid / halt / kern … すべて 700px（= 7em）で不変。
+     一方 Noto Sans JP は palt で 692 → 612px に詰まる。
+   つまり配信している Zen Old Mincho のサブセットには GSUB/GPOS が入っておらず、
+   **明朝に palt は効かない**。ここでの font-feature-settings は
+   ①フォールバック（Hiragino Mincho ProN / YuMincho）で効かせるため、
+   ②将来フル機能のフォントに差し替えたときに自動で効くようにするため、の宣言。
+   Web フォント側の実効的な補正は下の --kana-track（.kana）と
+   tailwind.config.ts の fontSize トークンの負トラッキングで行う。 */
+.font-mincho {
+  font-feature-settings: 'palt' 1, 'pkna' 1, 'kern' 1;
+  font-kerning: normal;
+  --kana-track: -0.06em;
+  --kana-small: -0.03em;
+  --kana-edge: -0.03em;
+}
+
+/* カタカナだけ字面が em の 6 割前後しかないのに全角送りで並ぶため、
+   同じ行の漢字と比べてカタカナ語だけアキが開いて見える（「ケ ト ル」問題）。
+   lib/wordBreak.ts の withWordBreaks() が連続カタカナを <span class="kana"> で包むので、
+   祖先が指定した --kana-track のぶんだけ語の内側の字送りを詰める。
+   letter-spacing は最後の1文字の後ろにも入るので、その分は margin で戻す。
+   こうすると「カタカナ語の内側だけ詰まり、隣の漢字とのアキは変わらない」になる。 */
+.kana {
+  letter-spacing: var(--kana-track, 0em);
+  margin-inline-end: calc(var(--kana-track, 0em) * -1);
+}
+
+/* 漢字↔カタカナの継ぎ目。.kana は語の内側しか詰めないので、
+   カタカナ語の両端に残る「字面の余り」（em の 2 割前後）がそのまま継ぎ目のアキになる。
+   実測（1440px / text-display 68px / 「温度調整ドリップケトル」）:
+     手当て前 … 「整」と「ド」の字面の間が約 0.9em。同じ行の漢字どうし（ほぼ 0）と比べて明白。
+   隣にグループがある側にだけ付ける（行頭・行末や約物の隣は詰めない）。
+   margin-inline-end は .kana の宣言を上書きするので、必ず .kana より後ろに置くこと。 */
+.kana-edge-s { margin-inline-start: var(--kana-edge, 0em); }
+.kana-edge-e { margin-inline-end: calc(var(--kana-track, 0em) * -1 + var(--kana-edge, 0em)); }
+
+/* 小書き仮名（ァィゥェォッャュョヮヵヶ）だけの追加の詰め。
+   letter-spacing は「その文字の**後ろ**」にしか効かないので、前のアキは
+   margin-inline-start で戻す。両側から詰めないと、
+   「ドリッ|プ」（後ろだけ空く）「キャ|ンプ」（前だけ空く）のどちらかが必ず残る。
+   最後の1文字が小書きだったときは、.kana 側の margin-inline-end が --kana-track ぶんしか
+   戻していないので、追加ぶんをここで戻す（語の右のアキが隣の漢字と食い違わないように）。 */
+.kana-small {
+  letter-spacing: calc(var(--kana-track, 0em) + var(--kana-small, 0em));
+  margin-inline-start: var(--kana-small, 0em);
+}
+.kana > .kana-small:last-child {
+  margin-inline-end: calc(var(--kana-small, 0em) * -1);
 }
 
 /* 見出しは詰め気味の行間で情報密度を上げる */
 h1,
 h2,
-h3 {
+h3,
+.jp-head {
   line-height: 1.25;
+  text-wrap: balance;                /* 見出しの行数を均等割り */
 }
 
-/* 操作可能要素は色変化を常に滑らかに */
+p,
+li,
+.jp-body {
+  text-wrap: pretty;                 /* 孤立行を防ぐ（非対応環境は無害） */
+}
+
+/* 商品名・見出しなど、語中改行を避けたい短いテキスト専用。
+   宣言順が意味を持つ: ①フォールバック → ②対応ブラウザ用の上書き、の二段構え。 */
+.jp-name {
+  /* ① auto-phrase 非対応ブラウザ（Safari / Firefox）向けのフォールバック。
+     keep-all で和文を1つの語として扱い、カタカナ語の途中に改行機会を作らない。
+     旧実装の `overflow-wrap: anywhere` は文字単位の改行機会を無条件に作るため、
+     「ブルートゥースス／ピーカー」「ン」1文字落ちの直接原因だった。使わない。 */
+  word-break: keep-all;
+  /* 1行に収まりきらない語だけ、最後の手段として行末で折る。
+     これが無いと長い商品名がカードや版面を突き破って横スクロールを生む。
+     `anywhere` と違い min-content 幅を1文字まで縮めないので、
+     語が収まる限り改行機会は増えない。 */
+  overflow-wrap: break-word;
+  line-break: strict;
+
+  /* ② Chromium 119+ はここで①の word-break を上書きする。
+     形態素解析の結果、語句境界だけが改行機会になる。
+     ただし評価に使うヘッドレス Chromium では `normal` と同じ結果になる（＝効かない）ので、
+     これに頼らず withWordBreaks() の <wbr> を必ず併用すること。 */
+  word-break: auto-phrase;
+}
+
+/* 表紙・扉の大見出し（text-display / text-h1）専用。.jp-name と必ず併用する。
+   なぜ balance を戻せるのか:
+     r1 で「温度調整ド／リップケトル」を起こしたのは、balance が候補幅を狭めて再組みする途中で
+     overflow-wrap: break-word が任意位置に改行機会を作っていたため。
+     いまは withWordBreaks() が語境界に <wbr> を挿し、.jp-name の keep-all が
+     それ以外の改行機会を消すので、balance は「語の切れ目」からしか選べない。
+   実測（390 / 768 / 1440、Chromium）:
+     balance なし: 温度調整ドリップ／ケトル（8:3）、ワイヤレスイヤ／ホン（7:2）
+     balance あり: 温度調整／ドリップケトル（4:7）、ワイヤレス／イヤホン（5:4）
+   text-pretty ユーティリティより後に置いてあるので、併記した場合はこちらが勝つ。 */
+.jp-display {
+  text-wrap: balance;
+  /* 大きい号数ほどカタカナのアキが目立つので一段強く詰める。
+     実測（1440px / text-display = 68px / 「ドリップケトル」）:
+       -0.08em … 1文字あたりの送り 62.6px（0.92em）。隣の「温度調整」（0.99em 送りだが
+                 字面が em いっぱい）に対してカタカナだけ明らかに散漫だった。
+       -0.13em … 62.6 → 59.2px（0.87em）。カタカナの字面（約 0.62em）に対する
+                 アキが漢字の字面に対するアキとほぼ揃う。
+     サイト最大の活字が最も緩い、という型の規律の逆転をここで解消している。 */
+  --kana-track: -0.13em;
+  --kana-small: -0.05em;
+  --kana-edge: -0.07em;
+}
+
+/* プレースホルダの既定色。AA（対 surface 4.5:1）を満たす ink-muted を地にする。
+   コンポーネント側で placeholder:text-* を書かないこと（書かなければ必ずここが効く）。
+   ink-faint（washi-500 / 対 surface 3.65:1）は AA 未達なのでテキストには使わない。 */
+input::placeholder,
+textarea::placeholder {
+  color: theme(colors.ink-muted);
+  opacity: 1;              /* Firefox の既定 opacity で更に薄くなるのを防ぐ */
+}
+
+/* 数値。価格・合計・件数・在庫・順位・ページ番号に必ず付ける。 */
+.tnum {
+  font-family: var(--font-num), var(--font-sans-jp), sans-serif;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'palt' 0;
+}
+
+/* ============================================================
+   3. コンテンツ幅（3系統）と縦リズム（4段階）
+   帯は <main> 直下の <section> なので既に全幅。100vw は使わない
+   （スクロールバー分の横スクロールが出る）。内側に .wrap* を置くだけ。
+   ============================================================ */
+@layer components {
+  .wrap-wide { max-width: 82.5rem; margin-inline: auto; padding-inline: 1rem; }  /* 1320px */
+  .wrap      { max-width: 72rem;   margin-inline: auto; padding-inline: 1rem; }  /* 1152px = 現 max-w-6xl */
+  .wrap-read { max-width: 40rem;   margin-inline: auto; padding-inline: 1rem; }  /* 640px */
+
+  @media (min-width: 768px) {
+    .wrap-wide, .wrap, .wrap-read { padding-inline: 2rem; }
+  }
+
+  .band-sm { padding-block: 2rem; }    /* 32px  補助帯（カテゴリ・奥付） */
+  .band    { padding-block: 2.5rem; }  /* 40px  レーン */
+  .band-lg { padding-block: 3.5rem; }  /* 56px  主要セクション */
+  .band-xl { padding-block: 5rem; }    /* 80px  署名帯・表紙 */
+
+  @media (min-width: 768px) {
+    .band-sm { padding-block: 2.5rem; }  /* 40px */
+    .band    { padding-block: 3.5rem; }  /* 56px */
+    .band-lg { padding-block: 5rem; }    /* 80px */
+    .band-xl { padding-block: 7rem; }    /* 112px */
+  }
+
+  /* 見た目を変えずにタップ領域を 44px 以上へ広げる。
+     親に position:relative があるとその中に収まるので、独立要素に付けること。 */
+  .hit { position: relative; }
+  .hit::after { content: ''; position: absolute; inset: -6px; }
+
+}
+
+/* ============================================================
+   3b. 面の段差 と モーション（段階的な出現・高さの展開）
+   ここは @layer に入れない。@layer components に置くと Tailwind が
+   「content に出てこないクラス」として削除してしまい、他エリアが使い始めるまで
+   CSS が存在しない＝レビュー時に効かない、という事故になるため。
+   モーションはすべて §5 の prefers-reduced-motion ガードで無効化される。
+   ============================================================ */
+
+/* 沈んだ帯（扉・編集帯・カテゴリ帯）の上下端。
+   地色差（sunken:page = 1.23:1）だけでは大きな面の切り替わりが読みにくいので、
+   線を1本足して段差を明示する。border ユーティリティと衝突しない inset shadow で持つ。
+   （下端だけの .edge-b も持っていたが、帯は必ず上下1対で使うため使い道が無く削除した） */
+.edge-y {
+  box-shadow:
+    inset 0 1px 0 theme(colors.line-strong),
+    inset 0 -1px 0 theme(colors.line-strong);
+}
+
+/* 段階的な出現。並びの親に .stagger を付けるだけで、直下の子の animation-delay が
+   --stagger-step ずつ増える。子には別途アニメーション
+   （例 animate-rise / motion-safe:animate-rise）を付けること。
+   遅れが積み上がって「最後の1枚がいつまでも出ない」のを避けるため 8 枚で頭打ちにする。
+   刻みを変えたいときは呼び出し側で `[--stagger-step:40ms]`。
+
+   ⚠ animation-delay に !important が要る理由（実測）:
+   `animate-rise` 等の Tailwind ユーティリティは `animation:` **ショートハンド**を書くので、
+   後から適用されると animation-delay を 0s に巻き戻す。media variant（motion-safe:）付きの
+   ユーティリティは生成 CSS の最後（実測 idx 396,059 / .stagger > * は 382,682）に出るため、
+   素の詳細度では必ず負ける。ここを !important にしておくと、子が
+   `animate-rise` でも `motion-safe:animate-rise` でも段差が付く。
+   !important どうしでは詳細度の高い `.stagger > *`（0,1,0）が §5 の全称ガード（0,0,0）に
+   勝ってしまうので、この宣言だけ no-preference のときにしか出さない。
+   reduce のときは §5 の `animation-delay: 0ms !important` がそのまま効く。 */
+@media (prefers-reduced-motion: no-preference) {
+  .stagger > * { animation-delay: calc(var(--stagger-step, 70ms) * var(--stagger-i, 0)) !important; }
+}
+/* 先頭の子は明示的に 0 に戻す。--stagger-i は継承するプロパティなので、
+   .stagger を入れ子にすると（例: 署名帯の右段 .stagger > 棚 .stagger > 線画）
+   内側の1枚目が外側から受け取った値をそのまま使い、2枚目と同じ遅れになる。 */
+.stagger > *:nth-child(1)   { --stagger-i: 0; }
+.stagger > *:nth-child(2)   { --stagger-i: 1; }
+.stagger > *:nth-child(3)   { --stagger-i: 2; }
+.stagger > *:nth-child(4)   { --stagger-i: 3; }
+.stagger > *:nth-child(5)   { --stagger-i: 4; }
+.stagger > *:nth-child(6)   { --stagger-i: 5; }
+.stagger > *:nth-child(7)   { --stagger-i: 6; }
+.stagger > *:nth-child(8)   { --stagger-i: 7; }
+.stagger > *:nth-child(n+9) { --stagger-i: 8; }
+
+/* 高さ 0 ⇄ auto の展開（クーポンのアコーディオン・絞り込みの折りたたみ等）。
+   height:auto は遷移できないので grid-template-rows の 0fr → 1fr で行う。
+   使い方: <div className="reveal" data-open={open}><div>…中身…</div></div>
+   子は1つだけ置くこと（min-height:0 / overflow:hidden はこちらで当てる）。
+   開くときは entrance、閉じるときは exit と、イージングを非対称にしている。 */
+.reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--dur-base) var(--ease-exit),
+    opacity var(--dur-fast) var(--ease-exit);
+}
+.reveal > * { min-height: 0; overflow: hidden; }
+.reveal[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows var(--dur-base) var(--ease-entrance),
+    opacity var(--dur-base) var(--ease-entrance);
+}
+
+/* ============================================================
+   4. インタラクション
+   ============================================================ */
+/* 操作可能要素の状態遷移。
+   色だけでなく opacity / transform / box-shadow も既定で遷移させる。
+   ホバー以外（focus-visible・aria-expanded・group-focus-within で現れるお気に入り等）の
+   状態変化が「パッと切り替わる」のをなくすため。個別に transition-* を書いた要素は
+   ユーティリティが後勝ちするのでここは上書きされる。 */
 button,
-a {
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
+a,
+summary,
+input,
+select,
+textarea,
+[role='button'] {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke,
+    opacity, box-shadow, transform;
+  transition-timing-function: var(--ease-standard);
+  transition-duration: var(--dur-fast);
 }
 
 /* 全ての操作可能要素にキーボードフォーカス時の統一されたリングを付与する。
-   マウス/タッチ操作時は :focus-visible が発火しないため見た目は変わらない。 */
+   マウス/タッチ操作時は :focus-visible が発火しないため見た目は変わらない。
+   brand-400 は対 page 2.65:1 で WCAG 2.2 の 3:1 を満たさないため brand-600（5.5:1）にする。 */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid #5FA19A;
-  outline-offset: 2px;
+  outline: 2px solid #2A6B63;
+  outline-offset: 3px;
+  border-radius: inherit;
 }
 
+/* 暗い帯の中は brand-300（対 brand-950 で 8.0:1） */
+.on-dark a:focus-visible,
+.on-dark button:focus-visible {
+  outline-color: #8FC0BA;
+}
+
+/* ============================================================
+   5. prefers-reduced-motion の一括ガード
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================
+   6. AIアシスタント（既存。変更なし）
+   ============================================================ */
 /* AIアシスタント: 商品リストをパネルの「実幅」に応じて多段化する。
    ビューポート基準（lg 等）だと normal/wide/full やモバイル全画面で
    実効幅が一致せず、ワイド画面でも単一列のままになる問題を避けるため、

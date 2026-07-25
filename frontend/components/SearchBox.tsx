@@ -43,6 +43,23 @@ const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 250;
 
 /**
+ * プレースホルダは「文字が切れない一番長い版」を実測で選ぶ。
+ *
+ * ヘッダーの検索欄は flex-1 で、ログイン状態（ナビの項目数）とビューポート幅の
+ * 掛け合わせで幅が 190px〜670px まで動く。固定文にすると必ずどこかで
+ * 「…雨の日に便利ﾅ」のように 1 文字ぶった切られて不良表示に見えるため、
+ * ブレークポイントではなく入力欄の実幅（＝ ResizeObserver の contentRect）で
+ * 出し分ける。しきい値は各文言の実測レンダリング幅に余裕を足した値。
+ */
+const PLACEHOLDERS = [
+  { minTextWidth: 372, text: '商品名や雰囲気で検索（例: 雨の日に便利なもの）' },
+  { minTextWidth: 168, text: '商品名や雰囲気で検索' },
+  { minTextWidth: 0, text: '検索' },
+] as const;
+// SSR とハイドレーション直後の 1 フレームで使う既定値。実測前でも破綻しない中間の版。
+const DEFAULT_PLACEHOLDER = PLACEHOLDERS[1].text;
+
+/**
  * ドロップダウンに並ぶ選択肢のフラットなモデル。
  * 履歴・キーワード候補・商品候補が混在するため、種別付きの 1 次元配列に正規化し、
  * ↑↓ / Enter / aria-activedescendant がどの種別でも同じインデックスで一貫して動くようにする。
@@ -88,6 +105,8 @@ export default function SearchBox({
   const [open, setOpen] = useState(false);
   // キーボードでハイライト中の候補（options 配列のインデックス）。-1 は「未選択」。
   const [activeIndex, setActiveIndex] = useState(-1);
+  // 入力欄の文字が入る幅（padding/border を除く）。null は「未計測」。
+  const [textWidth, setTextWidth] = useState<number | null>(null);
 
   const listboxId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -179,6 +198,25 @@ export default function SearchBox({
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus();
   }, [autoFocus]);
+
+  // 入力欄の実幅を監視してプレースホルダの版を切り替える。
+  // ヘッダーの検索欄はナビの項目数（ログイン状態）でも幅が変わるので、
+  // メディアクエリではなく実測でないと「文字の途中で切れる」を潰せない。
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentRect;
+      if (box) setTextWidth(box.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const placeholder =
+    textWidth === null
+      ? DEFAULT_PLACEHOLDER
+      : (PLACEHOLDERS.find((p) => textWidth >= p.minTextWidth) ?? PLACEHOLDERS[2]).text;
 
   // URL の search パラメータが変わったら検索欄へ反映する（リンク遷移・ブラウザ戻る等）。
   // タイピング中の値を潰さないよう、パラメータが実際に変化したときだけ setQuery する。
@@ -327,7 +365,7 @@ export default function SearchBox({
             }}
             onBlur={() => setOpen(false)}
             onKeyDown={handleKeyDown}
-            placeholder="商品名や雰囲気で検索（例: 雨の日に便利なもの）"
+            placeholder={placeholder}
             aria-label="商品を検索"
             role="combobox"
             aria-expanded={showList}
@@ -335,8 +373,10 @@ export default function SearchBox({
             aria-autocomplete="list"
             aria-activedescendant={activeIndex >= 0 ? optionId(activeIndex) : undefined}
             autoComplete="off"
-            className={`w-full rounded-l-md border border-gray-300 pl-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 ${
-              query ? 'pr-9' : 'pr-3'
+            /* placeholder の色は指定しない。globals.css の input::placeholder 既定
+               （ink-muted＝AA 合格）に必ず落とすため、ここで placeholder:text-* を書かない。 */
+            className={`w-full rounded-l-md border border-line-input bg-surface pl-3.5 text-body text-ink focus:outline-none focus:ring-2 focus:ring-brand-600 ${
+              query ? 'pr-10' : 'pr-3'
             } ${inputClassName}`}
           />
           {query && (
@@ -346,7 +386,7 @@ export default function SearchBox({
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleClear}
               aria-label="検索キーワードをクリア"
-              className="absolute right-1.5 top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-ink-faint transition-colors duration-fast hover:bg-sunken hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
             >
               <XMarkIcon className="h-4 w-4" />
             </button>
@@ -354,7 +394,7 @@ export default function SearchBox({
         </div>
         <button
           type="submit"
-          className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-r-md border border-l-0 border-gray-300 bg-white px-4 text-sm text-gray-700 transition-colors duration-150 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 ${buttonClassName}`}
+          className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-r-md border border-l-0 border-line-input bg-sunken px-4 text-body text-ink-soft transition-colors duration-fast hover:bg-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${buttonClassName}`}
         >
           <SearchIcon />
           検索
@@ -366,20 +406,22 @@ export default function SearchBox({
           id={listboxId}
           role="listbox"
           aria-label="検索候補"
-          className="absolute left-0 right-0 top-full z-40 mt-1 max-h-96 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg"
+          className="absolute left-0 right-0 top-full z-40 mt-2 max-h-96 overflow-y-auto rounded-xl bg-surface py-1.5 shadow-float"
         >
           {/* 履歴モードの見出し（「最近の検索」＋全消去）。option ではないので role=presentation。 */}
           {isHistoryMode && (
             <li
               role="presentation"
-              className="flex items-center justify-between px-3 py-1.5 text-xs font-medium text-gray-500"
+              className="flex items-center justify-between gap-3 px-3.5 py-2 text-caption font-medium text-ink-muted"
             >
               <span>最近の検索</span>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={handleClearHistory}
-                className="rounded text-gray-400 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                /* 読ませる文字なので ink-faint（3.65:1）ではなく ink-muted（AA）に置く。
+                   ink-faint は罫・アイコン等の非テキスト装飾専用。 */
+                className="rounded text-caption text-ink-muted transition-colors duration-fast hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
               >
                 履歴を消去
               </button>
@@ -397,7 +439,7 @@ export default function SearchBox({
                 {showProductHeading && (
                   <li
                     role="presentation"
-                    className="mt-1 border-t border-gray-100 px-3 pb-1 pt-2 text-xs font-medium text-gray-500"
+                    className="mt-1.5 border-t border-line px-3.5 pb-1 pt-2.5 text-caption font-medium text-ink-muted"
                   >
                     商品
                   </li>
@@ -413,8 +455,8 @@ export default function SearchBox({
                     selectOption(opt);
                   }}
                   onMouseEnter={() => setActiveIndex(i)}
-                  className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-sm ${
-                    active ? 'bg-brand-50 text-brand-700' : 'text-gray-700'
+                  className={`flex cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-body transition-colors duration-fast ${
+                    active ? 'bg-brand-50 text-brand-700' : 'text-ink-soft'
                   }`}
                 >
                   {opt.kind === 'product' ? (
@@ -483,7 +525,7 @@ function KeywordOptionRow({
 }) {
   return (
     <>
-      <SearchIcon className="h-4 w-4 shrink-0 text-gray-400" />
+      <SearchIcon className="h-4 w-4 shrink-0 text-ink-faint" />
       <span className="min-w-0 flex-1 truncate">
         {/* 履歴は入力が短い（<2 文字）ので基本ハイライトされない。キーワード候補のみ光る。 */}
         {highlightMatch(value, query)}
@@ -498,7 +540,7 @@ function KeywordOptionRow({
             onRemove();
           }}
           aria-label={`「${value}」を履歴から削除`}
-          className="shrink-0 rounded-full p-1 text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          className="shrink-0 rounded-full p-1 text-line-strong transition-colors duration-fast hover:bg-sunken hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
         >
           <XMarkIcon className="h-3.5 w-3.5" />
         </button>
@@ -512,7 +554,8 @@ function ProductOptionRow({ product }: { product: SuggestProduct }) {
   const onSale = product.sale_price != null && product.sale_price < product.price;
   return (
     <>
-      <span className="h-10 w-10 shrink-0 overflow-hidden rounded bg-gray-100">
+      {/* 画像が載る面はイラストの地色（tile）にして額縁を消す。 */}
+      <span className="h-11 w-11 shrink-0 overflow-hidden rounded-md bg-tile">
         {product.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -528,11 +571,11 @@ function ProductOptionRow({ product }: { product: SuggestProduct }) {
           />
         ) : null}
       </span>
-      <span className="min-w-0 flex-1 truncate text-gray-800">{product.name}</span>
+      <span className="min-w-0 flex-1 truncate text-ink">{product.name}</span>
       <span className="flex shrink-0 items-baseline gap-1.5">
-        <Price value={product.effective_price} size="sm" />
+        <Price value={product.effective_price} size="sm" className="tnum" />
         {onSale && (
-          <span className="text-xs text-gray-400 line-through">
+          <span className="tnum text-caption text-ink-muted line-through decoration-line-strong">
             ¥{product.price.toLocaleString()}
           </span>
         )}

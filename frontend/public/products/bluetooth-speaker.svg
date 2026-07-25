@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
-  <rect width="600" height="600" fill="#F5F4F1"/>
+  <rect width="600" height="600" fill="#F2ECE1"/>
   <!-- ground shadow -->
-  <ellipse cx="300" cy="480" rx="185" ry="20" fill="#E7E5E0"/>
+  <ellipse cx="300" cy="480" rx="185" ry="20" fill="#E6DDCC"/>
   <!-- lanyard -->
   <path d="M448 232 q52 -28 44 -76 q-6 -34 -44 -34 q-30 0 -36 28" fill="none" stroke="#6B7280" stroke-width="12" stroke-linecap="round"/>
   <!-- speaker body -->

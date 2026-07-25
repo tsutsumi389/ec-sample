@@ -49,8 +49,8 @@ const TYPE_META: Record<
   { border: string; icon: (props: { className?: string }) => JSX.Element; iconColor: string }
 > = {
   success: { border: 'border-l-brand-600', icon: CheckCircleIcon, iconColor: 'text-brand-600' },
-  error: { border: 'border-l-red-500', icon: AlertCircleIcon, iconColor: 'text-red-500' },
-  info: { border: 'border-l-gray-400', icon: InfoIcon, iconColor: 'text-gray-500' },
+  error: { border: 'border-l-critical-600', icon: AlertCircleIcon, iconColor: 'text-critical-600' },
+  info: { border: 'border-l-line-strong', icon: InfoIcon, iconColor: 'text-ink-muted' },
 };
 
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) => void }) {
@@ -92,18 +92,22 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
       aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
-      className={`pointer-events-auto flex items-start gap-3 rounded-md border border-gray-200 border-l-4 ${meta.border} bg-white px-4 py-3 shadow-lg transition-all duration-200 ease-out ${
-        shown ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+      // 出は entrance でゆっくり置かれ、消えは exit で速く引かれる（＝非対称）。
+      // reduced-motion では globals.css §5 が transition-duration を 0.01ms に潰す。
+      className={`pointer-events-auto flex items-start gap-3 rounded-lg border-l-4 ${meta.border} bg-surface px-4 py-3 shadow-float transition-all ${
+        shown
+          ? 'translate-y-0 scale-100 opacity-100 duration-base ease-entrance'
+          : 'translate-y-2 scale-[0.98] opacity-0 duration-fast ease-exit'
       }`}
     >
       <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${meta.iconColor}`} />
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-gray-800">{toast.message}</p>
+        <p className="text-body text-ink-soft">{toast.message}</p>
         {toast.action && (
           <Link
             href={toast.action.href}
             onClick={handleClose}
-            className="mt-1.5 inline-block text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 rounded"
+            className="mt-1.5 inline-block text-body font-medium text-brand-700 hover:text-brand-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
           >
             {toast.action.label}
           </Link>
@@ -113,7 +117,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
         type="button"
         onClick={handleClose}
         aria-label="通知を閉じる"
-        className="-mr-1 -mt-1 shrink-0 rounded p-1 text-gray-400 hover:text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+        className="hit -mr-1 -mt-1 shrink-0 rounded p-1 text-ink-faint hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
       >
         <CloseIcon className="h-4 w-4" />
       </button>

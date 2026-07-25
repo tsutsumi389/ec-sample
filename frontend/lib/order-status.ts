@@ -1,5 +1,5 @@
 import type { OrderStatus } from './types';
-import type { BadgeVariant } from '@/components/Badge';
+import type { BadgeStrength, BadgeVariant } from '@/components/Badge';
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   pending: '未処理',
@@ -10,15 +10,23 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 };
 
 /**
- * 注文ステータス → 共通 Badge の variant。ステータスの色分けはここに一本化する。
- * paid（支払い済み=info/brand）と shipped（発送済み=purple）は別色にして取り違えを防ぐ。
+ * 注文ステータス → 共通 Badge の見た目。ステータスの色分けはここに一本化する
+ * （管理画面・注文履歴・注文詳細で必ずこの表を参照すること）。
+ *
+ * 色相は増やさない。進行の4段は brand の**濃度**で描き分け、濃いほど先に進んでいる
+ * ことを表す。まだ手が付いていない pending だけ「要対応」の意味で柿渋（accent）にし、
+ * cancelled は流れから外れるので無彩の neutral に落とす。
+ * 使い方: <Badge {...ORDER_STATUS_BADGE[status]}>{ORDER_STATUS_LABELS[status]}</Badge>
  */
-export const ORDER_STATUS_BADGE_VARIANTS: Record<OrderStatus, BadgeVariant> = {
-  pending: 'warning',
-  paid: 'info',
-  shipped: 'purple',
-  delivered: 'success',
-  cancelled: 'neutral',
+export const ORDER_STATUS_BADGE: Record<
+  OrderStatus,
+  { variant: BadgeVariant; strength: BadgeStrength }
+> = {
+  pending: { variant: 'accent', strength: 'base' },
+  paid: { variant: 'brand', strength: 'soft' },
+  shipped: { variant: 'brand', strength: 'base' },
+  delivered: { variant: 'brand', strength: 'strong' },
+  cancelled: { variant: 'neutral', strength: 'base' },
 };
 
 export const ORDER_STATUS_OPTIONS: OrderStatus[] = [

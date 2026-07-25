@@ -113,7 +113,7 @@ function CouponFormModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-invert/50 flex items-center justify-center z-50 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="coupon-form-title"
@@ -368,7 +368,7 @@ export default function AdminCouponsPage() {
                       {coupon.expires_at ? new Date(coupon.expires_at).toLocaleString('ja-JP') : '無期限'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <Badge variant={coupon.is_active ? 'success' : 'neutral'}>
+                      <Badge variant={coupon.is_active ? 'brand' : 'neutral'}>
                         {coupon.is_active ? '有効' : '無効'}
                       </Badge>
                     </td>

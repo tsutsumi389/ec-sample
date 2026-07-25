@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="472" rx="164" ry="20" fill="#E6DDCC"/>
+  <!-- pom -->
+  <circle cx="300" cy="132" r="46" fill="#D97706"/>
+  <circle cx="286" cy="120" r="16" fill="#E0AC6B"/>
+  <!-- crown -->
+  <path d="M300 168 q142 0 142 176 l-284 0 q0 -176 142 -176 z" fill="#2A6B63"/>
+  <!-- knit ribs -->
+  <g fill="none" stroke="#22574F" stroke-width="9" stroke-linecap="round" opacity="0.7">
+    <path d="M226 344 q-4 -108 34 -158"/>
+    <path d="M300 344 l0 -172"/>
+    <path d="M374 344 q4 -108 -34 -158"/>
+  </g>
+  <path d="M300 168 q-70 0 -104 60 q28 -34 62 -40 q-30 42 -30 156 l-28 0 q0 -176 100 -176 z" fill="#5FA19A" opacity="0.45"/>
+  <!-- brim -->
+  <path d="M144 342 l312 0 q16 0 16 18 l0 62 q0 18 -16 18 l-312 0 q-16 0 -16 -18 l0 -62 q0 -18 16 -18 z" fill="#22574F"/>
+  <g fill="none" stroke="#5FA19A" stroke-width="8" stroke-linecap="round" opacity="0.8">
+    <path d="M176 366 l0 48"/>
+    <path d="M226 366 l0 48"/>
+    <path d="M276 366 l0 48"/>
+    <path d="M326 366 l0 48"/>
+    <path d="M376 366 l0 48"/>
+    <path d="M426 366 l0 48"/>
+  </g>
+  <!-- label -->
+  <rect x="396" y="384" width="44" height="18" rx="6" fill="#F2ECE1"/>
+</svg>

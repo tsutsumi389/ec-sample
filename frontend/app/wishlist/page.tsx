@@ -10,11 +10,12 @@ import { useToast } from '@/lib/toast-context';
 import { useCart } from '@/lib/cart-context';
 import ProductCard from '@/components/ProductCard';
 import { ProductGridSkeleton } from '@/components/Skeleton';
-import Breadcrumbs from '@/components/Breadcrumbs';
+import PageMasthead from '@/components/PageMasthead';
 import EmptyState from '@/components/EmptyState';
 import { PRODUCT_STATUS_META } from '@/lib/productStatus';
-import { btnPrimary } from '@/lib/buttonStyles';
-import { HeartIcon, CartIcon } from '@/components/Icons';
+import { btn } from '@/lib/buttonStyles';
+import { recommendGrid } from '@/lib/gridStyles';
+import { CartIcon } from '@/components/Icons';
 
 /** 購入可否と、追加ボタンに出す文言を status / stock から導出する。 */
 function addToCartState(product: Product): { disabled: boolean; label: string } {
@@ -88,63 +89,79 @@ export default function WishlistPage() {
   const showSkeleton = authLoading || !user || loading;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
-      <Breadcrumbs items={[{ label: 'ホーム', href: '/' }, { label: 'お気に入り' }]} />
-      <h1 className="text-2xl font-bold mt-3 mb-6">お気に入り</h1>
+    <>
+      {/* 扉。全ページ共通の PageMasthead に寄せる（幅は本文と同じ wrap ＝ width="default"）。 */}
+      <PageMasthead
+        eyebrow="WISHLIST"
+        title="お気に入り"
+        subtitle="いつか迎えたい道具の栞。"
+        width="default"
+        motif="umbrella"
+        breadcrumbs={[{ label: 'ホーム', href: '/' }, { label: 'お気に入り' }]}
+        right={
+          !showSkeleton && items.length > 0 ? (
+            <p className="whitespace-nowrap text-body text-ink-muted">
+              全 <span className="text-num-lg tnum text-ink">{items.length}</span> 件
+            </p>
+          ) : undefined
+        }
+      />
 
-      {error && (
-        <p role="alert" className="text-red-600 mb-4">
-          {error}
-        </p>
-      )}
+      <div className="wrap band-lg">
+        {error && (
+          <p role="alert" className="mb-6 text-body text-critical-700">
+            {error}
+          </p>
+        )}
 
-      {showSkeleton && <ProductGridSkeleton count={8} />}
+        {showSkeleton && <ProductGridSkeleton count={8} />}
 
-      {!showSkeleton && items.length === 0 && (
-        <EmptyState
-          icon={<HeartIcon />}
-          title="お気に入りの道具をここに集めましょう"
-          description="気になった道具を保存しておくと、いつでも見返せます。まずは商品を眺めてみませんか。"
-          action={
-            <Link href="/" className={btnPrimary}>
-              商品を見る
-            </Link>
-          }
-        />
-      )}
+        {!showSkeleton && items.length === 0 && (
+          <EmptyState
+            title="お気に入りの道具をここに集めましょう"
+            description="気になった道具を保存しておくと、いつでも見返せます。まずは商品を眺めてみませんか。"
+            action={
+              <Link href="/products" className={btn('primary', 'lg')}>
+                商品を見る
+              </Link>
+            }
+          />
+        )}
 
-      {!showSkeleton && items.length > 0 && (
-        <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 items-stretch">
-          {items.map((item) => {
-            const { disabled, label } = addToCartState(item.product);
-            const adding = addingId === item.product.id;
-            return (
-              <li key={item.id} className="flex h-full flex-col">
-                <div className="relative flex-1">
-                  <ProductCard product={item.product} hideWishlistButton />
+        {!showSkeleton && items.length > 0 && (
+          <ul className={`grid items-stretch ${recommendGrid}`}>
+            {items.map((item) => {
+              const { disabled, label } = addToCartState(item.product);
+              const adding = addingId === item.product.id;
+              return (
+                <li key={item.id} className="flex h-full min-w-0 flex-col">
+                  <div className="relative flex-1">
+                    <ProductCard product={item.product} hideWishlistButton />
+                    {/* カードのハートと同じ位置に置く（お気に入り一覧では解除だけを出す） */}
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(item.product.id)}
+                      aria-label={`「${item.product.name}」をお気に入りから削除`}
+                      className="absolute right-3 top-3 z-20 inline-flex h-9 items-center rounded-full bg-surface/85 px-3 text-caption text-ink-muted shadow-paper backdrop-blur-sm transition-colors duration-fast ease-standard hover:text-critical-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                    >
+                      解除
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => handleRemove(item.product.id)}
-                    aria-label={`「${item.product.name}」をお気に入りから削除`}
-                    className="absolute top-2 right-2 z-20 inline-flex items-center rounded-full bg-white/90 shadow-sm border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:text-red-600 hover:border-red-200 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                    onClick={() => handleAddToCart(item.product)}
+                    disabled={disabled || adding}
+                    className={`${btn('secondary', 'sm')} mt-3 w-full`}
                   >
-                    解除
+                    {!disabled && <CartIcon className="h-4 w-4" />}
+                    {adding ? '追加中...' : label}
                   </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleAddToCart(item.product)}
-                  disabled={disabled || adding}
-                  className={`${btnPrimary} mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs`}
-                >
-                  {!disabled && <CartIcon className="h-4 w-4" />}
-                  {adding ? '追加中...' : label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </>
   );
 }

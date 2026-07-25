@@ -38,6 +38,10 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      # next/font は Google Fonts のスライスを数百個まとめて取得する。このコンテナには
+      # IPv6 の経路が無く、名前解決が AAAA を先に返すと ENETUNREACH / ETIMEDOUT で
+      # 大量に失敗し、和文フォントが丸ごとフォールバックに落ちる。IPv4 を優先させる。
+      NODE_OPTIONS: --dns-result-order=ipv4first
     volumes:
       - ./frontend:/app
       - /app/node_modules

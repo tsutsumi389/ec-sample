@@ -4,9 +4,11 @@ import { Suspense, useEffect, useState } from 'react';
 import { notFound } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import type { Category } from '@/lib/types';
-import Breadcrumbs, { type BreadcrumbItem } from '@/components/Breadcrumbs';
+import { type BreadcrumbItem } from '@/components/Breadcrumbs';
 import ProductListing from '@/components/ProductListing';
 import { ProductGridSkeleton, Skeleton } from '@/components/Skeleton';
+import ErrorNotice from '@/components/ErrorNotice';
+import { listingGrid } from '@/lib/gridStyles';
 
 /**
  * カテゴリ別の商品一覧ページ（/categories/[id]）。
@@ -58,13 +60,23 @@ export default function CategoryPage({ params }: { params: { id: string } }) {
   if (missing) notFound();
 
   if (loading) {
-    // パンくず＋見出し＋グリッドのレイアウトを予約して、解決後の段差を防ぐ。
+    // マストヘッド帯（パンくず＋見出し）＋フィルタ帯＋グリッドの骨格を予約して、解決後の段差を防ぐ。
     return (
-      <div className="max-w-6xl mx-auto px-4 py-8" aria-hidden="true">
-        <Skeleton className="h-4 w-48" />
-        <Skeleton className="mt-6 h-7 w-40" />
-        <div className="mt-6">
-          <ProductGridSkeleton count={12} />
+      <div aria-hidden="true">
+        <div className="bg-sunken band-lg">
+          <div className="wrap-wide">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="mt-6 h-3 w-24" />
+            <Skeleton className="mt-4 h-9 w-56" />
+          </div>
+        </div>
+        <div className="border-y border-line bg-sunken/95">
+          <div className="wrap-wide py-3">
+            <Skeleton className="h-11 w-full max-w-md" />
+          </div>
+        </div>
+        <div className="wrap-wide band-lg">
+          <ProductGridSkeleton count={12} className={listingGrid} />
         </div>
       </div>
     );
@@ -72,17 +84,11 @@ export default function CategoryPage({ params }: { params: { id: string } }) {
 
   if (error || !category) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <div role="alert" className="flex flex-col items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="text-sm text-red-700">{error || 'カテゴリの取得に失敗しました'}</p>
-          <button
-            type="button"
-            onClick={() => setReloadKey((k) => k + 1)}
-            className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 transition-colors duration-150 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2"
-          >
-            再読み込み
-          </button>
-        </div>
+      <div className="wrap band-lg">
+        <ErrorNotice
+          description={error || 'カテゴリの取得に失敗しました'}
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
       </div>
     );
   }
@@ -93,23 +99,20 @@ export default function CategoryPage({ params }: { params: { id: string } }) {
   ];
 
   return (
-    <>
-      {/* 一覧本体（ProductListing）が py-8 を持つため、パンくずは上余白だけ付ける。 */}
-      <div className="max-w-6xl mx-auto px-4 pt-8 -mb-4">
-        <Breadcrumbs items={breadcrumbItems} />
-      </div>
-      <Suspense
-        fallback={
-          <div className="max-w-6xl mx-auto px-4 py-8">
-            <ProductGridSkeleton count={12} />
-          </div>
-        }
-      >
-        <ProductListing
-          basePath={`/categories/${category.id}`}
-          fixedCategory={{ id: category.id, name: category.name }}
-        />
-      </Suspense>
-    </>
+    // パンくずは ProductListing のマストヘッド帯の中で描く（帯の外に置くと
+    // 生成り地に浮いた1行が残り、帯の扉としての効きが弱まるため）。
+    <Suspense
+      fallback={
+        <div className="wrap-wide band-lg" aria-hidden="true">
+          <ProductGridSkeleton count={12} className={listingGrid} />
+        </div>
+      }
+    >
+      <ProductListing
+        basePath={`/categories/${category.id}`}
+        fixedCategory={{ id: category.id, name: category.name }}
+        breadcrumbs={breadcrumbItems}
+      />
+    </Suspense>
   );
 }

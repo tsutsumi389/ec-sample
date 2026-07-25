@@ -3,6 +3,10 @@ node_modules/
 .next/
 npm-debug.log*
 
+# 自己ホストのWebフォント（13MB超）。`make fonts` で生成する。
+frontend/public/fonts/
+frontend/app/fonts.css
+
 # Python
 __pycache__/
 *.pyc

@@ -211,11 +211,6 @@ export interface RecommendationItem {
   reason: string | null;
 }
 
-export interface RecommendationResponse {
-  source: 'llm' | 'fallback';
-  items: RecommendationItem[];
-}
-
 /**
  * ホーム（GET /home）のレーン描画形式。
  * バックエンドはこの3つ以外を返さない契約。

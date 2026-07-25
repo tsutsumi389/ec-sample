@@ -9,13 +9,18 @@ import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
 import { ChevronRightIcon } from '@/components/Icons';
 
-/** ステータスの状態色はテキスト色で表現（selectの造形は他の入力と同じ1系統に統一） */
+/**
+ * ステータスの状態色はテキスト色で表現（select の造形は他の入力と同じ1系統に統一）。
+ * 色は lib/order-status.ts の ORDER_STATUS_BADGE と同じ読み方にする
+ * ＝ pending だけ柿渋（要対応）、進行の3段は brand の濃度、cancelled は無彩。
+ * ⚠ 体系外のパレット（blue / purple / green）を使わないこと。
+ */
 const STATUS_TEXT_COLORS: Record<OrderStatus, string> = {
-  pending: 'text-amber-700',
-  paid: 'text-blue-700',
-  shipped: 'text-purple-700',
-  delivered: 'text-green-700',
-  cancelled: 'text-gray-500',
+  pending: 'text-accent-700',
+  paid: 'text-brand-600',
+  shipped: 'text-brand-700',
+  delivered: 'text-brand-900',
+  cancelled: 'text-ink-muted',
 };
 
 export default function AdminOrdersPage() {

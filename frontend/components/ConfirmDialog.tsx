@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { btn, btnPrimary, btnSecondary } from '@/lib/buttonStyles';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -15,8 +15,8 @@ interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
-const dangerConfirmClass =
-  'bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 text-sm font-medium rounded-md transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed';
+/** 破壊的操作の確定ボタン。キャンセルボタン（btnSecondary）と高さを揃えるため btn() から作る。 */
+const dangerConfirmClass = btn('danger', 'md');
 
 /**
  * 確認ダイアログ。Esc・オーバーレイクリックで onCancel、開いたら確認ボタンにフォーカス、
@@ -102,7 +102,7 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 transition-opacity duration-150 ${
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-invert/50 transition-opacity duration-base ease-standard ${
         entered ? 'opacity-100' : 'opacity-0'
       }`}
       onClick={() => {
@@ -116,15 +116,15 @@ export default function ConfirmDialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-sm bg-white rounded-lg shadow-xl p-6 transition-all duration-150 ease-out ${
+        className={`w-full max-w-sm rounded-2xl bg-surface p-6 shadow-float transition-all duration-base ease-standard ${
           entered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
         }`}
       >
-        <h2 id={titleId} className="text-base font-semibold text-gray-900">
+        <h2 id={titleId} className="font-mincho text-h3 text-ink jp-head">
           {title}
         </h2>
         {description && (
-          <p id={descId} className="mt-2 text-sm text-gray-600">
+          <p id={descId} className="mt-2 text-body text-ink-muted">
             {description}
           </p>
         )}

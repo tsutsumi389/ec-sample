@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="500" rx="150" ry="18" fill="#E6DDCC"/>
+  <!-- air flow -->
+  <g fill="none" stroke="#B9D9D5" stroke-width="10" stroke-linecap="round">
+    <path d="M452 200 q56 24 0 48"/>
+    <path d="M470 268 q72 30 0 60"/>
+    <path d="M452 350 q56 24 0 48"/>
+  </g>
+  <!-- outer ring -->
+  <circle cx="290" cy="288" r="152" fill="#2A6B63"/>
+  <circle cx="290" cy="288" r="126" fill="#22574F"/>
+  <circle cx="290" cy="288" r="112" fill="#F2ECE1"/>
+  <!-- guard rings -->
+  <g fill="none" stroke="#8FC0BA" stroke-width="6">
+    <circle cx="290" cy="288" r="92"/>
+    <circle cx="290" cy="288" r="64"/>
+    <circle cx="290" cy="288" r="36"/>
+  </g>
+  <!-- blades -->
+  <g fill="#5FA19A" opacity="0.9">
+    <path d="M290 288 q-14 -84 44 -96 q26 44 -44 96 z"/>
+    <path d="M290 288 q84 -14 96 44 q-44 26 -96 -44 z"/>
+    <path d="M290 288 q14 84 -44 96 q-26 -44 44 -96 z"/>
+    <path d="M290 288 q-84 14 -96 -44 q44 -26 96 44 z"/>
+  </g>
+  <circle cx="290" cy="288" r="22" fill="#22574F"/>
+  <circle cx="290" cy="288" r="9" fill="#D97706"/>
+  <!-- neck + base -->
+  <rect x="272" y="424" width="36" height="52" fill="#4B5563"/>
+  <path d="M198 476 l184 0 q16 0 16 14 l0 8 q0 12 -16 12 l-184 0 q-16 0 -16 -12 l0 -8 q0 -14 16 -14 z" fill="#6B7280"/>
+  <rect x="252" y="444" width="76" height="14" rx="7" fill="#B9D9D5"/>
+</svg>

@@ -126,13 +126,13 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-invert/50 flex items-center justify-center z-50 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-form-title"
       ref={dialogRef}
     >
-      <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-float max-h-[90vh] overflow-y-auto">
         <h2 id="product-form-title" className="text-lg font-bold mb-4">{product ? '商品を編集' : '商品を新規作成'}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

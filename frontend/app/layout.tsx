@@ -2,7 +2,9 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Noto_Sans_JP } from 'next/font/google';
+// フォントは自己ホスト。next/font/google は使わない（理由は scripts/fetch-fonts.mjs 参照）。
+// fonts.css が @font-face と --font-sans-jp / --font-mincho / --font-num を :root に定義する。
+import './fonts.css';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 import { CartProvider } from '@/lib/cart-context';
@@ -13,11 +15,11 @@ import Footer from '@/components/Footer';
 import AssistantWidget from '@/components/assistant/AssistantWidget';
 import AnalyticsTracker from '@/components/AnalyticsTracker';
 
-const notoSansJP = Noto_Sans_JP({
-  weight: ['400', '500', '700'],
-  subsets: ['latin'],
-  display: 'swap',
-});
+// 収録ウェイト（fonts.css）:
+//   Noto Sans JP 400/700 … 本文・UI。font-medium(500) は 400 にマッチする。
+//   Zen Old Mincho 700 …… 見出し・ブランド表記専用。900 は持たないので指定しないこと
+//                          （合成ボールドは明朝の線を潰す。text-display も 700 で組む）。
+//   Inter 400/500/600/700 … 価格・件数などの数値専用。
 
 const SITE_NAME = 'Hibino';
 const SITE_DESCRIPTION = 'Hibino — 日々の暮らしの道具店';
@@ -57,7 +59,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <title>{SITE_NAME}</title>
         <meta name="description" content={SITE_DESCRIPTION} />
       </head>
-      <body className={`${notoSansJP.className} min-h-screen bg-gray-50 text-gray-900 flex flex-col`}>
+      <body className="font-sans min-h-screen bg-page text-ink-soft flex flex-col antialiased">
         <AuthProvider>
           {/* 実験の割り当てはログイン状態に応じて取り直すため AuthProvider の内側に置く。 */}
           <ExperimentProvider>
@@ -65,7 +67,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <ToastProvider>
                 <AnalyticsTracker />
                 <Header />
-                <main className="flex-1">{children}</main>
+                {/*
+                  下端のセーフエリアはここでは取らない。FAB は position:fixed なので
+                  main に padding を足しても被りは変わらず、全ページ一律で 80px の
+                  無地帯が本文と奥付のあいだに挟まるだけだった（モバイルで顕著）。
+                  固定バーを持つページ（商品詳細）だけが自分の器で逃げ幅を持つ。
+                */}
+                {/* スキップリンク（components/Header.tsx 先頭）の着地点。
+                    tabIndex={-1} が無いと href="#main" でスクロールはしてもフォーカスが
+                    移らず、次の Tab がヘッダーの先頭へ戻ってしまう。 */}
+                <main id="main" tabIndex={-1} className="flex-1 focus-visible:outline-none">
+                  {children}
+                </main>
                 <Footer />
                 <AssistantWidget />
               </ToastProvider>

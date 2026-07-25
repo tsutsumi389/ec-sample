@@ -352,25 +352,25 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
       aria-modal="true"
       aria-label="ショッピングアシスタント"
       onKeyDown={handleKeyDown}
-      className={`fixed inset-0 z-50 flex flex-col bg-white shadow-2xl transition-all duration-300 ease-out sm:rounded-2xl sm:border sm:border-gray-200 ${
+      className={`fixed inset-0 z-50 flex flex-col bg-surface shadow-float transition-all duration-slow ease-standard sm:rounded-2xl ${
         SIZE_CLASSES[size]
       } ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}
     >
       {/* ヘッダー */}
-      <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
           <SparklesIcon className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold leading-tight text-gray-900">Hibino の店員AI</p>
-          <p className="text-xs leading-tight text-gray-600">お買い物のご相談を承ります</p>
+          <p className="font-mincho text-base font-bold leading-tight text-ink">Hibino の店員AI</p>
+          <p className="text-caption leading-tight text-ink-muted">お買い物のご相談を承ります</p>
         </div>
         <button
           type="button"
           onClick={handleReset}
           title="新しい会話を始める"
           aria-label="新しい会話を始める"
-          className="inline-flex min-h-[44px] items-center gap-1 rounded-md px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:min-h-0"
+          className="inline-flex min-h-[44px] items-center gap-1 rounded-md px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0"
         >
           <ArrowPathIcon className="h-4 w-4" />
           <span className="hidden sm:inline">新しい会話</span>
@@ -381,7 +381,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
           onClick={cycleSize}
           title={SIZE_LABELS[size]}
           aria-label={SIZE_LABELS[size]}
-          className="hidden h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:inline-flex"
+          className="hidden h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:inline-flex"
         >
           {size === 'full' ? (
             <ArrowsPointingInIcon className="h-5 w-5" />
@@ -393,7 +393,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
           type="button"
           onClick={onClose}
           aria-label="閉じる"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:h-9 sm:w-9"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:h-9 sm:w-9"
         >
           <XMarkIcon className="h-5 w-5" />
         </button>
@@ -404,7 +404,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="assistant-scroll h-full space-y-4 overflow-y-auto bg-gray-50 px-4 py-4"
+          className="assistant-scroll h-full space-y-4 overflow-y-auto bg-page px-4 py-4"
         >
           {initializing ? (
             <div className="flex justify-center py-8">
@@ -416,7 +416,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
                 // ウェルカムは上詰めで各セクションを一定間隔（gap-4）に並べ、
                 // chips とガイドの間に大きな空白が残らないようにする。
                 <div className="mx-auto flex max-w-[70ch] flex-col gap-4">
-                  <div className={`${bubbleWidth} rounded-2xl rounded-tl-sm bg-white px-4 py-3 text-sm leading-relaxed text-gray-800 shadow-sm`}>
+                  <div className={`${bubbleWidth} rounded-2xl rounded-tl-sm bg-surface px-4 py-3 text-sm leading-relaxed text-ink-soft shadow-paper`}>
                     {WELCOME_MESSAGE}
                   </div>
 
@@ -428,7 +428,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
                           key={s}
                           type="button"
                           onClick={() => handleSuggestion(s)}
-                          className="inline-flex min-h-[44px] items-center rounded-full border border-brand-200 bg-white px-3.5 py-1.5 text-xs text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:min-h-0"
+                          className="inline-flex min-h-[44px] items-center rounded-full border border-brand-200 bg-surface px-3.5 py-1.5 text-xs text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0"
                         >
                           {s}
                         </button>
@@ -444,7 +444,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
                           key={c}
                           type="button"
                           onClick={() => handleCategory(c)}
-                          className="inline-flex min-h-[44px] items-center rounded-full border border-gray-200 bg-white px-3.5 py-1.5 text-xs text-gray-700 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 sm:min-h-0"
+                          className="inline-flex min-h-[44px] items-center rounded-full border border-gray-200 bg-surface px-3.5 py-1.5 text-xs text-gray-700 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0"
                         >
                           {c}
                         </button>
@@ -452,7 +452,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-gray-200 bg-white/70 p-4">
+                  <div className="rounded-2xl bg-surface/70 p-4 shadow-paper">
                     <p className="mb-2 text-xs font-semibold text-gray-600">かんたん3ステップ</p>
                     <ol className="space-y-2">
                       {USAGE_GUIDE.map((step, i) => (
@@ -478,8 +478,8 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
                 ) : (
                   <div key={msg.id} className="space-y-2">
                     <div
-                      className={`${bubbleWidth} whitespace-pre-wrap break-words rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
-                        msg.isError ? 'bg-amber-50 text-amber-800' : 'bg-white text-gray-800'
+                      className={`${bubbleWidth} whitespace-pre-wrap break-words rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm leading-relaxed shadow-paper ${
+                        msg.isError ? 'bg-critical-50 text-critical-700' : 'bg-surface text-ink-soft'
                       }`}
                     >
                       {msg.content}
@@ -504,10 +504,10 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
 
               {sending && (
                 <div className="flex justify-start">
-                  <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm bg-white px-3 py-3 shadow-sm">
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]" />
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]" />
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" />
+                  <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm bg-surface px-3 py-3 shadow-paper">
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-line-strong [animation-delay:-0.3s]" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-line-strong [animation-delay:-0.15s]" />
+                    <span className="h-2 w-2 animate-bounce rounded-full bg-line-strong" />
                   </div>
                 </div>
               )}
@@ -520,7 +520,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
           <button
             type="button"
             onClick={scrollToBottom}
-            className="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+            className="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-xs font-medium text-white shadow-lift hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           >
             <ArrowDownIcon className="h-4 w-4" />
             新着メッセージへ移動
@@ -536,7 +536,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
       {/* 入力欄 */}
       <form
         onSubmit={handleSubmit}
-        className="border-t border-gray-200 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+        className="border-t border-line px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       >
         <div className="flex items-center gap-2">
           <input
@@ -547,13 +547,13 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
             disabled={sending}
             maxLength={MAX_INPUT_LENGTH}
             placeholder={sending ? 'AIが考えています…' : 'メッセージを入力'}
-            className="min-w-0 flex-1 rounded-full border border-gray-300 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:bg-gray-100"
+            className="min-w-0 flex-1 rounded-full border border-line-input bg-surface px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand-600 disabled:bg-sunken"
           />
           <button
             type="submit"
             disabled={sending || !input.trim()}
             aria-label="送信"
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           >
             {sending ? (
               <span
@@ -569,7 +569,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
         {/* 文字数カウンタ。上限が近づいたら警告色で残数を示す。 */}
         <div className="mt-1 flex justify-end px-1">
           <span
-            className={`text-[11px] tabular-nums ${nearLimit ? 'text-amber-600' : 'text-gray-500'}`}
+            className={`text-[11px] tabular-nums ${nearLimit ? 'text-accent-700' : 'text-ink-muted'}`}
             aria-live="polite"
           >
             {input.length}/{MAX_INPUT_LENGTH}

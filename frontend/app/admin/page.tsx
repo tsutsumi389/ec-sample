@@ -3,21 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import type { AdminOrder, Category, Coupon, OrderStatus, Product, User } from '@/lib/types';
-import { ORDER_STATUS_LABELS } from '@/lib/order-status';
+import type { AdminOrder, Category, Coupon, Product, User } from '@/lib/types';
+import { ORDER_STATUS_BADGE, ORDER_STATUS_LABELS } from '@/lib/order-status';
 import Spinner from '@/components/Spinner';
-import Badge, { BadgeVariant } from '@/components/Badge';
+import Badge from '@/components/Badge';
 import Price from '@/components/Price';
 import ScrollableTable from '@/components/ScrollableTable';
 import { BoxIcon, CartIcon, ClipboardListIcon, UsersIcon } from '@/components/Icons';
-
-const STATUS_BADGE_VARIANTS: Record<OrderStatus, BadgeVariant> = {
-  pending: 'warning',
-  paid: 'info',
-  shipped: 'info',
-  delivered: 'success',
-  cancelled: 'neutral',
-};
 
 export default function AdminDashboardPage() {
   const [productCount, setProductCount] = useState<number | null>(null);
@@ -132,7 +124,7 @@ export default function AdminDashboardPage() {
                             {new Date(order.created_at).toLocaleString('ja-JP')}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <Badge variant={STATUS_BADGE_VARIANTS[order.status]}>
+                            <Badge {...ORDER_STATUS_BADGE[order.status]}>
                               {ORDER_STATUS_LABELS[order.status]}
                             </Badge>
                           </td>

@@ -145,7 +145,7 @@ function ExperimentFormModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-invert/50 flex items-center justify-center z-50 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="experiment-form-title"
@@ -434,7 +434,7 @@ export default function AdminExperimentsPage() {
                       <p className="text-xs text-gray-500 font-mono">{experiment.key}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant={meta.variant}>{meta.label}</Badge>
+                      <Badge variant={meta.variant} strength={meta.strength}>{meta.label}</Badge>
                     </td>
                     <td className="px-4 py-3 text-gray-700">
                       {experiment.variants.map((v) => `${v.key}:${v.weight}`).join(' / ')}

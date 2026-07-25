@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="512" rx="150" ry="16" fill="#E6DDCC"/>
+  <!-- hanging rail -->
+  <rect x="96" y="120" width="408" height="16" rx="8" fill="#9CA3AF"/>
+  <circle cx="112" cy="128" r="16" fill="#6B7280"/>
+  <circle cx="488" cy="128" r="16" fill="#6B7280"/>
+  <!-- back tail (draped over the rail) -->
+  <path d="M312 130 q78 0 78 76 l0 244 -70 0 0 -244 q0 -20 -30 -20 z" fill="#22574F"/>
+  <!-- front tail -->
+  <path d="M210 130 q-70 0 -70 76 l0 300 84 0 0 -300 q0 -20 26 -20 z" fill="#2A6B63"/>
+  <!-- loop over the rail -->
+  <path d="M204 108 l112 0 q30 0 30 26 q0 26 -30 26 l-112 0 q-30 0 -30 -26 q0 -26 30 -26 z" fill="#5FA19A"/>
+  <!-- knit stripes -->
+  <g stroke="#8FC0BA" stroke-width="12" stroke-linecap="round" opacity="0.9">
+    <path d="M148 250 l84 0"/>
+    <path d="M148 300 l84 0"/>
+    <path d="M322 250 l66 0"/>
+    <path d="M322 300 l66 0"/>
+  </g>
+  <rect x="140" y="356" width="92" height="18" rx="9" fill="#D97706"/>
+  <rect x="320" y="356" width="70" height="18" rx="9" fill="#D97706"/>
+  <!-- fringes -->
+  <g stroke="#8FC0BA" stroke-width="10" stroke-linecap="round">
+    <path d="M156 506 l0 34"/>
+    <path d="M186 506 l0 34"/>
+    <path d="M216 506 l0 34"/>
+    <path d="M334 450 l0 34"/>
+    <path d="M356 450 l0 34"/>
+    <path d="M378 450 l0 34"/>
+  </g>
+</svg>

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
-  <rect width="600" height="600" fill="#F5F4F1"/>
+  <rect width="600" height="600" fill="#F2ECE1"/>
   <!-- ground shadow -->
-  <ellipse cx="300" cy="500" rx="180" ry="20" fill="#E7E5E0"/>
+  <ellipse cx="300" cy="500" rx="180" ry="20" fill="#E6DDCC"/>
   <!-- open umbrella canopy -->
   <g>
     <path d="M300 96 q-190 10 -206 176 q30 -26 62 -26 q34 0 60 26 q26 -30 60 -30 l48 0 q34 0 60 30 q26 -26 60 -26 q32 0 62 26 q-16 -166 -206 -176 z" fill="#2A6B63"/>

@@ -2,17 +2,26 @@
 COMPOSE := docker compose
 
 .PHONY: help up up-d build down stop restart logs logs-backend logs-frontend ps \
-        backend-shell frontend-shell db-shell lint reset clean
+        backend-shell frontend-shell db-shell lint reset clean fonts
 
 help: ## このヘルプを表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
+## --- フォント ----------------------------------------------------
+# Webフォントは自己ホスト。frontend コンテナには IPv6 経路が無く next/font の
+# 一斉ダウンロードが大量に失敗する（しかも黙ってフォールバックに落ちる）ため、
+# ホスト側で1回だけ取得して public/fonts/ に置く。詳細は scripts/fetch-fonts.mjs。
+fonts: frontend/app/fonts.css ## Webフォントを取得（未取得のときだけ走る）
+
+frontend/app/fonts.css:
+	node frontend/scripts/fetch-fonts.mjs
+
 ## --- 起動・停止 --------------------------------------------------
-up: ## ビルドしてフォアグラウンドで起動（ログを表示）
+up: fonts ## ビルドしてフォアグラウンドで起動（ログを表示）
 	$(COMPOSE) up --build
 
-up-d: ## ビルドしてバックグラウンドで起動
+up-d: fonts ## ビルドしてバックグラウンドで起動
 	$(COMPOSE) up --build -d
 
 build: ## イメージをビルド

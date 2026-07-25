@@ -1,9 +1,11 @@
-import type { BadgeVariant } from '@/components/Badge';
+import type { BadgeStrength, BadgeVariant } from '@/components/Badge';
 import type { ExperimentStatus } from '@/lib/types';
 
 interface StatusMeta {
   label: string;
   variant: BadgeVariant;
+  /** 進行の段階。色相を増やさず brand の濃度で描き分ける（lib/order-status.ts と同じ規律）。 */
+  strength?: BadgeStrength;
   /** 管理画面でこの状態から進める操作（ボタンのラベルと遷移先）。 */
   actions: { label: string; next: ExperimentStatus }[];
 }
@@ -22,7 +24,8 @@ export const EXPERIMENT_STATUS_META: Record<ExperimentStatus, StatusMeta> = {
   },
   running: {
     label: '実施中',
-    variant: 'success',
+    variant: 'brand',
+    strength: 'strong',
     actions: [
       { label: '一時停止', next: 'paused' },
       { label: '終了する', next: 'completed' },
@@ -30,13 +33,13 @@ export const EXPERIMENT_STATUS_META: Record<ExperimentStatus, StatusMeta> = {
   },
   paused: {
     label: '一時停止',
-    variant: 'warning',
+    variant: 'accent',
     actions: [
       { label: '再開する', next: 'running' },
       { label: '終了する', next: 'completed' },
     ],
   },
-  completed: { label: '終了', variant: 'info', actions: [] },
+  completed: { label: '終了', variant: 'brand', strength: 'soft', actions: [] },
 };
 
 /** 0.0123 → "1.23%" のように、率を読みやすい百分率にする。 */

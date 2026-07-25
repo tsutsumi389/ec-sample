@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
-  <rect width="600" height="600" fill="#F5F4F1"/>
+  <rect width="600" height="600" fill="#F2ECE1"/>
   <!-- ground shadow -->
-  <ellipse cx="300" cy="496" rx="175" ry="20" fill="#E7E5E0"/>
+  <ellipse cx="300" cy="496" rx="175" ry="20" fill="#E6DDCC"/>
   <!-- light beam -->
   <path d="M242 226 l-96 180 220 0 z" fill="#F3E1BC" opacity="0.75"/>
   <!-- lamp head -->
@@ -31,6 +31,6 @@
     <path d="M144 396 q-4 -28 14 -44 q10 22 -6 44 z" fill="#8FC0BA"/>
     <path d="M144 396 q4 -24 -12 -40 q-10 20 4 40 z" fill="#8FC0BA"/>
     <path d="M116 430 l56 0 -6 48 q-1 12 -14 12 l-16 0 q-13 0 -14 -12 z" fill="#9CA3AF"/>
-    <ellipse cx="144" cy="494" rx="34" ry="7" fill="#E7E5E0"/>
+    <ellipse cx="144" cy="494" rx="34" ry="7" fill="#E6DDCC"/>
   </g>
 </svg>
