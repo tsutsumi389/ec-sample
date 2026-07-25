@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
-  <rect width="600" height="600" fill="#F5F4F1"/>
+  <rect width="600" height="600" fill="#F2ECE1"/>
   <!-- ground shadow -->
-  <ellipse cx="300" cy="486" rx="185" ry="20" fill="#E7E5E0"/>
+  <ellipse cx="300" cy="486" rx="185" ry="20" fill="#E6DDCC"/>
   <!-- cable -->
   <path d="M150 470 q-60 -30 -30 -80 q26 -44 90 -30" fill="none" stroke="#6B7280" stroke-width="10" stroke-linecap="round"/>
   <rect x="196" y="346" width="44" height="24" rx="6" fill="#9CA3AF"/>
@@ -29,7 +29,7 @@
   </g>
   <!-- USB ports on top -->
   <rect x="216" y="168" width="70" height="22" rx="6" fill="#6B7280"/>
-  <rect x="228" y="174" width="46" height="10" rx="3" fill="#E5E7EB"/>
+  <rect x="228" y="174" width="46" height="10" rx="3" fill="#E6DDCC"/>
   <rect x="314" y="168" width="70" height="22" rx="6" fill="#6B7280"/>
-  <rect x="326" y="174" width="46" height="10" rx="3" fill="#E5E7EB"/>
+  <rect x="326" y="174" width="46" height="10" rx="3" fill="#E6DDCC"/>
 </svg>

@@ -8,8 +8,9 @@ import type { User } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 import { Skeleton } from '@/components/Skeleton';
-import Breadcrumbs from '@/components/Breadcrumbs';
-import { btnPrimary } from '@/lib/buttonStyles';
+import PageMasthead from '@/components/PageMasthead';
+import SectionHead from '@/components/SectionHead';
+import { btn } from '@/lib/buttonStyles';
 import { ClipboardListIcon, HeartIcon, PackageIcon, ArrowRightIcon } from '@/components/Icons';
 
 /** 名前の先頭1文字をアバターのイニシャルにする（無ければ「H」）。 */
@@ -17,6 +18,17 @@ function initialOf(name: string): string {
   const trimmed = name.trim();
   return trimmed ? Array.from(trimmed)[0] : 'H';
 }
+
+/** 入力欄・ラベルの共通クラス（ログイン／会員登録と同一の造形に揃える）。 */
+const inputClass =
+  'h-11 w-full rounded-md border border-line-input bg-surface px-3.5 text-body text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:border-brand-600';
+const labelClass = 'mb-1.5 block text-caption font-medium text-ink-soft';
+
+/** アカウント内の導線カード（注文履歴・お気に入り・住所帳・ログアウト）の共通クラス。 */
+const menuCardClass =
+  'group flex h-full items-center gap-3 rounded-xl bg-surface p-4 text-left shadow-paper transition-[background-color,box-shadow] duration-base ease-standard hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600';
+
+const breadcrumbs = [{ label: 'ホーム', href: '/' }, { label: 'アカウント' }];
 
 export default function AccountPage() {
   const { user, loading: authLoading, logout, updateUser } = useAuth();
@@ -101,197 +113,203 @@ export default function AccountPage() {
 
   if (authLoading || !user) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-8" aria-hidden="true">
-        <div className="mt-4 mb-8 flex items-center gap-4">
-          <Skeleton className="h-16 w-16 rounded-full" />
-          <div className="flex-1">
-            <Skeleton className="h-7 w-40" />
-            <Skeleton className="mt-2 h-4 w-56" />
+      <>
+        <PageMasthead
+          eyebrow="ACCOUNT"
+          title="アカウント"
+          width="default"
+          motif="plant"
+          breadcrumbs={breadcrumbs}
+        />
+        <div className="wrap band-lg" aria-hidden="true">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-[72px] w-full rounded-xl" />
+            ))}
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[72px] w-full" />
-          ))}
-        </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <Breadcrumbs items={[{ label: 'ホーム', href: '/' }, { label: 'アカウント' }]} />
+    <>
+      {/* 扉。全ページ共通の PageMasthead に寄せる（幅は本文と同じ wrap ＝ width="default"）。 */}
+      <PageMasthead
+        eyebrow="ACCOUNT"
+        title={`${user.name} さん`}
+        subtitle={user.email}
+        width="default"
+        motif="plant"
+        breadcrumbs={breadcrumbs}
+        right={
+          <span
+            aria-hidden="true"
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-700 font-mincho text-h2 font-bold text-on-dark"
+          >
+            {initialOf(user.name)}
+          </span>
+        }
+      />
 
-      {/* 歓迎ヘッダ */}
-      <div className="mt-4 mb-8 flex items-center gap-4">
-        <div
-          aria-hidden="true"
-          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-brand-400 text-2xl font-bold text-white"
-        >
-          {initialOf(user.name)}
+      <div className="wrap band-lg">
+        {/* カードメニュー */}
+        <div className="mb-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Link href="/orders" className={`${menuCardClass} hover:bg-brand-50`}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
+              <ClipboardListIcon className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-body font-medium text-ink jp-name">注文履歴</span>
+              <span className="block text-caption text-ink-muted jp-name">これまでのご注文を確認</span>
+            </span>
+            <ArrowRightIcon className="h-4 w-4 shrink-0 text-line-strong transition-colors group-hover:text-brand-600" />
+          </Link>
+
+          <Link href="/wishlist" className={`${menuCardClass} hover:bg-brand-50`}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
+              <HeartIcon className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-body font-medium text-ink jp-name">お気に入り</span>
+              <span className="block text-caption text-ink-muted jp-name">保存した道具を見返す</span>
+            </span>
+            <ArrowRightIcon className="h-4 w-4 shrink-0 text-line-strong transition-colors group-hover:text-brand-600" />
+          </Link>
+
+          <Link href="/account/addresses" className={`${menuCardClass} hover:bg-brand-50`}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
+              <PackageIcon className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-body font-medium text-ink jp-name">住所帳</span>
+              <span className="block text-caption text-ink-muted jp-name">お届け先を管理</span>
+            </span>
+            <ArrowRightIcon className="h-4 w-4 shrink-0 text-line-strong transition-colors group-hover:text-brand-600" />
+          </Link>
+
+          <button type="button" onClick={handleLogout} className={`${menuCardClass} hover:bg-sunken`}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sunken text-ink-muted">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-5 w-5">
+                <path d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+              </svg>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-body font-medium text-ink jp-name">ログアウト</span>
+              <span className="block text-caption text-ink-muted jp-name">またお待ちしています</span>
+            </span>
+          </button>
         </div>
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold truncate">{user.name} さん</h1>
-          <p className="text-sm text-gray-600 truncate">{user.email}</p>
+
+        <SectionHead title="アカウント設定" eyebrow="SETTINGS" className="mb-6" />
+
+        {/* 版面が広い画面では設定カードを2段組にして、入力欄が1行1000px超に伸びるのを防ぐ */}
+        <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+          <section className="rounded-xl bg-surface p-6 shadow-paper">
+            <h3 className="mb-4 font-mincho text-h3 text-ink">プロフィール</h3>
+            <form onSubmit={handleNameSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="email" className={labelClass}>
+                  メールアドレス
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={user.email}
+                  disabled
+                  className={`${inputClass} bg-sunken text-ink-muted`}
+                />
+              </div>
+              <div>
+                <label htmlFor="name" className={labelClass}>
+                  お名前
+                  <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
+                  <span className="sr-only">（必須）</span>
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (nameError) setNameError('');
+                  }}
+                  className={`${inputClass} ${nameError ? 'border-critical-400' : ''}`}
+                />
+                {nameError && (
+                  <p role="alert" className="mt-1.5 text-caption text-critical-600">
+                    {nameError}
+                  </p>
+                )}
+              </div>
+              <button
+                type="submit"
+                disabled={nameSubmitting}
+                className={`${btn('primary', 'lg')} w-full`}
+              >
+                {nameSubmitting ? '保存中...' : '氏名を更新'}
+              </button>
+            </form>
+          </section>
+
+          <section className="rounded-xl bg-surface p-6 shadow-paper">
+            <h3 className="mb-4 font-mincho text-h3 text-ink">パスワード変更</h3>
+            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="current_password" className={labelClass}>
+                  現在のパスワード
+                  <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
+                  <span className="sr-only">（必須）</span>
+                </label>
+                <input
+                  id="current_password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="new_password" className={labelClass}>
+                  新しいパスワード
+                  <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
+                  <span className="sr-only">（必須）</span>
+                </label>
+                <input
+                  id="new_password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    if (passwordError) setPasswordError('');
+                  }}
+                  className={inputClass}
+                />
+                <p className="mt-1.5 text-caption text-ink-muted">
+                  <span className="tnum">6</span>文字以上で入力してください
+                </p>
+              </div>
+              {passwordError && (
+                <p role="alert" className="text-body text-critical-600">
+                  {passwordError}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={passwordSubmitting}
+                className={`${btn('primary', 'lg')} w-full`}
+              >
+                {passwordSubmitting ? '変更中...' : 'パスワードを変更'}
+              </button>
+            </form>
+          </section>
         </div>
       </div>
-
-      {/* カードメニュー */}
-      <div className="grid gap-3 sm:grid-cols-2 mb-10">
-        <Link
-          href="/orders"
-          className="group flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors duration-150 hover:border-brand-300 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-            <ClipboardListIcon className="h-5 w-5" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-medium text-gray-900">注文履歴</span>
-            <span className="block text-xs text-gray-500">これまでのご注文を確認</span>
-          </span>
-          <ArrowRightIcon className="h-4 w-4 shrink-0 text-gray-300 transition-colors group-hover:text-brand-500" />
-        </Link>
-
-        <Link
-          href="/wishlist"
-          className="group flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors duration-150 hover:border-brand-300 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-            <HeartIcon className="h-5 w-5" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-medium text-gray-900">お気に入り</span>
-            <span className="block text-xs text-gray-500">保存した道具を見返す</span>
-          </span>
-          <ArrowRightIcon className="h-4 w-4 shrink-0 text-gray-300 transition-colors group-hover:text-brand-500" />
-        </Link>
-
-        <Link
-          href="/account/addresses"
-          className="group flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors duration-150 hover:border-brand-300 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-            <PackageIcon className="h-5 w-5" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-medium text-gray-900">住所帳</span>
-            <span className="block text-xs text-gray-500">お届け先を管理</span>
-          </span>
-          <ArrowRightIcon className="h-4 w-4 shrink-0 text-gray-300 transition-colors group-hover:text-brand-500" />
-        </Link>
-
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="group flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 text-left transition-colors duration-150 hover:border-gray-300 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-5 w-5">
-              <path d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
-            </svg>
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-medium text-gray-900">ログアウト</span>
-            <span className="block text-xs text-gray-500">またのお越しをお待ちしています</span>
-          </span>
-        </button>
-      </div>
-
-      <h2 className="text-lg font-semibold mb-4">アカウント設定</h2>
-
-      <section className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h3 className="text-base font-semibold mb-4">プロフィール</h3>
-        <form onSubmit={handleNameSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-              メールアドレス
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={user.email}
-              disabled
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm bg-gray-50 text-gray-500"
-            />
-          </div>
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-              お名前
-              <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
-              <span className="sr-only">（必須）</span>
-            </label>
-            <input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                if (nameError) setNameError('');
-              }}
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-            />
-            {nameError && (
-              <p role="alert" className="text-xs text-red-600 mt-1">
-                {nameError}
-              </p>
-            )}
-          </div>
-          <button type="submit" disabled={nameSubmitting} className={`${btnPrimary} w-full`}>
-            {nameSubmitting ? '保存中...' : '氏名を更新'}
-          </button>
-        </form>
-      </section>
-
-      <section className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-base font-semibold mb-4">パスワード変更</h3>
-        <form onSubmit={handlePasswordSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="current_password" className="block text-sm font-medium text-gray-700 mb-1">
-              現在のパスワード
-              <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
-              <span className="sr-only">（必須）</span>
-            </label>
-            <input
-              id="current_password"
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(e) => {
-                setCurrentPassword(e.target.value);
-                if (passwordError) setPasswordError('');
-              }}
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-            />
-          </div>
-          <div>
-            <label htmlFor="new_password" className="block text-sm font-medium text-gray-700 mb-1">
-              新しいパスワード
-              <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
-              <span className="sr-only">（必須）</span>
-            </label>
-            <input
-              id="new_password"
-              type="password"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(e) => {
-                setNewPassword(e.target.value);
-                if (passwordError) setPasswordError('');
-              }}
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-            />
-            <p className="text-xs text-gray-600 mt-1">6文字以上で入力してください</p>
-          </div>
-          {passwordError && (
-            <p role="alert" className="text-red-600 text-sm">
-              {passwordError}
-            </p>
-          )}
-          <button type="submit" disabled={passwordSubmitting} className={`${btnPrimary} w-full`}>
-            {passwordSubmitting ? '変更中...' : 'パスワードを変更'}
-          </button>
-        </form>
-      </section>
-    </div>
+    </>
   );
 }

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
-  <rect width="600" height="600" fill="#F5F4F1"/>
+  <rect width="600" height="600" fill="#F2ECE1"/>
   <!-- ground shadow -->
-  <ellipse cx="300" cy="474" rx="200" ry="22" fill="#E7E5E0"/>
+  <ellipse cx="300" cy="474" rx="200" ry="22" fill="#E6DDCC"/>
   <!-- unrolled part -->
   <path d="M130 430 l340 0 0 34 -340 0 q-16 0 -16 -17 q0 -17 16 -17 z" fill="#5FA19A"/>
   <path d="M130 430 l340 0 0 12 -340 0 q-8 0 -8 -6 q0 -6 8 -6 z" fill="#8FC0BA"/>
@@ -30,6 +30,6 @@
     <rect x="128" y="330" width="44" height="96" rx="14" fill="#B9D9D5"/>
     <rect x="128" y="356" width="44" height="8" fill="#8FC0BA"/>
     <rect x="138" y="310" width="24" height="24" rx="6" fill="#6B7280"/>
-    <ellipse cx="150" cy="430" rx="30" ry="6" fill="#E7E5E0"/>
+    <ellipse cx="150" cy="430" rx="30" ry="6" fill="#E6DDCC"/>
   </g>
 </svg>

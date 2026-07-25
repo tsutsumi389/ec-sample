@@ -112,7 +112,7 @@ export default function AdminExperimentResultPage() {
           <h1 className="text-2xl font-bold">{experiment.name}</h1>
           <p className="mt-1 text-xs font-mono text-gray-500">{experiment.key}</p>
         </div>
-        <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+        <Badge variant={statusMeta.variant} strength={statusMeta.strength}>{statusMeta.label}</Badge>
       </div>
 
       {experiment.description && (

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="502" rx="132" ry="18" fill="#E6DDCC"/>
+  <!-- glow -->
+  <circle cx="300" cy="308" r="190" fill="#F6E2C9" opacity="0.45"/>
+  <circle cx="300" cy="308" r="132" fill="#EDCB9F" opacity="0.4"/>
+  <!-- hanging hook -->
+  <path d="M254 120 q46 -52 92 0" fill="none" stroke="#4B5563" stroke-width="14" stroke-linecap="round"/>
+  <!-- top cap -->
+  <path d="M212 158 l176 0 q18 0 18 18 l0 26 -212 0 0 -26 q0 -18 18 -18 z" fill="#22574F"/>
+  <rect x="196" y="196" width="208" height="18" rx="9" fill="#2A6B63"/>
+  <!-- glass cylinder -->
+  <path d="M204 214 l192 0 0 172 q0 20 -22 20 l-148 0 q-22 0 -22 -20 z" fill="#F6E2C9"/>
+  <rect x="204" y="214" width="52" height="192" fill="#FBF1E5" opacity="0.85"/>
+  <!-- ribs -->
+  <g fill="#2A6B63">
+    <rect x="196" y="214" width="16" height="192" rx="4"/>
+    <rect x="388" y="214" width="16" height="192" rx="4"/>
+  </g>
+  <!-- flame -->
+  <path d="M300 250 q34 34 34 62 q0 34 -34 34 q-34 0 -34 -34 q0 -28 34 -62 z" fill="#D97706"/>
+  <path d="M300 288 q16 18 16 32 q0 18 -16 18 q-16 0 -16 -18 q0 -14 16 -32 z" fill="#F6E2C9"/>
+  <!-- burner -->
+  <rect x="262" y="346" width="76" height="20" rx="8" fill="#4B5563"/>
+  <!-- base -->
+  <path d="M190 406 l220 0 q20 0 20 20 l0 44 q0 20 -20 20 l-220 0 q-20 0 -20 -20 l0 -44 q0 -20 20 -20 z" fill="#2A6B63"/>
+  <rect x="190" y="406" width="52" height="84" fill="#5FA19A" opacity="0.55"/>
+  <circle cx="380" cy="448" r="16" fill="#D97706"/>
+  <rect x="164" y="482" width="272" height="18" rx="9" fill="#4B5563"/>
+</svg>

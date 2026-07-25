@@ -41,9 +41,19 @@ def _product_image(slug: str) -> str:
 # 同じ失敗をデータ側で再現しないこと）。用途・素材・シーン・サイズなど、その商品にしか
 # 出てこない具体語を必ず入れる。
 #
-# image_slug は frontend/public/products/ にある 10 枚の SVG のいずれかを指す。
-# 新規 SVG は追加せず、意味的に最も近い 1 枚を流用する（電気ポット系→electric-kettle、
-# 革小物→wrist-watch、容器→stainless-bottle、布・マット類→yoga-mat など）。
+# image_slug は frontend/public/products/ にある 24 枚の SVG のいずれかを指す。
+#
+# ⚠ 図版はこの誌面の主役なので、**同じ絵が1画面に2枚出ない**ことを配分の条件にする。
+#   10 枚しか無かった頃は yoga-mat 12件 / wrist-watch 11件 / electric-kettle 10件と偏り、
+#   一覧・レーン・「合わせておすすめ」のどのグリッドでも隣り合うカードが同じ絵になって
+#   「レンダリングのバグ」に見えていた（フロント側の重複除外だけでは一覧を救えない）。
+#   いまは 24 枚を最大5件までに散らし、**この配列上で同じ slug が3件以内に再出現しない**
+#   ように並べてある（並びは created_at の順にほぼそのまま出る）。
+#   商品名と図案が1対1で対応する商品（炊飯器・テント・ニット帽など）は固定で、
+#   残りを間隔が空くように振っている。
+#   商品を足すときは、前後3件と違う slug を選ぶこと。意味の近い絵が無ければ SVG を1枚足す
+#   （地色 #F2ECE1 = tailwind.config.ts の tile・接地の楕円 #E6DDCC・brand/accent の平塗り、
+#   という既存の作法に合わせる。地色は tile トークンと必ず一致させること）。
 SEED_PRODUCTS = [
     {
         "name": "ワイヤレスイヤホン",
@@ -72,7 +82,7 @@ SEED_PRODUCTS = [
     {"name": "ステンレスボトル", "slug": "stainless-bottle", "sku": "DLY-2024-008", "description": "保温保冷に優れた真空断熱ステンレスボトル 500ml。", "price": 1500, "stock": 90},
     {"name": "ブルートゥーススピーカー", "slug": "bluetooth-speaker", "sku": "ELC-2024-009", "description": "防水仕様のポータブルBluetoothスピーカー。", "price": 6980, "sale_price": 5480, "stock": 30},
     {"name": "腕時計", "slug": "wrist-watch", "sku": "FSN-2024-010", "description": "シンプルで上品なデザインのクオーツ腕時計。", "price": 15800, "stock": 0},
-    {"name": "スマートウォッチ", "slug": "smart-watch", "sku": "FSN-2024-011", "description": "健康管理機能を搭載した次世代スマートウォッチ。近日発売予定。", "price": 19800, "stock": 30, "status": "coming_soon", "image_slug": "wrist-watch"},
+    {"name": "スマートウォッチ", "slug": "smart-watch", "sku": "FSN-2024-011", "description": "健康管理機能を搭載した次世代スマートウォッチ。近日発売予定。", "price": 19800, "stock": 30, "status": "coming_soon", "image_slug": "smart-watch"},
     # ---- キッチン家電 ----
     {
         "name": "電気圧力鍋",
@@ -92,7 +102,7 @@ SEED_PRODUCTS = [
         "description": "鍋に直接差し込んで使えるスティック型のハンドブレンダー。ポタージュやスムージーはもちろん、付属のチョッパーで玉ねぎのみじん切り、泡立て器でメレンゲまで1本でこなします。シャフトは取り外して丸洗いでき、離乳食作りにも安心。握りやすい細身のグリップで、片手が塞がる調理中でも扱いやすい設計です。",
         "price": 5480,
         "stock": 40,
-        "image_slug": "electric-kettle",
+        "image_slug": "humidifier",
     },
     {
         "name": "オーブントースター",
@@ -102,7 +112,7 @@ SEED_PRODUCTS = [
         "price": 8800,
         "sale_price": 6980,
         "stock": 25,
-        "image_slug": "coffee-maker",
+        "image_slug": "toaster",
     },
     {
         "name": "炊飯器",
@@ -111,7 +121,7 @@ SEED_PRODUCTS = [
         "description": "銘柄ごとに炊き分けるIH式の5.5合炊飯器。かため・やわらかめの食感調整に加え、玄米・雑穀米・おかゆの専用モードを備えています。内釜は厚みのある多層構造で熱がむらなく回り、粒が立ったつやのあるごはんに。保温は24時間まで黄ばみを抑え、朝炊いたごはんが夜でもおいしく食べられます。",
         "price": 19800,
         "stock": 22,
-        "image_slug": "electric-kettle",
+        "image_slug": "rice-cooker",
     },
     {
         "name": "電動コーヒーミル",
@@ -130,7 +140,7 @@ SEED_PRODUCTS = [
         "description": "耳まで圧着してプレスできる直火式のホットサンドメーカー。ガスコンロでもキャンプの焚き火でも使え、両面をこんがり焼けば具がこぼれません。プレートは上下に分割できるので、ミニフライパンとして目玉焼きを焼くこともできます。中央の仕切りで焼き上がりを半分に切り分けられます。",
         "price": 3980,
         "stock": 45,
-        "image_slug": "coffee-maker",
+        "image_slug": "electric-kettle",
     },
     {
         "name": "卓上IHクッキングヒーター",
@@ -139,7 +149,7 @@ SEED_PRODUCTS = [
         "description": "火を使わず1400Wで加熱できる薄型の卓上IHクッキングヒーター。鍋物や焼肉をテーブルの真ん中で楽しめ、揚げ物のときは油温を160〜200℃で自動キープします。天板はフラットなガラストップで、吹きこぼれても布巾でひと拭き。切り忘れ防止と鍋なし検知を備えています。",
         "price": 7980,
         "stock": 30,
-        "image_slug": "electric-kettle",
+        "image_slug": "toaster",
     },
     {
         "name": "フードプロセッサー",
@@ -148,7 +158,7 @@ SEED_PRODUCTS = [
         "description": "みじん切り・すりおろし・こねるを一台で担う1Lのフードプロセッサー。ハンバーグのタネはボタン数秒、パン生地やうどんのこね作業も刃を替えるだけでこなします。大根おろしは粗さを選べ、繊維をつぶさずみずみずしく仕上がります。容器と刃はすべて食洗機に対応します。",
         "price": 9800,
         "stock": 20,
-        "image_slug": "electric-kettle",
+        "image_slug": "humidifier",
     },
     {
         "name": "電気蒸し器",
@@ -158,7 +168,7 @@ SEED_PRODUCTS = [
         "price": 5980,
         "stock": 15,
         "status": "draft",
-        "image_slug": "electric-kettle",
+        "image_slug": "rice-cooker",
     },
     {
         "name": "温度調整ドリップケトル",
@@ -167,7 +177,7 @@ SEED_PRODUCTS = [
         "description": "1℃刻みで湯温を設定できる細口のグースネックケトル。ハンドドリップで狙った場所に細く長く注げ、ペーパーの縁を濡らさずに蒸らせます。60℃の玉露から96℃の深煎りまで温度を保持でき、湯を沸かし直す手間がありません。ハンドルは熱の伝わりにくい樹脂製です。",
         "price": 11800,
         "stock": 28,
-        "image_slug": "electric-kettle",
+        "image_slug": "coffee-maker",
         "gallery": ["coffee-maker"],
     },
     # ---- 生活家電 ----
@@ -189,7 +199,7 @@ SEED_PRODUCTS = [
         "price": 6480,
         "sale_price": 4980,
         "stock": 38,
-        "image_slug": "bluetooth-speaker",
+        "image_slug": "circulator",
     },
     {
         "name": "衣類スチーマー",
@@ -208,7 +218,7 @@ SEED_PRODUCTS = [
         "price": 39800,
         "stock": 12,
         "status": "coming_soon",
-        "image_slug": "bluetooth-speaker",
+        "image_slug": "desk-light",
     },
     {
         "name": "加湿器",
@@ -217,7 +227,7 @@ SEED_PRODUCTS = [
         "description": "超音波とヒーターを組み合わせたハイブリッド式の4L加湿器。目標湿度を50%に設定しておけば湿度センサーが自動で霧の量を調整し、窓の結露を抑えながら喉の乾燥を防ぎます。給水は上から注ぐだけでタンクを外す必要がなく、内部は分解して丸洗いできる衛生設計です。",
         "price": 8980,
         "stock": 0,
-        "image_slug": "electric-kettle",
+        "image_slug": "humidifier",
     },
     {
         "name": "電気毛布",
@@ -226,7 +236,7 @@ SEED_PRODUCTS = [
         "description": "洗える生地に細いヒーター線を編み込んだ188×130cmの電気敷き毛布。就寝1時間前にスイッチを入れておけば、布団に入った瞬間から足先までじんわり温まります。ダニ退治モードと室温センサーによる自動温度調整を搭載し、1時間あたりの電気代は約1円。丸めて洗濯機で洗えます。",
         "price": 5480,
         "stock": 40,
-        "image_slug": "yoga-mat",
+        "image_slug": "folded-towel",
     },
     {
         "name": "USB充電ステーション",
@@ -275,7 +285,7 @@ SEED_PRODUCTS = [
         "price": 1280,
         "stock": 0,
         "status": "archived",
-        "image_slug": "yoga-mat",
+        "image_slug": "tote-bag",
     },
     {
         "name": "アロマディフューザー",
@@ -284,7 +294,7 @@ SEED_PRODUCTS = [
         "description": "水を使わずエッセンシャルオイルを霧状に噴射するネブライザー式のアロマディフューザー。オイル本来の香りが薄まらずに広がり、玄関やリビングに一滴で香りの層をつくります。噴霧の間隔と濃度を段階で選べ、間欠運転なら1本のオイルが長持ち。運転音は静かで寝室でも使えます。",
         "price": 4280,
         "stock": 36,
-        "image_slug": "electric-kettle",
+        "image_slug": "humidifier",
     },
     {
         "name": "長傘",
@@ -302,7 +312,7 @@ SEED_PRODUCTS = [
         "description": "リュックを背負ったまますっぽりかぶれる耐水圧5000mmのレインポンチョ。自転車通勤ではハンドルまで裾が届き、野外フェスでは敷物代わりにも広げられます。脇下のベンチレーションが蒸れを逃がし、たたむと手のひらサイズの収納袋に。フードのつばが顔に雨が吹き込むのを防ぎます。",
         "price": 2980,
         "stock": 48,
-        "image_slug": "folding-umbrella",
+        "image_slug": "folded-scarf",
     },
     {
         "name": "竹製まな板",
@@ -330,7 +340,7 @@ SEED_PRODUCTS = [
         "description": "髪の水分を綿タオルの倍の速さで吸い上げる超極細繊維のヘアタオル4枚組。ドライヤーの時間が短くなり、キューティクルへの熱のダメージを減らせます。厚みがないので絞りやすく、洗濯後は数時間で乾いて生乾きのにおいが出ません。ジムやプールのバッグにも小さく収まります。",
         "price": 1680,
         "stock": 80,
-        "image_slug": "yoga-mat",
+        "image_slug": "folded-towel",
     },
     {
         "name": "ソープディスペンサー",
@@ -339,7 +349,7 @@ SEED_PRODUCTS = [
         "description": "手をかざすと必要な分だけ泡が出るセンサー式のソープディスペンサー。調理中に生肉を触った手でボトルに触れずに済み、キッチンでも洗面所でも衛生的に使えます。詰め替え用のハンドソープを薄めて注ぐだけで、市販の泡ボトルよりランニングコストを抑えられます。単三電池で約半年動きます。",
         "price": 2280,
         "stock": 52,
-        "image_slug": "stainless-bottle",
+        "image_slug": "humidifier",
     },
     # ---- アウトドア ----
     {
@@ -350,7 +360,7 @@ SEED_PRODUCTS = [
         "price": 12800,
         "sale_price": 9800,
         "stock": 18,
-        "image_slug": "yoga-mat",
+        "image_slug": "tent",
     },
     {
         "name": "寝袋",
@@ -369,7 +379,7 @@ SEED_PRODUCTS = [
         "price": 3480,
         "sale_price": 2680,
         "stock": 60,
-        "image_slug": "desk-light",
+        "image_slug": "camp-lantern",
     },
     {
         "name": "折りたたみチェア",
@@ -378,7 +388,7 @@ SEED_PRODUCTS = [
         "description": "座面高38cmで焚き火の炎に近い目線に座れるローチェア。アルミフレームで重さ1.2kg、たたむと肩掛けできる細長い袋に収まります。生地は1000デニールのポリエステルで火の粉に強く、背もたれのメッシュが背中の蒸れを逃がします。脚先が太く、砂浜や芝生でも沈み込みません。",
         "price": 5980,
         "stock": 34,
-        "image_slug": "yoga-mat",
+        "image_slug": "tent",
     },
     {
         "name": "登山用ザック30L",
@@ -387,7 +397,7 @@ SEED_PRODUCTS = [
         "description": "日帰り登山にちょうどよい30Lのバックパック。背面のフレームが荷重を腰のベルトに逃がし、肩への負担を減らします。雨蓋の下にレインカバーを内蔵し、サイドのポケットは歩きながらボトルを抜き差しできる角度。ハイドレーションチューブの通し穴とポールの固定ループも備えます。",
         "price": 15800,
         "stock": 24,
-        "image_slug": "yoga-mat",
+        "image_slug": "backpack",
     },
     {
         "name": "トレッキングポール",
@@ -415,7 +425,7 @@ SEED_PRODUCTS = [
         "price": 9800,
         "stock": 22,
         "status": "coming_soon",
-        "image_slug": "yoga-mat",
+        "image_slug": "camp-lantern",
     },
     {
         "name": "ソーラーチャージャー",
@@ -443,7 +453,7 @@ SEED_PRODUCTS = [
         "price": 6480,
         "stock": 30,
         "status": "suspended",
-        "image_slug": "yoga-mat",
+        "image_slug": "tent",
     },
     # ---- ファッション小物 ----
     {
@@ -463,7 +473,7 @@ SEED_PRODUCTS = [
         "description": "厚さ2cmに収まるコンパクトな牛革の二つ折り財布。カードポケットは段差をつけた6枚差しで、目的のカードを探さずに抜き出せます。小銭入れはL字ファスナーで大きく開き、レジ前で指を入れて硬貨を選べる深さ。角は手作業で磨いて丸められ、ポケットの中で生地を傷めません。",
         "price": 12800,
         "stock": 25,
-        "image_slug": "wrist-watch",
+        "image_slug": "leather-wallet",
     },
     {
         "name": "カシミヤマフラー",
@@ -473,7 +483,7 @@ SEED_PRODUCTS = [
         "price": 12800,
         "sale_price": 9800,
         "stock": 22,
-        "image_slug": "wrist-watch",
+        "image_slug": "folded-scarf",
     },
     {
         "name": "レザートートバッグ",
@@ -482,7 +492,7 @@ SEED_PRODUCTS = [
         "description": "A4のノートPCと書類が縦に収まる牛革のトートバッグ。底に鋲がついていて床に置いても革が擦れず、自立するので中身を片手で出し入れできます。内側にはペンと名刺入れの定位置となる仕切りポケット。持ち手は肩に掛けられる長さで、荷物が重い日も手首に食い込みません。",
         "price": 28800,
         "stock": 14,
-        "image_slug": "wrist-watch",
+        "image_slug": "tote-bag",
     },
     {
         "name": "ウールニット帽",
@@ -491,7 +501,7 @@ SEED_PRODUCTS = [
         "description": "メリノウールを二重に編んだ折り返し付きのニット帽。耳まで下ろせば真冬の通勤でも冷えを防ぎ、折り返しを浅くすれば春先の朝夕にちょうどよい厚みになります。ウール本来の調湿性で蒸れにくく、頭が汗ばんでもにおいがこもりません。手洗いで型崩れせずに洗えます。",
         "price": 3480,
         "stock": 45,
-        "image_slug": "wrist-watch",
+        "image_slug": "knit-cap",
     },
     {
         "name": "サングラス",
@@ -500,7 +510,7 @@ SEED_PRODUCTS = [
         "description": "可視光線透過率15%の偏光レンズを入れたウェリントン型サングラス。水面やアスファルトの照り返しを抑えるので、釣りや長距離の運転で目が疲れません。フレームは軽いアセテートで、鼻あては鼻筋から浮きにくい設計。UV400でまぶたの日焼けも防ぎます。",
         "price": 15800,
         "stock": 0,
-        "image_slug": "wrist-watch",
+        "image_slug": "sunglasses",
     },
     {
         "name": "革製名刺入れ",
@@ -519,7 +529,7 @@ SEED_PRODUCTS = [
         "price": 9800,
         "stock": 10,
         "status": "discontinued",
-        "image_slug": "wrist-watch",
+        "image_slug": "folded-scarf",
     },
     {
         "name": "シューケアセット",
@@ -528,7 +538,7 @@ SEED_PRODUCTS = [
         "description": "馬毛ブラシ・豚毛ブラシ・乳化性クリーム・防水スプレーをまとめた革靴の手入れセット。帰宅後に馬毛でほこりを落とし、月に一度クリームで油分を補えば、革が乾いてひび割れるのを防げます。木箱に一式が収まり、玄関に置いても生活感が出ないつくり。手順書が同梱されています。",
         "price": 6480,
         "stock": 30,
-        "image_slug": "wrist-watch",
+        "image_slug": "stainless-bottle",
     },
     {
         "name": "レザーキーケース",
@@ -537,7 +547,7 @@ SEED_PRODUCTS = [
         "description": "鍵を6本まで留められる牛革のキーケース。金具がスライドするので、鍵を大きく振り回さずに玄関の錠を開けられます。内側にはICカードを1枚差せるポケットがあり、通勤の改札もこれ1つで通れます。使うほどに手の脂を吸って柔らかくなり、鞄の内張りを傷つけません。",
         "price": 4980,
         "stock": 42,
-        "image_slug": "wrist-watch",
+        "image_slug": "leather-wallet",
     },
 ]
 

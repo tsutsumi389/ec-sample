@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import type { Product } from '@/lib/types';
 import ProductCard from '@/components/ProductCard';
+import SectionHead from '@/components/SectionHead';
 import { ProductGridSkeleton } from '@/components/Skeleton';
+import { recommendGrid } from '@/lib/gridStyles';
 import { getRecentlyViewedIds } from '@/lib/recentlyViewed';
 
 const MAX_DISPLAY = 8;
@@ -59,9 +61,9 @@ export default function RecentlyViewed({ excludeId }: { excludeId?: number }) {
 
   if (loading) {
     return (
-      <section className="mt-12">
-        <h2 className="text-xl font-bold text-gray-900">最近見た商品</h2>
-        <div className="mt-4">
+      <section className="mt-16">
+        <SectionHead title="最近見た商品" eyebrow="RECENTLY VIEWED" />
+        <div className="mt-6">
           <ProductGridSkeleton count={4} />
         </div>
       </section>
@@ -72,13 +74,27 @@ export default function RecentlyViewed({ excludeId }: { excludeId?: number }) {
   if (products.length === 0) return null;
 
   return (
-    <section className="mt-12">
-      <h2 className="text-xl font-bold text-gray-900">最近見た商品</h2>
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-        {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
+    <section className="mt-16">
+      <SectionHead
+        title="最近見た商品"
+        eyebrow="RECENTLY VIEWED"
+        right={
+          <p className="text-caption text-ink-muted">
+            この端末の履歴から <span className="tnum text-ink">{products.length}</span> 件
+          </p>
+        }
+      />
+      <ul className={`mt-6 grid items-stretch ${recommendGrid}`}>
+        {products.map((product, i) => (
+          <li
+            key={product.id}
+            className="h-full motion-safe:animate-rise"
+            style={{ animationDelay: `${Math.min(i, 7) * 45}ms` }}
+          >
+            <ProductCard product={product} />
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

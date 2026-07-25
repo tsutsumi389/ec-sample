@@ -1,43 +1,40 @@
 import Link from 'next/link';
-import { btnPrimary } from '@/lib/buttonStyles';
+import { btn } from '@/lib/buttonStyles';
+import { KettleMotif } from '@/components/BrandMotifs';
 
 export default function NotFound() {
   return (
-    <div className="max-w-xl mx-auto px-4 py-24 text-center">
-      {/* 道具モチーフ（虫めがね付きの箱）の小さなイラスト */}
-      <svg
-        viewBox="0 0 120 120"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={3}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        className="mx-auto mb-6 h-24 w-24 text-brand-400"
-      >
-        <path d="M20 44 60 26l40 18-40 18-40-18Z" />
-        <path d="M20 44v34l40 18 40-18V44" />
-        <path d="M60 62v34" />
-        <circle cx="78" cy="72" r="11" />
-        <path d="m86 80 9 9" />
-      </svg>
+    <section className="relative overflow-hidden band-xl">
+      {/* 背面の線画。他ページ（表紙・署名帯・奥付帯）と同じ判型記号をここでも反響させる。 */}
+      <KettleMotif
+        className="pointer-events-none select-none absolute left-1/2 top-4 h-72 -translate-x-1/2 text-brand-700 opacity-[0.07]"
+        strokeWidth={2}
+        aria-hidden
+      />
 
-      <p className="text-6xl sm:text-7xl font-bold tracking-tight text-brand-600">404</p>
-      <h1 className="mt-4 text-xl font-bold text-gray-900">お探しの道具は見つかりませんでした</h1>
-      <p className="mt-3 text-gray-600">
-        ページが移動または削除されたのかもしれません。
-        <br className="hidden sm:block" />
-        よろしければ、トップから道具をゆっくり眺めてみてください。
-      </p>
+      <div className="wrap-read relative text-center">
+        <p className="text-eyebrow uppercase font-num text-ink-muted">ERROR — PAGE NOT FOUND</p>
+        <p className="mt-6 font-mincho text-display text-brand-700">404</p>
 
-      <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-        <Link href="/" className={btnPrimary}>
-          トップへ戻る
-        </Link>
-        <Link href="/products" className="text-sm text-brand-600 font-medium hover:underline">
-          新着の道具を見る →
-        </Link>
+        {/* jp-name で語句境界の改行にする（付けないと「見つ／かり」で割れる） */}
+        <h1 className="mt-6 font-mincho text-h1 text-ink jp-head jp-name">
+          お探しの道具は見つかりませんでした
+        </h1>
+        <p className="mt-4 text-body-lg text-ink-muted jp-body">
+          ページが移動または削除されたのかもしれません。
+          <br className="hidden sm:block" />
+          よろしければ、トップから道具をゆっくり眺めてみてください。
+        </p>
+
+        <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Link href="/" className={`${btn('primary', 'lg')} w-full sm:w-auto`}>
+            トップへ戻る
+          </Link>
+          <Link href="/products" className={`${btn('secondary', 'lg')} w-full sm:w-auto`}>
+            商品一覧を見る
+          </Link>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }

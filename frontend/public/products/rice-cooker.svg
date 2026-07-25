@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <!-- ground shadow -->
+  <ellipse cx="300" cy="486" rx="180" ry="20" fill="#E6DDCC"/>
+  <!-- steam -->
+  <g fill="none" stroke="#9CA3AF" stroke-width="7" stroke-linecap="round" opacity="0.8">
+    <path d="M262 150 q12 -22 0 -44"/>
+    <path d="M300 142 q14 -26 0 -52"/>
+    <path d="M338 150 q12 -22 0 -44"/>
+  </g>
+  <!-- body -->
+  <path d="M148 268 l304 0 q14 0 12 16 l-20 176 q-3 22 -26 22 l-236 0 q-23 0 -26 -22 l-20 -176 q-2 -16 12 -16 z" fill="#2A6B63"/>
+  <!-- highlight -->
+  <path d="M182 268 l34 0 -14 214 -26 0 q-14 0 -16 -14 z" fill="#5FA19A" opacity="0.65"/>
+  <!-- lid -->
+  <rect x="138" y="224" width="324" height="52" rx="26" fill="#22574F"/>
+  <rect x="272" y="196" width="56" height="34" rx="16" fill="#6B7280"/>
+  <!-- steam vent -->
+  <rect x="286" y="182" width="28" height="14" rx="7" fill="#4B5563"/>
+  <!-- control panel -->
+  <rect x="238" y="322" width="124" height="82" rx="12" fill="#F2ECE1"/>
+  <rect x="254" y="338" width="92" height="26" rx="6" fill="#B9D9D5"/>
+  <g fill="#8FC0BA">
+    <rect x="254" y="376" width="40" height="12" rx="6"/>
+    <rect x="302" y="376" width="44" height="12" rx="6"/>
+  </g>
+  <circle cx="392" cy="360" r="14" fill="#D97706"/>
+  <!-- handle -->
+  <path d="M462 300 q44 0 44 46 q0 46 -44 46 l0 -22 q22 0 22 -24 q0 -24 -22 -24 z" fill="#22574F"/>
+  <!-- base -->
+  <rect x="164" y="474" width="272" height="20" rx="10" fill="#4B5563"/>
+</svg>

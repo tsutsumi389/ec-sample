@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="440" rx="196" ry="20" fill="#E6DDCC"/>
+  <!-- temples -->
+  <path d="M120 268 q-52 12 -60 96" fill="none" stroke="#4B5563" stroke-width="18" stroke-linecap="round"/>
+  <path d="M480 268 q52 12 60 96" fill="none" stroke="#4B5563" stroke-width="18" stroke-linecap="round"/>
+  <!-- bridge -->
+  <path d="M258 258 q42 -26 84 0" fill="none" stroke="#22574F" stroke-width="20" stroke-linecap="round"/>
+  <!-- left lens -->
+  <path d="M116 236 l152 0 q16 0 14 18 l-10 66 q-6 44 -56 44 l-40 0 q-50 0 -58 -44 l-14 -66 q-4 -18 12 -18 z" fill="#22574F"/>
+  <path d="M132 254 l124 0 q12 0 10 14 l-8 52 q-5 32 -44 32 l-30 0 q-39 0 -45 -32 l-11 -52 q-3 -14 4 -14 z" fill="#3D837B"/>
+  <path d="M148 258 l40 0 -34 82 q-14 -8 -18 -26 z" fill="#8FC0BA" opacity="0.7"/>
+  <!-- right lens -->
+  <path d="M332 236 l152 0 q16 0 12 18 l-14 66 q-8 44 -58 44 l-40 0 q-50 0 -56 -44 l-10 -66 q-2 -18 14 -18 z" fill="#22574F"/>
+  <path d="M344 254 l124 0 q7 0 4 14 l-11 52 q-6 32 -45 32 l-30 0 q-39 0 -44 -32 l-8 -52 q-2 -14 10 -14 z" fill="#3D837B"/>
+  <path d="M364 258 l40 0 -34 82 q-14 -8 -18 -26 z" fill="#8FC0BA" opacity="0.7"/>
+  <!-- accent screws -->
+  <circle cx="132" cy="252" r="9" fill="#D97706"/>
+  <circle cx="468" cy="252" r="9" fill="#D97706"/>
+</svg>

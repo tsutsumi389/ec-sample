@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="512" rx="120" ry="16" fill="#E6DDCC"/>
+  <!-- band -->
+  <path d="M240 120 l120 0 -10 96 -100 0 z" fill="#22574F"/>
+  <path d="M250 396 l100 0 10 96 -120 0 z" fill="#22574F"/>
+  <g fill="#2A6B63">
+    <rect x="244" y="140" width="112" height="12"/>
+    <rect x="246" y="172" width="108" height="12"/>
+    <rect x="246" y="428" width="108" height="12"/>
+    <rect x="244" y="460" width="112" height="12"/>
+  </g>
+  <!-- case -->
+  <rect x="196" y="196" width="208" height="208" rx="52" fill="#2A6B63"/>
+  <rect x="196" y="196" width="60" height="208" rx="52" fill="#5FA19A" opacity="0.5"/>
+  <!-- screen -->
+  <rect x="222" y="222" width="156" height="156" rx="38" fill="#193A34"/>
+  <!-- ui: ring -->
+  <circle cx="300" cy="300" r="46" fill="none" stroke="#3D837B" stroke-width="12"/>
+  <path d="M300 254 a46 46 0 0 1 40 68" fill="none" stroke="#D97706" stroke-width="12" stroke-linecap="round"/>
+  <!-- ui: bars -->
+  <g fill="#8FC0BA">
+    <rect x="246" y="342" width="24" height="14" rx="7"/>
+    <rect x="280" y="342" width="40" height="14" rx="7"/>
+    <rect x="330" y="342" width="24" height="14" rx="7"/>
+  </g>
+  <rect x="252" y="240" width="96" height="10" rx="5" fill="#3D837B"/>
+  <!-- crown -->
+  <rect x="404" y="272" width="20" height="42" rx="8" fill="#4B5563"/>
+</svg>

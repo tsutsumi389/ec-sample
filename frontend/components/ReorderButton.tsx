@@ -6,7 +6,7 @@ import { api, ApiError } from '@/lib/api';
 import type { ReorderItem, ReorderResult } from '@/lib/types';
 import { useCart } from '@/lib/cart-context';
 import { useToast } from '@/lib/toast-context';
-import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { btn, btnPrimary, btnSecondary } from '@/lib/buttonStyles';
 import Spinner from '@/components/Spinner';
 
 interface ReorderButtonProps {
@@ -16,26 +16,26 @@ interface ReorderButtonProps {
 }
 
 const focusRing =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
 
-const primaryClass = `${btnPrimary} inline-flex items-center gap-2 ${focusRing}`;
+const primaryClass = `${btnPrimary} ${focusRing}`;
 
-const compactClass =
-  `inline-flex items-center gap-2 rounded-md border border-brand-300 text-brand-700 px-3 py-1.5 text-sm font-medium hover:bg-brand-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${focusRing}`;
+/** 一覧カード内に置く小さめのボタン。btn('secondary','sm') に brand の字面だけ足す。 */
+const compactClass = `${btn('secondary', 'sm')} text-brand-700 ${focusRing}`;
 
 /** 部分成功時の内訳リスト。 */
 function ResultList({ title, items }: { title: string; items: ReorderItem[] }) {
   if (items.length === 0) return null;
   return (
     <div className="mt-4">
-      <h3 className="text-sm font-medium text-gray-900">{title}</h3>
+      <h3 className="text-eyebrow uppercase font-num text-ink-muted">{title}</h3>
       <ul className="mt-2 space-y-1.5">
         {/* 同じ商品の明細が複数ある注文では product_id が重複しうるので index を添える */}
         {items.map((item, index) => (
-          <li key={`${item.product_id}-${index}`} className="text-sm text-gray-700">
+          <li key={`${item.product_id}-${index}`} className="text-body text-ink-soft">
             <span className="font-medium">{item.product_name}</span>
-            {item.quantity > 0 && <span className="ml-1 text-gray-500">× {item.quantity}</span>}
-            {item.reason && <p className="mt-0.5 text-xs text-gray-500">{item.reason}</p>}
+            {item.quantity > 0 && <span className="ml-1 tnum text-ink-muted">× {item.quantity}</span>}
+            {item.reason && <p className="mt-0.5 text-caption text-ink-muted">{item.reason}</p>}
           </li>
         ))}
       </ul>
@@ -108,7 +108,7 @@ function ReorderResultDialog({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 transition-opacity duration-150 ${
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-invert/50 transition-opacity duration-base ease-standard ${
         entered ? 'opacity-100' : 'opacity-0'
       }`}
       onClick={(e) => {
@@ -124,11 +124,11 @@ function ReorderResultDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-sm max-h-[80vh] overflow-y-auto bg-white rounded-lg shadow-xl p-6 transition-all duration-150 ease-out ${
+        className={`max-h-[80vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-surface p-6 shadow-float transition-all duration-base ease-standard ${
           entered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
         }`}
       >
-        <h2 id={titleId} className="text-base font-semibold text-gray-900">
+        <h2 id={titleId} className="font-mincho text-h3 text-ink jp-head">
           再注文の結果
         </h2>
         <ResultList title="カートに追加した商品" items={result.added} />

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F2ECE1"/>
+  <ellipse cx="300" cy="470" rx="188" ry="20" fill="#E6DDCC"/>
+  <!-- cards peeking out -->
+  <g>
+    <rect x="212" y="176" width="180" height="118" rx="12" fill="#8FC0BA"/>
+    <rect x="232" y="158" width="180" height="118" rx="12" fill="#B9D9D5"/>
+    <rect x="248" y="176" width="60" height="14" rx="7" fill="#5FA19A"/>
+  </g>
+  <!-- wallet back -->
+  <path d="M136 232 l328 0 q22 0 22 22 l0 178 q0 22 -22 22 l-328 0 q-22 0 -22 -22 l0 -178 q0 -22 22 -22 z" fill="#8F3F06"/>
+  <!-- front flap -->
+  <path d="M136 268 l328 0 q22 0 22 22 l0 142 q0 22 -22 22 l-328 0 q-22 0 -22 -22 l0 -142 q0 -22 22 -22 z" fill="#B45309"/>
+  <path d="M136 268 l84 0 0 186 -84 0 q-22 0 -22 -22 l0 -142 q0 -22 22 -22 z" fill="#D97706" opacity="0.75"/>
+  <!-- stitching -->
+  <g fill="none" stroke="#F6E2C9" stroke-width="5" stroke-dasharray="14 12" stroke-linecap="round" opacity="0.9">
+    <path d="M142 296 l316 0"/>
+    <path d="M142 426 l316 0"/>
+  </g>
+  <!-- clasp -->
+  <rect x="272" y="336" width="56" height="40" rx="10" fill="#4B5563"/>
+  <rect x="284" y="348" width="32" height="16" rx="6" fill="#9CA3AF"/>
+  <!-- coin -->
+  <circle cx="420" cy="200" r="30" fill="#E0AC6B"/>
+  <circle cx="420" cy="200" r="18" fill="#D97706"/>
+</svg>

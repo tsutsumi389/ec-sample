@@ -8,18 +8,19 @@ import type { Address } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 import Badge from '@/components/Badge';
-import Breadcrumbs from '@/components/Breadcrumbs';
+import PageMasthead from '@/components/PageMasthead';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import EmptyState from '@/components/EmptyState';
 import { Skeleton } from '@/components/Skeleton';
 import AddressForm, { AddressFormValues } from '@/components/AddressForm';
-import { btnPrimary, btnGhost } from '@/lib/buttonStyles';
-import { PackageIcon } from '@/components/Icons';
+import SectionHead from '@/components/SectionHead';
+import { ArrowLeftIcon } from '@/components/Icons';
+import { btn } from '@/lib/buttonStyles';
 
 /** 住所カード型のスケルトン。 */
 function AddressCardSkeleton() {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
+    <div className="rounded-xl bg-surface p-4 shadow-paper">
       <Skeleton className="h-5 w-32" />
       <Skeleton className="mt-2 h-4 w-24" />
       <Skeleton className="mt-1.5 h-4 w-48" />
@@ -136,127 +137,137 @@ export default function AddressesPage() {
   const guarding = authLoading || !user;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
-      <Breadcrumbs
-        items={[
+    <>
+      {/* 扉。全ページ共通の PageMasthead に寄せる（幅は本文と同じ wrap ＝ width="default"）。 */}
+      <PageMasthead
+        eyebrow="ADDRESSES"
+        title="住所帳"
+        width="default"
+        motif="plant"
+        breadcrumbs={[
           { label: 'ホーム', href: '/' },
           { label: 'アカウント', href: '/account' },
           { label: '住所帳' },
         ]}
-      />
-      <div className="flex items-center justify-between mt-3 mb-6 flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">住所帳</h1>
-        {!formOpen && !guarding && (
-          <button type="button" onClick={openCreate} className={btnPrimary}>
-            新しい住所を追加
-          </button>
-        )}
-      </div>
-
-      {error && (
-        <p role="alert" className="text-red-600 text-sm mb-4">
-          {error}
-        </p>
-      )}
-
-      {formOpen && (
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-3">{editingAddress ? '住所を編集' : '住所を追加'}</h2>
-          <AddressForm
-            initialValues={editingAddress}
-            onSubmit={handleSubmit}
-            onCancel={() => {
-              setFormOpen(false);
-              setEditingAddress(null);
-            }}
-          />
-        </div>
-      )}
-
-      {(guarding || loading) && (
-        <div className="space-y-3" aria-hidden="true">
-          <AddressCardSkeleton />
-          <AddressCardSkeleton />
-        </div>
-      )}
-
-      {!guarding && !loading && addresses.length === 0 && !formOpen && (
-        <EmptyState
-          icon={<PackageIcon />}
-          title="最初の住所を追加しましょう"
-          description="お届け先を登録しておくと、お会計がぐっとスムーズになります。"
-          action={
-            <button type="button" onClick={openCreate} className={btnPrimary}>
+        /* 0件のときは空状態が同じボタンを出すので、扉には出さない（同一CTAの二重掲出を避ける）。 */
+        right={
+          !formOpen && !guarding && !loading && addresses.length > 0 ? (
+            <button type="button" onClick={openCreate} className={btn('primary', 'md')}>
               新しい住所を追加
             </button>
-          }
-        />
-      )}
+          ) : undefined
+        }
+      />
 
-      {!guarding && !loading && addresses.length > 0 && (
-        <div className="space-y-3">
-          {addresses.map((address) => (
-            <div key={address.id} className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-medium">{address.recipient_name} 様</p>
-                    {address.is_default && <Badge variant="info">既定</Badge>}
+      <div className="wrap band-lg">
+        {error && (
+          <p role="alert" className="mb-4 text-body text-critical-600">
+            {error}
+          </p>
+        )}
+
+        {formOpen && (
+          <div className="mb-8">
+            <SectionHead title={editingAddress ? '住所を編集' : '住所を追加'} eyebrow="EDIT" className="mb-4" />
+            <AddressForm
+              initialValues={editingAddress}
+              onSubmit={handleSubmit}
+              onCancel={() => {
+                setFormOpen(false);
+                setEditingAddress(null);
+              }}
+            />
+          </div>
+        )}
+
+        {(guarding || loading) && (
+          <div className="grid gap-3 md:grid-cols-2" aria-hidden="true">
+            <AddressCardSkeleton />
+            <AddressCardSkeleton />
+          </div>
+        )}
+
+        {!guarding && !loading && addresses.length === 0 && !formOpen && (
+          <EmptyState
+            title="最初の住所を追加しましょう"
+            description="お届け先を登録しておくと、お会計がぐっとスムーズになります。"
+            action={
+              <button type="button" onClick={openCreate} className={btn('primary', 'md')}>
+                新しい住所を追加
+              </button>
+            }
+          />
+        )}
+
+        {!guarding && !loading && addresses.length > 0 && (
+          <div className="grid gap-3 md:grid-cols-2">
+            {addresses.map((address) => (
+              <div key={address.id} className="rounded-xl bg-surface p-5 shadow-paper">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-body font-medium text-ink">{address.recipient_name} 様</p>
+                      {address.is_default && <Badge variant="brand">既定</Badge>}
+                    </div>
+                    <p className="text-body tnum text-ink-muted">〒{address.postal_code}</p>
+                    <p className="text-body text-ink-muted">
+                      {address.prefecture}
+                      {address.city}
+                      {address.address_line}
+                    </p>
+                    <p className="text-body tnum text-ink-muted">TEL: {address.phone}</p>
                   </div>
-                  <p className="text-sm text-gray-600">〒{address.postal_code}</p>
-                  <p className="text-sm text-gray-600">
-                    {address.prefecture}
-                    {address.city}
-                    {address.address_line}
-                  </p>
-                  <p className="text-sm text-gray-600">TEL: {address.phone}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {!address.is_default && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!address.is_default && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetDefault(address)}
+                        disabled={settingDefaultId === address.id}
+                        className={btn('ghost', 'sm')}
+                      >
+                        {settingDefaultId === address.id ? '設定中...' : '既定にする'}
+                      </button>
+                    )}
+                    <button type="button" onClick={() => openEdit(address)} className={btn('ghost', 'sm')}>
+                      編集
+                    </button>
                     <button
                       type="button"
-                      onClick={() => handleSetDefault(address)}
-                      disabled={settingDefaultId === address.id}
-                      className={`${btnGhost} text-sm`}
+                      onClick={() => setDeleteTarget(address)}
+                      className={`${btn('ghost', 'sm')} text-critical-700 hover:bg-critical-50`}
                     >
-                      {settingDefaultId === address.id ? '設定中...' : '既定にする'}
+                      削除
                     </button>
-                  )}
-                  <button type="button" onClick={() => openEdit(address)} className={`${btnGhost} text-sm`}>
-                    編集
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteTarget(address)}
-                    className={`${btnGhost} text-sm text-red-600 hover:bg-red-50`}
-                  >
-                    削除
-                  </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        )}
+
+        <div className="mt-8">
+          <Link
+            href="/account"
+            className="inline-flex items-center gap-1.5 rounded text-body text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+          >
+            <ArrowLeftIcon className="h-4 w-4" />
+            アカウントに戻る
+          </Link>
         </div>
-      )}
 
-      <p className="mt-6 text-sm">
-        <Link href="/account" className="text-brand-600 hover:underline">
-          ← アカウントに戻る
-        </Link>
-      </p>
-
-      <ConfirmDialog
-        open={Boolean(deleteTarget)}
-        title="この住所を削除しますか？"
-        description={deleteTarget ? summarize(deleteTarget) : undefined}
-        confirmLabel="削除する"
-        danger
-        busy={deleting}
-        onConfirm={handleDelete}
-        onCancel={() => {
-          if (!deleting) setDeleteTarget(null);
-        }}
-      />
-    </div>
+        <ConfirmDialog
+          open={Boolean(deleteTarget)}
+          title="この住所を削除しますか？"
+          description={deleteTarget ? summarize(deleteTarget) : undefined}
+          confirmLabel="削除する"
+          danger
+          busy={deleting}
+          onConfirm={handleDelete}
+          onCancel={() => {
+            if (!deleting) setDeleteTarget(null);
+          }}
+        />
+      </div>
+    </>
   );
 }
