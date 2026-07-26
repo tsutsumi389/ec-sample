@@ -3,12 +3,13 @@
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
 import { api } from './api';
 import { useAuth } from './auth-context';
+import { guestCartCount, subscribeGuestCart } from './guestCart';
 import type { Cart } from './types';
 
 interface CartContextValue {
-  /** カート内の数量合計。未ログイン時は 0。 */
+  /** カート内の数量合計。未ログイン時は端末が持つゲストカートの数量。 */
   count: number;
-  /** サーバーからカートを取り直して count を更新する。カート操作後に呼ぶ。 */
+  /** カートを取り直して count を更新する。カート操作後に呼ぶ。 */
   refresh: () => Promise<void>;
 }
 
@@ -16,12 +17,13 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  // 初期値は 0 のまま置く（localStorage は SSR で読めないため、読むのは effect 以降）。
   const [count, setCount] = useState(0);
 
   const refresh = useCallback(async () => {
-    // 未ログイン時はカートAPIを呼ばず、常に 0 とする。
+    // 未ログインのカートは端末（localStorage）にあるので、サーバーには問い合わせない。
     if (!user) {
-      setCount(0);
+      setCount(guestCartCount());
       return;
     }
     try {
@@ -34,12 +36,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // ログイン状態が変わったら自動で取り直す。
   useEffect(() => {
-    if (!user) {
-      setCount(0);
-      return;
-    }
     void refresh();
   }, [user, refresh]);
+
+  // ゲストカートの変更（別タブでの操作を含む）を購読する。未ログイン中はその値でバッジを
+  // 更新し、ログイン後は「マージが済んで控えが空になった」合図として使ってサーバーの
+  // カートを取り直す（マージは login() を経ない復帰経路でも走るため、ここで拾わないと
+  // バッジだけがマージ前の数で残る）。
+  useEffect(() => {
+    return subscribeGuestCart(() => {
+      void refresh();
+    });
+  }, [refresh]);
 
   return <CartContext.Provider value={{ count, refresh }}>{children}</CartContext.Provider>;
 }

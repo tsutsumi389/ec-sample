@@ -323,6 +323,62 @@ class CartOut(BaseModel):
     total_amount: int
 
 
+# ---------- Guest cart ----------
+#
+# ゲスト（未ログイン）のカートは端末の localStorage が持つ。サーバーへ届くのは商品IDと
+# 数量の並びだけで、価格・購入可否・在庫の判断は必ずサーバー側で行う（services/cart.py）。
+
+
+class GuestCartItemIn(BaseModel):
+    product_id: int
+    quantity: int = Field(default=1, ge=1)
+
+
+class GuestCartIn(BaseModel):
+    """端末が持っているゲストカートの中身。
+
+    件数に上限を置くのは、localStorage が壊れた場合や作為的な呼び出しで巨大な配列が
+    届いたときに、商品を無制限に引かないため。
+    """
+
+    items: list[GuestCartItemIn] = Field(default_factory=list, max_length=50)
+
+
+class GuestCartItemOut(BaseModel):
+    product: ProductOut
+    # サーバーが認めた数量（在庫で丸めた後）。買えない明細は 0。
+    quantity: int
+    # 端末が送ってきた数量。丸めが起きたことを画面で伝えるために返す。
+    requested_quantity: int
+    subtotal: int
+    # 数量を丸めた・買えない理由。問題がなければ None。
+    reason: str | None = None
+
+
+class GuestCartOut(BaseModel):
+    items: list[GuestCartItemOut]
+    total_amount: int
+    # 商品として引けなかった明細（物理削除・archived）。フロントは端末側の控えから消す。
+    dropped_product_ids: list[int]
+
+
+class CartLineResultOut(BaseModel):
+    """一括投入した 1 明細の結果（再注文・ゲストカートのマージで共有）。"""
+
+    product_id: int
+    product_name: str
+    quantity: int  # 実際にカートへ追加した数（見送った場合は 0）
+    reason: str | None = None  # 見送り/減数の理由。問題なく追加できた場合は None
+
+
+class CartMergeResultOut(BaseModel):
+    """一括投入の結果一式。投入後のカートと、明細ごとの成否を返す。"""
+
+    cart: CartOut
+    added: list[CartLineResultOut]
+    skipped: list[CartLineResultOut]
+
+
 # ---------- Orders ----------
 
 
@@ -356,19 +412,6 @@ class OrderSummaryOut(BaseModel):
 
 class OrderDetailOut(OrderSummaryOut):
     items: list[OrderItemOut]
-
-
-class ReorderItemOut(BaseModel):
-    product_id: int
-    product_name: str
-    quantity: int  # 実際にカートへ追加した数（skipped の場合は 0）
-    reason: str | None = None  # スキップ/減数の理由。問題なく追加できた場合は None
-
-
-class ReorderResultOut(BaseModel):
-    cart: CartOut
-    added: list[ReorderItemOut]
-    skipped: list[ReorderItemOut]
 
 
 class OrderStatusUpdate(BaseModel):

@@ -123,6 +123,11 @@ export default function RelatedProducts({
             <li key={product.id} className="animate-rise">
               <Link
                 href={`/products/${product.id}`}
+                // この枠は ProductCard を使わない独自の行なので、計測もここに置く
+                // （鍵は product_card に揃え、section で枠を見分ける）。
+                data-track-click="product_card"
+                data-track-view="product_card"
+                data-track-props={JSON.stringify({ product_id: product.id, section: 'related' })}
                 className="group flex items-center gap-4 rounded-md py-4 transition-colors duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:gap-6 md:py-5"
               >
                 <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-tile md:h-20 md:w-20">

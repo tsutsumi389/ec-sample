@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
-import type { ReorderItem, ReorderResult } from '@/lib/types';
+import type { CartLineResult, CartMergeResult } from '@/lib/types';
 import { useCart } from '@/lib/cart-context';
 import { useToast } from '@/lib/toast-context';
 import { btn, btnPrimary, btnSecondary } from '@/lib/buttonStyles';
@@ -24,7 +24,7 @@ const primaryClass = `${btnPrimary} ${focusRing}`;
 const compactClass = `${btn('secondary', 'sm')} text-brand-700 ${focusRing}`;
 
 /** 部分成功時の内訳リスト。 */
-function ResultList({ title, items }: { title: string; items: ReorderItem[] }) {
+function ResultList({ title, items }: { title: string; items: CartLineResult[] }) {
   if (items.length === 0) return null;
   return (
     <div className="mt-4">
@@ -52,7 +52,7 @@ function ReorderResultDialog({
   onViewCart,
   onClose,
 }: {
-  result: ReorderResult;
+  result: CartMergeResult;
   onViewCart: () => void;
   onClose: () => void;
 }) {
@@ -156,7 +156,7 @@ export default function ReorderButton({ orderId, variant = 'primary' }: ReorderB
   const { showToast } = useToast();
   const { refresh } = useCart();
   const [pending, setPending] = useState(false);
-  const [result, setResult] = useState<ReorderResult | null>(null);
+  const [result, setResult] = useState<CartMergeResult | null>(null);
 
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -165,7 +165,7 @@ export default function ReorderButton({ orderId, variant = 'primary' }: ReorderB
 
     setPending(true);
     try {
-      const res = await api.post<ReorderResult>(`/orders/${orderId}/reorder`);
+      const res = await api.post<CartMergeResult>(`/orders/${orderId}/reorder`);
       await refresh();
 
       const hasPartial = res.added.some((item) => item.reason !== null);

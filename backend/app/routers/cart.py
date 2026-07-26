@@ -4,8 +4,18 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, get_visitor_id
 from app.database import get_db
 from app.models import CartItem, Product, User
-from app.schemas import CartItemCreate, CartItemOut, CartItemUpdate, CartOut, ProductOut
+from app.schemas import (
+    CartItemCreate,
+    CartItemOut,
+    CartItemUpdate,
+    CartMergeResultOut,
+    CartOut,
+    GuestCartIn,
+    GuestCartOut,
+    ProductOut,
+)
 from app.services import analytics
+from app.services import cart as cart_service
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
@@ -71,9 +81,12 @@ def add_cart_item(
 
     db.commit()
 
-    # カート投入をサーバー側で記録する（ファネルの中間指標）。カート追加は要ログインの
-    # ため、未ログインのボタン押下はここには現れない。それはフロントの click イベント
-    # （element_key = add_to_cart）として別名で記録するので、二重計上にはならない。
+    # カート投入をサーバー側で記録する（ファネルの中間指標）。
+    #
+    # ゲスト（未ログイン）のカート投入はこのエンドポイントを通らず端末の localStorage に
+    # 入るため、そちらはフロントが同じ名前（add_to_cart）で記録する。ログイン時の
+    # マージ（POST /cart/merge）では記録しない——ゲストの時点で 1 件記録済みで、
+    # マージでもう 1 件足すと同じ投入が二重に数えられるため。
     if visitor_id:
         analytics.record_server_event(
             db,
@@ -108,6 +121,54 @@ def update_cart_item(
     item.quantity = payload.quantity
     db.commit()
     return _get_cart(db, current_user)
+
+
+@router.post("/preview", response_model=GuestCartOut)
+def preview_guest_cart(
+    payload: GuestCartIn,
+    db: Session = Depends(get_db),
+) -> GuestCartOut:
+    """ゲストカートの明細を解決して返す（認証不要）。
+
+    在庫の引き当てはしない（ゲストのカートは予約ではない）。金額は effective_price から
+    サーバーが計算する。ゲストカートを描くのに必要な情報がこの 1 リクエストで揃うので、
+    フロントは商品を 1 件ずつ引き直さない。
+    """
+    return cart_service.resolve_guest_lines(
+        db,
+        [
+            cart_service.CartLineRequest(product_id=item.product_id, quantity=item.quantity)
+            for item in payload.items
+        ],
+    )
+
+
+@router.post("/merge", response_model=CartMergeResultOut)
+def merge_guest_cart(
+    payload: GuestCartIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CartMergeResultOut:
+    """端末が持っていたゲストカートをサーバーのカートへ合算する（ログイン直後に呼ぶ）。
+
+    買えない明細はエラーにせず理由とともに見送る（再注文と同じ流儀）。カート投入の計測は
+    ゲストの時点でフロントが済ませているので、ここでは記録しない（add_cart_item の
+    コメント参照）。
+    """
+    lines = [
+        cart_service.CartLineRequest(product_id=item.product_id, quantity=item.quantity)
+        for item in payload.items
+    ]
+    try:
+        added, skipped = cart_service.merge_lines(db, current_user.id, lines)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return CartMergeResultOut(
+        cart=_get_cart(db, current_user), added=added, skipped=skipped
+    )
 
 
 @router.delete("/items/{item_id}", response_model=CartOut)

@@ -23,15 +23,27 @@ logger = logging.getLogger(__name__)
 EVENT_PAGE_VIEW = "page_view"
 EVENT_CLICK = "click"
 EVENT_IMPRESSION = "impression"
+# 商品ページの到達。page_view は全ページ共通なので、これが無いと「一覧 → 商品ページ」と
+# 「商品ページ → カート投入」を分離できず、ファネルの一番太い区間が読めない。
+EVENT_VIEW_ITEM = "view_item"
 EVENT_ADD_TO_CART = "add_to_cart"
+# カート画面の到達。カートを開いた人と、確定操作まで踏み込んだ人（begin_checkout）を
+# 分けて数えるための段。
+EVENT_VIEW_CART = "view_cart"
 EVENT_BEGIN_CHECKOUT = "begin_checkout"
 # 購入。value に注文金額を入れるので、CV数と売上をこの 1 種類だけで集計できる。
 EVENT_PURCHASE = "purchase"
 
 # 既定のファネル。管理画面の結果表示で各段の到達率を枝ごとに比較する。
+# 段は「訪問 → 商品を見た → カートに入れた → カートを開いた → 確定操作 → 購入」。
+# view_item と view_cart はフロントの track() だけが記録する（サーバー側で確定できる
+# 事実ではないため）。重要指標である add_to_cart / purchase はサーバー側が正で、
+# ゲストのカート投入だけは例外的にフロントが記録する（cart.py の add_cart_item 参照）。
 DEFAULT_FUNNEL = (
     EVENT_PAGE_VIEW,
+    EVENT_VIEW_ITEM,
     EVENT_ADD_TO_CART,
+    EVENT_VIEW_CART,
     EVENT_BEGIN_CHECKOUT,
     EVENT_PURCHASE,
 )

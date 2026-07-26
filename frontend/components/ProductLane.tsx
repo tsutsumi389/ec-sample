@@ -23,6 +23,12 @@ interface ProductLaneProps {
   eyebrow?: string;
   items: RecommendationItem[];
   variant?: ProductLaneVariant;
+  /**
+   * 計測でこのレーンを見分ける名前（ホームでは API のレーン key をそのまま渡す）。
+   * レーンは 1 本 = 1 アルゴリズムなので、これが無いと「どの推薦が押されたか」が
+   * 全レーン合算になって読めない。
+   */
+  trackSection?: string;
 }
 
 /** 1ステップのスクロール量（可視幅に対する割合）。端の見切れカードを次の先頭に送る。 */
@@ -66,6 +72,7 @@ export default function ProductLane({
   eyebrow,
   items,
   variant = 'lane',
+  trackSection,
 }: ProductLaneProps) {
   const scrollRef = useRef<HTMLUListElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -249,12 +256,16 @@ export default function ProductLane({
                       </span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <ProductCard product={item.product} tone="onDark" />
+                      <ProductCard
+                        product={item.product}
+                        tone="onDark"
+                        trackSection={trackSection}
+                      />
                     </div>
                   </div>
                 ) : (
                   <div className="flex h-full flex-col">
-                    <ProductCard product={item.product} />
+                    <ProductCard product={item.product} trackSection={trackSection} />
                     {item.reason && (
                       // 丸めは文字数ではなく「文」で行う（truncateAtSentence）。
                       // line-clamp-2 のままだと「食卓の必…」「ミルで挽…」と文節の途中で切れ、

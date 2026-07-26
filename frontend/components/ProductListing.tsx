@@ -18,6 +18,7 @@ import { XMarkIcon } from '@/components/Icons';
 import ProductFilters, { type ProductFiltersValue, type ProductSort } from '@/components/ProductFilters';
 import { btn } from '@/lib/buttonStyles';
 import { listingGrid } from '@/lib/gridStyles';
+import { EVENT_SEARCH_NO_RESULT, track } from '@/lib/analytics';
 
 const LIMIT = 12;
 
@@ -198,6 +199,19 @@ export default function ProductListing({
         if (cancelled) return;
         setProducts(data.items);
         setTotal(data.total);
+        // 0 件は「探したのに見つからなかった」＝取りこぼしている需要。何で探して
+        // 空になったのかを残す（1 ページ目だけ数える。ページ送りの空振りは需要ではない）。
+        if (data.total === 0 && page === 1) {
+          track(EVENT_SEARCH_NO_RESULT, {
+            props: {
+              search: search || null,
+              category_id: categoryId,
+              min_price: minPrice || null,
+              max_price: maxPrice || null,
+              sort: sortParam,
+            },
+          });
+        }
       })
       .catch((e) => {
         if (cancelled) return;
@@ -380,7 +394,7 @@ export default function ProductListing({
     }
     gridCells.push(
       <li key={product.id} className="h-full animate-rise">
-        <ProductCard product={product} />
+        <ProductCard product={product} trackSection="listing" />
       </li>
     );
   });

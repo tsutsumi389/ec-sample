@@ -136,7 +136,7 @@ export default function WishlistPage() {
               return (
                 <li key={item.id} className="flex h-full min-w-0 flex-col">
                   <div className="relative flex-1">
-                    <ProductCard product={item.product} hideWishlistButton />
+                    <ProductCard product={item.product} hideWishlistButton trackSection="wishlist" />
                     {/* カードのハートと同じ位置に置く（お気に入り一覧では解除だけを出す） */}
                     <button
                       type="button"

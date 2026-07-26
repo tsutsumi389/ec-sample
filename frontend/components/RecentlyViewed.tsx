@@ -91,7 +91,7 @@ export default function RecentlyViewed({ excludeId }: { excludeId?: number }) {
             className="h-full motion-safe:animate-rise"
             style={{ animationDelay: `${Math.min(i, 7) * 45}ms` }}
           >
-            <ProductCard product={product} />
+            <ProductCard product={product} trackSection="recently_viewed" />
           </li>
         ))}
       </ul>

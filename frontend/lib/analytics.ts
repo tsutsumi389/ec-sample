@@ -16,7 +16,16 @@ import { getSessionId, getVisitorId } from './visitor';
 export const EVENT_PAGE_VIEW = 'page_view';
 export const EVENT_CLICK = 'click';
 export const EVENT_IMPRESSION = 'impression';
+/** 商品ページの到達。page_view と違い「商品を見た人」だけを数える段。 */
+export const EVENT_VIEW_ITEM = 'view_item';
+/** カート投入。ゲスト（未ログイン）の投入はサーバーに届かないため、この名前で記録する。
+ *  ログイン済みの投入は routers/cart.py がサーバー側で記録する（二重に送らないこと）。 */
+export const EVENT_ADD_TO_CART = 'add_to_cart';
+/** カート画面の到達。カートを開いた人と、確定操作まで進んだ人を分けて数える。 */
+export const EVENT_VIEW_CART = 'view_cart';
 export const EVENT_BEGIN_CHECKOUT = 'begin_checkout';
+/** 検索・絞り込みの結果が 0 件だったこと。取りこぼしている需要を拾うための記録。 */
+export const EVENT_SEARCH_NO_RESULT = 'search_no_result';
 
 export interface TrackOptions {
   /** どのUI要素か。レイアウト実験ではこれを軸にクリック分布の変化を見る。 */
