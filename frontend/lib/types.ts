@@ -153,6 +153,43 @@ export interface Cart {
   total_amount: number;
 }
 
+/**
+ * ゲスト（未ログイン）のカート 1 明細。端末が持つのは商品IDと数量だけなので、
+ * 価格・購入可否・在庫はサーバー（POST /cart/preview）が解決して返す。
+ */
+export interface GuestCartItem {
+  product: Product;
+  /** サーバーが認めた数量（在庫で丸めた後）。買えない明細は 0。 */
+  quantity: number;
+  /** 端末が送った数量。quantity と違えば丸めが起きている。 */
+  requested_quantity: number;
+  subtotal: number;
+  /** 数量を丸めた・買えない理由。問題がなければ null。 */
+  reason: string | null;
+}
+
+export interface GuestCart {
+  items: GuestCartItem[];
+  total_amount: number;
+  /** 商品として引けなかった明細。端末側の控えから消す対象。 */
+  dropped_product_ids: number[];
+}
+
+/** カートへ一括投入した 1 明細の結果（再注文・ゲストカートのマージで共通）。 */
+export interface CartLineResult {
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  /** 追加できなかった理由・一部のみ追加した理由。通常の追加成功時は null。 */
+  reason: string | null;
+}
+
+export interface CartMergeResult {
+  cart: Cart;
+  added: CartLineResult[];
+  skipped: CartLineResult[];
+}
+
 export type OrderStatus = 'pending' | 'paid' | 'shipped' | 'delivered' | 'cancelled';
 
 export interface OrderItem {
@@ -174,20 +211,6 @@ export interface Order {
   shipping_address: string;
   created_at: string;
   items?: OrderItem[];
-}
-
-export interface ReorderItem {
-  product_id: number;
-  product_name: string;
-  quantity: number;
-  /** 追加できなかった理由・一部のみ追加した理由。通常の追加成功時は null。 */
-  reason: string | null;
-}
-
-export interface ReorderResult {
-  cart: Cart;
-  added: ReorderItem[];
-  skipped: ReorderItem[];
 }
 
 export interface AdminOrderUser {

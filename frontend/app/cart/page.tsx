@@ -1,13 +1,19 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
-import type { Address, Cart, CartItem, CouponValidation } from '@/lib/types';
+import type { Address, Cart, CouponValidation, GuestCart, Product } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
 import { useToast } from '@/lib/toast-context';
+import {
+  readGuestCart,
+  reconcileGuestCart,
+  removeFromGuestCart,
+  setGuestCartQuantity,
+} from '@/lib/guestCart';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
 import PageMasthead from '@/components/PageMasthead';
@@ -17,7 +23,7 @@ import SectionHead from '@/components/SectionHead';
 import { Skeleton } from '@/components/Skeleton';
 import { TrashIcon, ChevronRightIcon } from '@/components/Icons';
 import { btn } from '@/lib/buttonStyles';
-import { EVENT_BEGIN_CHECKOUT, track } from '@/lib/analytics';
+import { EVENT_BEGIN_CHECKOUT, EVENT_VIEW_CART, track } from '@/lib/analytics';
 import { SELECT_CHEVRON } from '@/lib/selectChevron';
 import { withWordBreaks } from '@/lib/wordBreak';
 
@@ -36,6 +42,45 @@ const inputClass = `${inputBase} rounded-md`;
  * 行数は rows で決める（誌面の枠なので、利用者が高さを変えられる必要はない）。
  */
 const textareaClass = `${inputBase} resize-none rounded-lg`;
+
+/**
+ * 明細 1 行の描画データ。ログイン後のカート（サーバー）とゲストカート（端末＋
+ * POST /cart/preview で解決）を同じ形に正規化し、行の造形を 1 つに保つ。
+ */
+interface CartRow {
+  /** React の key。行の宛先が id 体系ごと違うので接頭辞で分ける。 */
+  key: string;
+  /** 数量変更・削除の宛先。ログイン時は CartItem.id、ゲスト時は商品ID。 */
+  targetId: number;
+  product: Product;
+  /** 買える数量。買えない明細（在庫切れ・販売停止）は 0。 */
+  quantity: number;
+  subtotal: number;
+  /** 在庫で数量を丸めた・いま買えない、などサーバーからの申し送り。無ければ null。 */
+  notice: string | null;
+}
+
+function toRows(cart: Cart): CartRow[] {
+  return cart.items.map((item) => ({
+    key: `item-${item.id}`,
+    targetId: item.id,
+    product: item.product,
+    quantity: item.quantity,
+    subtotal: item.subtotal,
+    notice: null,
+  }));
+}
+
+function toGuestRows(cart: GuestCart): CartRow[] {
+  return cart.items.map((item) => ({
+    key: `product-${item.product.id}`,
+    targetId: item.product.id,
+    product: item.product,
+    quantity: item.quantity,
+    subtotal: item.subtotal,
+    notice: item.reason,
+  }));
+}
 
 /** 読み込み中のカート行スケルトン（実際の行レイアウトに合わせる）。 */
 function CartRowSkeleton() {
@@ -60,7 +105,9 @@ export default function CartPage() {
   const { refresh } = useCart();
   const { showToast } = useToast();
 
-  const [cart, setCart] = useState<Cart | null>(null);
+  // null は「まだ取得していない」。空配列は「カートが空」。
+  const [rows, setRows] = useState<CartRow[] | null>(null);
+  const [subtotal, setSubtotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   /** 注文確定の失敗。取得失敗（error）とは復帰導線が違うので別の状態に分ける
@@ -72,7 +119,7 @@ export default function CartPage() {
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
   // 削除確認ダイアログ
-  const [removeTarget, setRemoveTarget] = useState<CartItem | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<CartRow | null>(null);
   const [removing, setRemoving] = useState(false);
 
   // 注文確定ボタンはサマリー（右カラム）にあるため、住所未入力で弾いたときは
@@ -93,31 +140,76 @@ export default function CartPage() {
     null
   );
 
+  // ファネルの「カートを開いた」段。確定操作（begin_checkout）まで進んだ人と分けて数える。
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.replace('/login?redirect=/cart');
-    }
-  }, [authLoading, user, router]);
+    track(EVENT_VIEW_CART);
+  }, []);
 
-  const loadCart = () => {
+  /**
+   * カートの中身を取る。ログイン時はサーバーのカート、未ログイン時は端末の控えを
+   * POST /cart/preview に渡して解決させる（価格・購入可否・在庫の判断はサーバー側が
+   * 唯一の源。effective_price の計算をクライアントへ写さない）。
+   */
+  const fetchCart = useCallback(async (): Promise<{
+    rows: CartRow[];
+    subtotal: number;
+    /** 商品ごと引けずに落とした件数（ゲストのみ）。黙って消さずに知らせるために返す。 */
+    droppedCount: number;
+  }> => {
+    if (user) {
+      const data = await api.get<Cart>('/cart');
+      return { rows: toRows(data), subtotal: data.total_amount, droppedCount: 0 };
+    }
+    const lines = readGuestCart();
+    if (lines.length === 0) return { rows: [], subtotal: 0, droppedCount: 0 };
+    const data = await api.post<GuestCart>('/cart/preview', { items: lines });
+    // 取り扱いが終わった商品を落とし、在庫で丸めた数量を端末の控えにも反映する。
+    // 買えない明細（quantity=0）は要求数量のまま残す——在庫が戻れば買えるので、
+    // 黙って消すより「在庫切れです」の行として見せて、外すかどうかは本人に委ねる。
+    reconcileGuestCart(
+      data.items.map((item) => ({
+        product_id: item.product.id,
+        quantity: item.quantity > 0 ? item.quantity : item.requested_quantity,
+      }))
+    );
+    return {
+      rows: toGuestRows(data),
+      subtotal: data.total_amount,
+      droppedCount: data.dropped_product_ids.length,
+    };
+  }, [user]);
+
+  const loadCart = useCallback(() => {
     setLoading(true);
-    api
-      .get<Cart>('/cart')
-      .then(setCart)
+    setError('');
+    fetchCart()
+      .then(({ rows: nextRows, subtotal: nextSubtotal, droppedCount }) => {
+        setRows(nextRows);
+        setSubtotal(nextSubtotal);
+        // 商品ページごと無くなった品は行として見せられないので落とすしかない。
+        // ただし黙って消すと「入れたはずのものが無い」だけが残るため必ず伝える。
+        if (droppedCount > 0) {
+          showToast(`お取り扱いが終了した${droppedCount}点をカートから外しました`, {
+            type: 'info',
+          });
+        }
+      })
       .catch((e) => setError(e instanceof ApiError ? e.message : 'カートの取得に失敗しました'))
       .finally(() => setLoading(false));
-  };
+    // showToast は ToastProvider が useCallback で固定しているため依存に入れても再生成されない。
+  }, [fetchCart, showToast]);
 
   // 数量変更・削除の後にスケルトンを出さず静かに取り直す。
   const refreshCart = async () => {
-    const data = await api.get<Cart>('/cart');
-    setCart(data);
-    return data;
+    const { rows: nextRows, subtotal: nextSubtotal } = await fetchCart();
+    setRows(nextRows);
+    setSubtotal(nextSubtotal);
+    return nextSubtotal;
   };
 
   // 数量変更・削除でカート合計が変わったら、適用中クーポンを新しい小計で再検証する。
   // 無効になった（最低購入額割れなど）場合はクーポンを解除して通知する。
-  const revalidateAppliedCoupon = async (nextCart: Cart) => {
+  const revalidateAppliedCoupon = async (nextSubtotal: number) => {
     if (!appliedCoupon) return;
     const removeStaleCoupon = () => {
       setAppliedCoupon(null);
@@ -129,7 +221,7 @@ export default function CartPage() {
     try {
       const result = await api.post<CouponValidation>('/coupons/validate', {
         code: appliedCoupon.code,
-        subtotal: nextCart.total_amount,
+        subtotal: nextSubtotal,
       });
       if (result.valid) {
         setAppliedCoupon({ code: appliedCoupon.code, discount_amount: result.discount_amount });
@@ -143,9 +235,11 @@ export default function CartPage() {
     }
   };
 
+  // 認証状態が確定してから読む（確定前に読むと、ログイン済みでもゲスト経路で取ってしまう）。
   useEffect(() => {
-    if (user) loadCart();
-  }, [user]);
+    if (authLoading) return;
+    loadCart();
+  }, [authLoading, loadCart]);
 
   useEffect(() => {
     if (!user) return;
@@ -162,15 +256,20 @@ export default function CartPage() {
       .finally(() => setAddressesLoaded(true));
   }, [user]);
 
-  const handleQuantityChange = async (itemId: number, quantity: number) => {
+  const handleQuantityChange = async (row: CartRow, quantity: number) => {
     if (quantity < 1) return;
-    setUpdatingId(itemId);
+    setUpdatingId(row.targetId);
     try {
-      await api.put(`/cart/items/${itemId}`, { quantity });
-      const nextCart = await refreshCart();
+      // 宛先は行の出自で決まる（ログイン時はカート明細、ゲスト時は端末の控え）。
+      if (user) {
+        await api.put(`/cart/items/${row.targetId}`, { quantity });
+      } else {
+        setGuestCartQuantity(row.targetId, quantity);
+      }
+      const nextSubtotal = await refreshCart();
       await refresh();
       showToast('数量を変更しました');
-      await revalidateAppliedCoupon(nextCart);
+      await revalidateAppliedCoupon(nextSubtotal);
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : '更新に失敗しました', { type: 'error' });
     } finally {
@@ -182,12 +281,16 @@ export default function CartPage() {
     if (!removeTarget) return;
     setRemoving(true);
     try {
-      await api.delete(`/cart/items/${removeTarget.id}`);
-      const nextCart = await refreshCart();
+      if (user) {
+        await api.delete(`/cart/items/${removeTarget.targetId}`);
+      } else {
+        removeFromGuestCart(removeTarget.targetId);
+      }
+      const nextSubtotal = await refreshCart();
       await refresh();
       showToast('カートから削除しました');
       setRemoveTarget(null);
-      await revalidateAppliedCoupon(nextCart);
+      await revalidateAppliedCoupon(nextSubtotal);
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : '削除に失敗しました', { type: 'error' });
     } finally {
@@ -197,13 +300,13 @@ export default function CartPage() {
 
   const handleValidateCoupon = async () => {
     const code = couponCode.trim();
-    if (!code || !cart) return;
+    if (!code || !rows) return;
     setCouponValidating(true);
     setCouponResult(null);
     try {
       const result = await api.post<CouponValidation>('/coupons/validate', {
         code,
-        subtotal: cart.total_amount,
+        subtotal,
       });
       setCouponResult(result);
       if (result.valid) {
@@ -279,7 +382,7 @@ export default function CartPage() {
     }
   };
 
-  if (authLoading || !user) {
+  if (authLoading) {
     return (
       <div className="wrap band-lg flex items-center text-body text-ink-muted">
         <Spinner className="mr-2" />
@@ -293,22 +396,27 @@ export default function CartPage() {
    * 造形を1つに保ったまま2箇所へ出す（同時に見えるのは常に片方だけ）。
    * h-9 + .hit（±6px）＝ 実効 48px。
    */
-  const removeButton = (item: CartItem, className = '') => (
+  const removeButton = (row: CartRow, className = '') => (
     <button
       type="button"
-      onClick={() => setRemoveTarget(item)}
-      disabled={updatingId === item.id}
-      aria-label={`${item.product.name}を削除`}
+      onClick={() => setRemoveTarget(row)}
+      disabled={updatingId === row.targetId}
+      aria-label={`${row.product.name}を削除`}
       className={`hit inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors duration-fast hover:bg-critical-50 hover:text-critical-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-50 ${className}`}
     >
       <TrashIcon className="h-5 w-5" />
     </button>
   );
 
-  const subtotal = cart?.total_amount ?? 0;
   const discount = appliedCoupon?.discount_amount ?? 0;
   const total = Math.max(subtotal - discount, 0);
-  const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  // 点数は「買える数量」で数える（在庫切れの行は金額にも点数にも入れない）。
+  const itemCount = rows?.reduce((sum, row) => sum + row.quantity, 0) ?? 0;
+  const hasItems = Boolean(rows && rows.length > 0);
+  // ゲストは注文まで進めない。カートは見せ、確定の手前でログインへ送る。
+  const guestCheckout = !user;
+  // 買える品が 1 つ以上あるか（在庫切れの行だけが残っている状態では確定させない）。
+  const canCheckout = itemCount > 0;
 
   return (
     <>
@@ -316,12 +424,16 @@ export default function CartPage() {
       <PageMasthead
         eyebrow="CART"
         title="カート"
-        subtitle="お届け先をご確認のうえ、ご注文へお進みください。"
+        subtitle={
+          guestCheckout
+            ? 'ご注文の前にログインが必要です。カートの中身はそのまま引き継がれます。'
+            : 'お届け先をご確認のうえ、ご注文へお進みください。'
+        }
         width="default"
         motif="kettle"
         breadcrumbs={[{ label: 'ホーム', href: '/' }, { label: 'カート' }]}
         right={
-          !loading && cart && cart.items.length > 0 ? (
+          !loading && hasItems ? (
             <p className="whitespace-nowrap text-body text-ink-muted">
               全 <span className="tnum text-num-lg text-ink">{itemCount}</span> 点
             </p>
@@ -355,7 +467,7 @@ export default function CartPage() {
           </div>
         )}
 
-        {!loading && cart && cart.items.length === 0 && (
+        {!loading && rows && rows.length === 0 && (
           <EmptyState
             title="カートは空です"
             description="気になる道具を見つけて、カートに入れてみてください。"
@@ -367,7 +479,7 @@ export default function CartPage() {
           />
         )}
 
-        {!loading && cart && cart.items.length > 0 && (
+        {!loading && rows && rows.length > 0 && (
           <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-x-10">
             {/* 左: 明細 + クーポン + お届け先 */}
             <div className="lg:col-span-7">
@@ -375,20 +487,23 @@ export default function CartPage() {
 
               {/* カードにせず、罫線だけの表組みにする（誌面の明細） */}
               <ul className="mt-6 divide-y divide-line border-y border-line">
-                {cart.items.map((item) => (
-                  <li key={item.id} className="flex gap-4 py-6 sm:gap-6">
+                {rows.map((row) => (
+                  <li key={row.key} className="flex gap-4 py-6 sm:gap-6">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={item.product.image_url}
-                      alt={item.product.name}
+                      src={row.product.image_url}
+                      alt={row.product.name}
                       onError={(e) => {
                         const img = e.currentTarget;
                         if (img.src.endsWith('/no-image.svg')) return;
                         img.onerror = null;
                         img.src = '/no-image.svg';
                       }}
-                      /* 画像が載る面はイラストの地色（tile）にして額縁を消す */
-                      className="h-24 w-24 shrink-0 rounded-lg bg-tile object-cover"
+                      /* 画像が載る面はイラストの地色（tile）にして額縁を消す。
+                         買えない行は図版を沈ませる（一覧カードと同じ規律）。 */
+                      className={`h-24 w-24 shrink-0 rounded-lg bg-tile object-cover ${
+                        row.quantity === 0 ? 'opacity-50' : ''
+                      }`}
                     />
                     {/* 768〜1023px（単カラムで行幅 704px）だけ「品名｜数量｜行合計｜削除」の
                         1行に組み替える。この帯では品名の右に約380pxの死空間が残っていた。
@@ -399,62 +514,83 @@ export default function CartPage() {
                       <div className="flex items-start justify-between gap-3 md:min-w-0 md:flex-1">
                         <div className="min-w-0">
                           <Link
-                            href={`/products/${item.product.id}`}
+                            href={`/products/${row.product.id}`}
                             className="text-h3 text-ink jp-name transition-colors duration-fast hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
                           >
                             {/* 素の商品名を書かない。<wbr> を語句境界だけに挿し、
                                 「ブルートゥースス／ピーカー」のような語中改行を止める。 */}
-                            {withWordBreaks(item.product.name)}
+                            {withWordBreaks(row.product.name)}
                           </Link>
                           {/* 単価は数量が2以上のときだけ出す。数量1では「¥2,680 × 1」と
                               行合計「¥2,680」が同じ数字を2度言うだけになる。 */}
-                          {item.quantity > 1 && (
+                          {row.quantity > 1 && (
                             <p className="mt-1.5 tnum text-caption text-ink-muted">
-                              単価 ¥{item.product.effective_price.toLocaleString()} ×{' '}
-                              {item.quantity}
+                              単価 ¥{row.product.effective_price.toLocaleString()} ×{' '}
+                              {row.quantity}
+                            </p>
+                          )}
+                          {/* 在庫で数量を丸めた・いま買えない、という申し送り。金額の変化を
+                              黙って起こさず、必ず理由をその行に書く。 */}
+                          {row.notice && (
+                            <p role="status" className="mt-1.5 text-caption text-critical-600">
+                              {row.notice}
                             </p>
                           )}
                         </div>
-                        {removeButton(item, 'md:hidden lg:inline-flex')}
+                        {removeButton(row, 'md:hidden lg:inline-flex')}
                       </div>
                       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 md:mt-0 md:shrink-0 md:gap-5 lg:mt-4 lg:gap-4">
-                        <div className="flex items-center gap-2">
-                          <label htmlFor={`qty-${item.id}`} className="text-caption text-ink-muted">
-                            数量
-                          </label>
-                          <select
-                            id={`qty-${item.id}`}
-                            value={item.quantity}
-                            disabled={updatingId === item.id}
-                            onChange={(e) => handleQuantityChange(item.id, Number(e.target.value))}
-                            aria-label={`${item.product.name}の数量`}
-                            style={{ backgroundImage: `url("${SELECT_CHEVRON}")` }}
-                            className="tnum h-11 appearance-none rounded-md border border-line-input bg-surface bg-[length:1rem_1rem] bg-[right_0.625rem_center] bg-no-repeat pl-3.5 pr-9 text-body text-ink focus-visible:border-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:opacity-50"
-                          >
-                            {Array.from(
-                              { length: Math.max(item.product.stock, item.quantity, 1) },
-                              (_, i) => i + 1
-                            ).map((q) => (
-                              <option key={q} value={q}>
-                                {q}
-                              </option>
-                            ))}
-                          </select>
-                          {updatingId === item.id && <Spinner className="h-4 w-4 text-ink-faint" />}
-                        </div>
+                        {/* 買えない行に数量セレクトは出さない（操作しても何も変わらない）。
+                            残るのは「削除して先へ進む」導線だけ。 */}
+                        {row.quantity > 0 && (
+                          <div className="flex items-center gap-2">
+                            <label
+                              htmlFor={`qty-${row.key}`}
+                              className="text-caption text-ink-muted"
+                            >
+                              数量
+                            </label>
+                            <select
+                              id={`qty-${row.key}`}
+                              value={row.quantity}
+                              disabled={updatingId === row.targetId}
+                              onChange={(e) => handleQuantityChange(row, Number(e.target.value))}
+                              aria-label={`${row.product.name}の数量`}
+                              style={{ backgroundImage: `url("${SELECT_CHEVRON}")` }}
+                              className="tnum h-11 appearance-none rounded-md border border-line-input bg-surface bg-[length:1rem_1rem] bg-[right_0.625rem_center] bg-no-repeat pl-3.5 pr-9 text-body text-ink focus-visible:border-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:opacity-50"
+                            >
+                              {Array.from(
+                                { length: Math.max(row.product.stock, row.quantity, 1) },
+                                (_, i) => i + 1
+                              ).map((q) => (
+                                <option key={q} value={q}>
+                                  {q}
+                                </option>
+                              ))}
+                            </select>
+                            {updatingId === row.targetId && (
+                              <Spinner className="h-4 w-4 text-ink-faint" />
+                            )}
+                          </div>
+                        )}
                         <Price
-                          value={item.subtotal}
+                          value={row.subtotal}
                           size="base"
                           as="p"
                           className="tnum sm:ml-auto sm:text-right md:ml-0 md:w-28 lg:ml-auto lg:w-auto"
                         />
-                        {removeButton(item, 'hidden md:inline-flex lg:hidden')}
+                        {removeButton(row, 'hidden md:inline-flex lg:hidden')}
                       </div>
                     </div>
                   </li>
                 ))}
               </ul>
 
+              {/* クーポンとお届け先は注文の入力欄なので、ログイン後にだけ出す。ゲストに
+                  空欄を並べても埋められず、「入力したのに進めない」体験になるだけ。
+                  ゲストの導線はサマリー側の「ログインしてご注文へ」1 本に絞る。 */}
+              {!guestCheckout && (
+                <>
               {/* クーポン（折りたたみ）。二次的な操作なので影は持たせず地の色差だけで浮かせる。 */}
               <div className="mt-8 overflow-hidden rounded-xl bg-sunken">
                 <button
@@ -635,6 +771,8 @@ export default function CartPage() {
                   </>
                 )}
               </div>
+                </>
+              )}
             </div>
 
             {/* 右: お支払い金額のサマリー。スクロールに追従させ、CTA を常に視界へ置く。 */}
@@ -679,7 +817,7 @@ export default function CartPage() {
                 {/* 押してから弾かれる順序にしないための予告。
                     デスクトップではお届け先が左カラム（CTA の遥か下）にあるため、
                     「まだ確定できない」ことと入力欄への近道を CTA の直上に置く。 */}
-                {addressMissing && (
+                {!guestCheckout && addressMissing && (
                   <div className="mt-6 rounded-lg bg-sunken px-4 py-4">
                     <p className="text-caption text-ink-soft">
                       ご注文にはお届け先の入力が必要です。
@@ -709,17 +847,53 @@ export default function CartPage() {
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleOrder}
-                  disabled={submitting}
-                  className={`${btn('primary', 'lg')} mt-6 w-full`}
-                >
-                  {submitting ? '注文処理中...' : '注文を確定する'}
-                </button>
-                <p className="mt-3 text-caption text-ink-muted">
-                  送料は全国一律無料です。お届け先を確認のうえご注文ください。
-                </p>
+                {/* 買える品が 1 つも無い（全行が在庫切れ・販売停止）ときは、押しても
+                    サーバーに弾かれるだけなので確定させない。 */}
+                {!canCheckout && (
+                  <p role="status" className="mt-6 rounded-lg bg-sunken px-4 py-4 text-caption text-ink-soft">
+                    ご注文いただける品がありません。在庫切れの品を外すか、別の道具をお選びください。
+                  </p>
+                )}
+
+                {guestCheckout ? (
+                  <>
+                    {/* ゲストにログインを求めるのはここだけ。カートに入れる時点では求めない
+                        （そこで求めると、買う気になった瞬間の意思がほぼ戻ってこない）。
+                        中身が引き継がれることを明示しないと、押す前に離脱する。 */}
+                    <Link
+                      href="/login?redirect=/cart"
+                      aria-disabled={!canCheckout}
+                      className={`${btn('primary', 'lg')} mt-6 w-full ${
+                        canCheckout ? '' : 'pointer-events-none opacity-50'
+                      }`}
+                    >
+                      ログインしてご注文へ
+                    </Link>
+                    <Link
+                      href="/register?redirect=/cart"
+                      className={`${btn('secondary', 'md')} mt-3 w-full`}
+                    >
+                      はじめての方は会員登録
+                    </Link>
+                    <p className="mt-3 text-caption text-ink-muted">
+                      カートの中身はそのまま引き継がれます。送料は全国一律無料です。
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleOrder}
+                      disabled={submitting || !canCheckout}
+                      className={`${btn('primary', 'lg')} mt-6 w-full`}
+                    >
+                      {submitting ? '注文処理中...' : '注文を確定する'}
+                    </button>
+                    <p className="mt-3 text-caption text-ink-muted">
+                      送料は全国一律無料です。お届け先を確認のうえご注文ください。
+                    </p>
+                  </>
+                )}
               </div>
             </aside>
           </div>

@@ -8,6 +8,7 @@ import { api, ApiError } from '@/lib/api';
 import type { User } from '@/lib/types';
 import { useToast } from '@/lib/toast-context';
 import { btn } from '@/lib/buttonStyles';
+import { safeRedirect, withRedirect } from '@/lib/redirect';
 import { KettleMotif, CupMotif, PlantMotif, LanternMotif } from '@/components/BrandMotifs';
 
 /** 入力欄の共通クラス（罫は line-input、高さ 44px）。 */
@@ -85,7 +86,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
-  const redirectTo = searchParams.get('redirect') || '/';
+  const redirectTo = safeRedirect(searchParams.get('redirect'));
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -100,7 +101,8 @@ function LoginForm() {
     setSubmitting(true);
     setError('');
     try {
-      await login(email, password);
+      // 未ログイン中に端末へ溜めたカートは login がサーバーへ合算し、その結果を返す。
+      const merged = await login(email, password);
       // login は内部で認証情報を更新するが name を返さないため、歓迎トースト用に取得する。
       let name = '';
       try {
@@ -110,6 +112,13 @@ function LoginForm() {
         // 取得に失敗しても歓迎トースト自体は出す（名前は省く）。
       }
       showToast(name ? `おかえりなさい、${name}さん` : 'おかえりなさい', { type: 'success' });
+      // 入れていた品が在庫切れ等で引き継げなかったときは黙って消さずに知らせる。
+      if (merged && merged.skipped.length > 0) {
+        showToast(
+          `カートの${merged.skipped.length}点は在庫が変わったため引き継げませんでした`,
+          { type: 'info' }
+        );
+      }
       router.push(redirectTo);
     } catch (err) {
       setError(
@@ -247,7 +256,9 @@ function LoginForm() {
           <p className="mt-8 border-t border-line pt-6 text-center text-body text-ink-muted">
             アカウントをお持ちでない方は{' '}
             <Link
-              href="/register"
+              /* 戻り先を登録側にも引き継ぐ。ここで落とすと「カートから来て登録したのに
+                 トップに着く」経路ができ、買う気になっていた人をそのまま失う。 */
+              href={withRedirect('/register', redirectTo)}
               className="rounded font-medium text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
             >
               会員登録

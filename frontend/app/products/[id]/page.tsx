@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type ReactNode, type SyntheticEvent } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError, getToken } from '@/lib/api';
 import type { Category, Product } from '@/lib/types';
@@ -35,6 +35,8 @@ import { Skeleton } from '@/components/Skeleton';
 import { btn, iconBtn } from '@/lib/buttonStyles';
 import { recordRecentlyViewed } from '@/lib/recentlyViewed';
 import { PRODUCT_STATUS_META } from '@/lib/productStatus';
+import { EVENT_ADD_TO_CART, EVENT_VIEW_ITEM, track } from '@/lib/analytics';
+import { addToGuestCart } from '@/lib/guestCart';
 
 // 下部セクションの既定の並び。実験の config が無い・壊れている場合はこれを使う。
 const DEFAULT_SECTION_ORDER = ['recommendations', 'related', 'reviews', 'qa', 'recently'];
@@ -51,7 +53,6 @@ interface CtaCopyConfig {
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const { user } = useAuth();
   const { showToast } = useToast();
   const { count: cartCount, refresh } = useCart();
@@ -99,6 +100,12 @@ export default function ProductDetailPage() {
         setAdded(false);
         // 取得に成功した商品だけを閲覧履歴に残す。
         recordRecentlyViewed(p.id);
+        // ファネルの「商品を見た」段。page_view は全ページ共通なので、これが無いと
+        // 「一覧 → 商品ページ」と「商品ページ → カート投入」を分けて読めない。
+        track(EVENT_VIEW_ITEM, {
+          value: p.effective_price,
+          props: { product_id: p.id, status: p.status },
+        });
         // ログイン時のみサーバー側にも閲覧を記録する（パーソナライズ用）。
         // サーバー側はゲストを no-op にするため、未ログイン時は無駄なリクエストを避けて呼ばない。
         // 閲覧記録は補助機能なので fire-and-forget とし、失敗は握りつぶして UI に影響させない。
@@ -151,10 +158,40 @@ export default function ProductDetailPage() {
   }, [product, trackCtaExposure]);
 
   const handleAddToCart = async () => {
+    if (!product) return;
+
+    // 未ログインでも入れられるようにする。「欲しい」と思った瞬間にログインを挟むと、
+    // その意思はほとんど戻ってこない。控えは端末に置き（lib/guestCart.ts）、ログイン・
+    // 会員登録の直後に POST /cart/merge でサーバーのカートへ合算する。
     if (!user) {
-      router.push('/login');
+      const { quantity: inCart, added: addedCount } = addToGuestCart(
+        product.id,
+        quantity,
+        product.stock
+      );
+      if (addedCount <= 0) {
+        showToast(
+          inCart > 0
+            ? 'すでにカートに在庫数分入っています'
+            : 'この商品はただいま在庫がありません',
+          { type: 'info' }
+        );
+        return;
+      }
+      // ゲストの投入はサーバーを通らないので、ファネルの段はここで記録する
+      // （ログイン時は routers/cart.py がサーバー側で記録するため、二重にはならない）。
+      track(EVENT_ADD_TO_CART, {
+        value: product.effective_price * addedCount,
+        props: { product_id: product.id, quantity: addedCount, guest: true },
+      });
+      setAdded(true);
+      showToast('カートに追加しました', {
+        type: 'success',
+        action: { label: 'カートを見る', href: '/cart' },
+      });
       return;
     }
+
     setAdding(true);
     setError('');
     try {

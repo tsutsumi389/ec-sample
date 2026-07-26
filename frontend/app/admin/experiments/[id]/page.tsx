@@ -21,9 +21,12 @@ const FUNNEL_LABELS: Record<string, string> = {
   page_view: 'ページ閲覧',
   impression: 'セクション表示',
   click: 'クリック',
+  view_item: '商品ページ閲覧',
   add_to_cart: 'カート投入',
+  view_cart: 'カート閲覧',
   begin_checkout: '注文手続き開始',
   purchase: '購入',
+  search_no_result: '検索0件',
 };
 
 function formatDate(iso: string | null): string {

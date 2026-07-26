@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 import { api, ApiError } from '@/lib/api';
+import { withRedirect } from '@/lib/redirect';
 import type { WishlistItem } from '@/lib/types';
 
 export type WishlistButtonSize = 'sm' | 'md' | 'lg';
@@ -57,7 +58,11 @@ export default function WishlistButton({
     e.stopPropagation();
 
     if (!user) {
-      router.push('/login');
+      // ログイン後は押した場所へ戻す。戻り先を渡さないとトップに着いてしまい、
+      // 何をしようとしていたのか分からなくなる。
+      // 現在地は window から読む（useSearchParams を使うとこのボタンを置く全ページに
+      // Suspense 境界が必要になる。ここはクリック時にだけ必要な値なのでその必要はない）。
+      router.push(withRedirect('/login', `${window.location.pathname}${window.location.search}`));
       return;
     }
 

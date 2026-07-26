@@ -1,12 +1,13 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { FormEvent, Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { ApiError, EMAIL_ALREADY_REGISTERED_MESSAGE } from '@/lib/api';
 import { useToast } from '@/lib/toast-context';
 import { btn } from '@/lib/buttonStyles';
+import { safeRedirect, withRedirect } from '@/lib/redirect';
 import { KettleMotif, CupMotif, PlantMotif, UmbrellaMotif } from '@/components/BrandMotifs';
 
 type FieldErrors = {
@@ -89,10 +90,13 @@ function PasswordField({ id, value, invalid, onChange }: PasswordFieldProps) {
   );
 }
 
-export default function RegisterPage() {
+function RegisterForm() {
   const { register } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { showToast } = useToast();
+  // どこから来たか（例: カートの「はじめての方は会員登録」）。登録後はそこへ戻す。
+  const redirectTo = safeRedirect(searchParams.get('redirect'));
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -129,9 +133,16 @@ export default function RegisterPage() {
     setSubmitting(true);
     setError('');
     try {
-      await register(email, password, name);
+      // 未ログイン中に端末へ溜めたカートは register（内部で login）が合算し、結果を返す。
+      const merged = await register(email, password, name);
       showToast('ようこそ、Hibinoへ', { type: 'success' });
-      router.push('/');
+      if (merged && merged.skipped.length > 0) {
+        showToast(
+          `カートの${merged.skipped.length}点は在庫が変わったため引き継げませんでした`,
+          { type: 'info' }
+        );
+      }
+      router.push(redirectTo);
     } catch (err) {
       if (err instanceof ApiError && err.message === EMAIL_ALREADY_REGISTERED_MESSAGE) {
         // 重複メール等、フィールドに紐づくAPIエラーは既存のフィールドエラー表示の仕組みに載せる
@@ -290,7 +301,8 @@ export default function RegisterPage() {
           <p className="mt-8 border-t border-line pt-6 text-center text-body text-ink-muted">
             すでにアカウントをお持ちの方は{' '}
             <Link
-              href="/login"
+              /* 戻り先はログイン側にも引き継ぐ（登録 ↔ ログインの行き来で落とさない）。 */
+              href={withRedirect('/login', redirectTo)}
               className="rounded font-medium text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
             >
               ログイン
@@ -299,5 +311,19 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="wrap band-lg text-body text-ink-muted">
+          <div className="mx-auto max-w-sm">読み込み中...</div>
+        </div>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }

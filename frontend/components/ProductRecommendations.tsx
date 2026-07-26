@@ -160,7 +160,7 @@ export default function ProductRecommendations({
         <ul className={`stagger mt-6 grid items-stretch ${goesWellGrid}`}>
           {visible.map((product) => (
             <li key={product.id} className="h-full min-w-0 animate-rise">
-              <ProductCard product={product} tone="onDark" />
+              <ProductCard product={product} tone="onDark" trackSection="recommendations" />
             </li>
           ))}
 

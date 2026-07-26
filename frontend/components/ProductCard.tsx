@@ -13,6 +13,7 @@ export default function ProductCard({
   hideWishlistButton = false,
   size = 'md',
   tone = 'default',
+  trackSection,
 }: {
   product: Product;
   /** お気に入り一覧など、別の解除操作がある画面ではハートボタンを非表示にする。省略時は表示。 */
@@ -21,6 +22,12 @@ export default function ProductCard({
   size?: 'md' | 'lg';
   /** 'onDark' は深緑帯（ランキングレーン）の上に置くとき。影が効かないので縁を1本足す。 */
   tone?: 'default' | 'onDark';
+  /**
+   * このカードが置かれている枠の名前（'recommendations' / 'listing' / 'home_lane' など）。
+   * クリック・表示の記録に添えるので、枠ごとの CTR を比べられる。渡さないと同じ
+   * product_card として一括計上され、「どの枠が効いているか」が読めなくなる。
+   */
+  trackSection?: string;
 }) {
   const statusMeta = PRODUCT_STATUS_META[product.status];
   // 在庫切れは status ではなく stock で決まる（status は on_sale のまま）。
@@ -45,6 +52,12 @@ export default function ProductCard({
     // 深度の規律: カードは「影だけ」で立たせる（ボーダーは付けない）。
     <div
       data-card="product"
+      // 計測はカードの器に 1 つだけ付ける。AnalyticsTracker が委譲で拾うので、この 2 行で
+      // 一覧・検索結果・レコメンド・ホームのレーン・お気に入りまで全部の枠が同じ鍵で測れる
+      // （どのカードが見られて、どれが押されたか）。個々の呼び出し側に計測を書かせない。
+      data-track-click="product_card"
+      data-track-view="product_card"
+      data-track-props={JSON.stringify({ product_id: product.id, section: trackSection ?? null })}
       className={`group relative flex h-full flex-col overflow-hidden rounded-xl bg-surface shadow-paper transition-[transform,box-shadow] duration-base ease-standard hover:-translate-y-1 hover:shadow-lift motion-reduce:hover:translate-y-0 ${
         tone === 'onDark' ? 'ring-1 ring-white/10' : ''
       }`}

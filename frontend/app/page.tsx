@@ -155,7 +155,11 @@ function NewArrivals({ order }: { order: number }) {
                     featured && i === 0 ? 'lg:col-span-2 lg:row-span-2 lg:min-h-0' : ''
                   }`}
                 >
-                  <ProductCard product={product} size={featured && i === 0 ? 'lg' : 'md'} />
+                  <ProductCard
+                    product={product}
+                    size={featured && i === 0 ? 'lg' : 'md'}
+                    trackSection="home_new_arrivals"
+                  />
                 </li>
               ))}
 

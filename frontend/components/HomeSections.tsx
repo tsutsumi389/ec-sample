@@ -263,6 +263,9 @@ export default function HomeSections({
           eyebrow={laneEyebrow(section.key, i + 2)}
           items={section.items}
           variant={variant}
+          // レーン key をそのまま計測の枠名にする（1 レーン = 1 アルゴリズムなので、
+          // これで「どの推薦が押されたか」をレーン単位で比べられる）。
+          trackSection={section.key}
         />
       ))}
 

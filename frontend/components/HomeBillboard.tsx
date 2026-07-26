@@ -105,7 +105,13 @@ export default function HomeBillboard({ item }: { item: RecommendationItem }) {
           />
 
           <div className="mt-6 flex animate-rise items-center gap-3 md:mt-8">
-            <Link href={`/products/${product.id}`} className={btn('onDark', 'lg')}>
+            <Link
+              href={`/products/${product.id}`}
+              // 表紙はホームの一等地。ここが効いているかを他の枠と同じ鍵で比べる。
+              data-track-click="product_card"
+              data-track-props={JSON.stringify({ product_id: product.id, section: 'billboard' })}
+              className={btn('onDark', 'lg')}
+            >
               詳しく見る
               <ArrowRightIcon className="h-4 w-4" />
             </Link>
