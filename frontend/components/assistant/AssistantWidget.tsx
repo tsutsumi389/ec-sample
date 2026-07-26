@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { ChatBubbleIcon, XMarkIcon } from '@/components/Icons';
+import { ChatBubbleIcon } from '@/components/Icons';
 import AssistantPanel from '@/components/assistant/AssistantPanel';
 
 /**
  * 全ページ右下に常駐する AIショッピングアシスタントのウィジェット。
- * フローティングボタンでパネルを開閉する。
+ * フローティングボタンでパネルを開く（閉じるのはパネルヘッダーの × と Escape）。
+ * 開いている間 FAB は隠すので、このボタンは「開く」専用。
  * 管理画面（/admin 配下）では表示しない。
  */
 export default function AssistantWidget() {
@@ -23,14 +24,22 @@ export default function AssistantWidget() {
   const hidden =
     pathname?.startsWith('/admin') || pathname === '/login' || pathname === '/register';
   // 開くトリガ（FAB）への参照。閉じたときにフォーカスを戻し、キーボード操作の文脈を保つ。
+  // FAB は開いている間 display:none なので、フォーカスを戻せるのは setOpen(false) の再描画後。
   const fabRef = useRef<HTMLButtonElement>(null);
 
   // パネルを閉じたら開く前のトリガ（FAB）へフォーカスを返す。
+  // 呼び出し元はパネルヘッダーの × と Escape だけ（FAB は開く専用にしたのでここへは来ない）。
   // パネルのアンマウント後に確実に当てるため次フレームで実行する。
   const handleClose = useCallback(() => {
     setOpen(false);
     requestAnimationFrame(() => fabRef.current?.focus());
   }, []);
+
+  // パネル内のリンクで遷移するときに閉じる経路。閉じるだけで FAB へフォーカスは戻さない。
+  // フォーカスは遷移先の先頭へ移るべきで、右下のボタンに取り残すと文脈が壊れるため。
+  // 閉じれば背景の inert は上の effect（依存 [open]）のクリーンアップで必ず外れる。
+  // これを通さずに遷移すると header/main/footer の inert が残り、遷移先が一切操作できない。
+  const handleCloseForNavigation = useCallback(() => setOpen(false), []);
 
   // パネル（role="dialog" aria-modal）を開いている間は背景ページ（ヘッダー/本文/フッター）を
   // inert + aria-hidden にして不活性化する。Tab フォーカストラップだけでは塞げない
@@ -82,21 +91,32 @@ export default function AssistantWidget() {
 
   return (
     <>
-      {open && <AssistantPanel onClose={handleClose} />}
+      {open && <AssistantPanel onClose={handleClose} onNavigate={handleCloseForNavigation} />}
 
-      {/* フローティングボタン。パネル全画面表示のモバイルでは開いている間は隠す。
+      {/* フローティングボタン。開いている間は全幅で隠すので「開く」専用（開閉トグルではない）。
+          FAB は z-50 かつパネルより後ろの DOM なので、重なった領域では必ず FAB が勝つ。
+          そのため入力フォームに 1px でも掛かると「送信」を押したつもりが「閉じる」になる。
+          掛かる組み合わせは wide/full だけではない:
+          ・wide(sm:bottom-6) / full(sm:inset-6) … パネル下端が 24px まで来るので、
+            bottom-6 の FAB（24〜80px）が入力フォームの帯に丸ごと入る。
+          ・normal でも商品詳細の 640〜1023px … 固定購入バーを避けて FAB が
+            bottom-5.5rem へ退避する（88〜144px）ため、パネル下端 96px から上の
+            48px ぶん、つまり送信ボタンの高さにちょうど乗る。
+          サイズごとに出し分けても、この2系統の座標が幅とページで動く以上また衝突が生えるので、
+          「開いている間は出さない」を不変条件にする。閉じる手段はパネルヘッダーの × と Escape が残る。
+          aria-expanded は残す（隠れている間も開閉状態を名乗る属性のため）。
           奥付帯（bg-invert）の上に重なっても輪郭が消えないよう、影に加えて淡いリングを持たせる。 */}
       <button
         ref={fabRef}
         type="button"
-        onClick={() => (open ? handleClose() : setOpen(true))}
-        aria-label={open ? 'アシスタントを閉じる' : 'アシスタントを開く'}
+        onClick={() => setOpen(true)}
+        aria-label="アシスタントを開く"
         aria-expanded={open}
-        className={`fixed z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-float ring-1 ring-washi-50/25 transition-[background-color,transform] duration-fast ease-standard hover:bg-brand-700 active:scale-95 motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${fabRight} ${fabPosition} ${
-          open ? 'hidden sm:inline-flex' : 'inline-flex'
+        className={`fixed z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-float ring-1 ring-washi-50/25 transition-[background-color,transform] duration-fast ease-standard hover:bg-brand-700 active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${fabRight} ${fabPosition} ${
+          open ? 'hidden' : 'inline-flex'
         }`}
       >
-        {open ? <XMarkIcon className="h-6 w-6" /> : <ChatBubbleIcon className="h-6 w-6" />}
+        <ChatBubbleIcon className="h-6 w-6" />
       </button>
     </>
   );

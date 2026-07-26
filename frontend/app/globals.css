@@ -348,31 +348,32 @@ textarea:focus-visible,
 }
 
 /* ============================================================
-   6. AIアシスタント（既存。変更なし）
+   6. AIアシスタント
    ============================================================ */
-/* AIアシスタント: 商品リストをパネルの「実幅」に応じて多段化する。
-   ビューポート基準（lg 等）だと normal/wide/full やモバイル全画面で
-   実効幅が一致せず、ワイド画面でも単一列のままになる問題を避けるため、
-   スクロール領域をコンテナクエリの基準（container）にして列数を切り替える。 */
+/* AIアシスタント: 列数は .assistant-product-grid の auto-fill がグリッド実幅から決める。
+   container はバブルの行長にだけ使う（ビューポート基準だと normal/wide/full やモバイル
+   全画面で実効幅が一致しないため、スクロール領域自体を基準にする）。 */
 .assistant-scroll {
   container-type: inline-size;
   container-name: assistant;
+  /* 末端まで送ったときに背面ページへスクロールが連鎖するのを断つ。モバイル全画面では特に、
+     閉じた後の読み位置が失われる。 */
+  overscroll-behavior: contain;
 }
 
+/* バブルの行長。ch は「0」の送り幅を単位にするので、42ch と書いても和文では全角21字にしかならず
+   「全角30〜40字」の目安を達成できない。rem で持ち、SignatureBand の max-w-[34rem] や
+   .wrap-read（40rem）と同じ語彙に揃える。閾値の基準はビューポートではなくスクロール領域
+   （上の container: assistant）なので、normal/wide/full とモバイル全画面のどれでも同じ行長になる。 */
+.assistant-bubble { max-width: 88%; }
+@container assistant (min-width: 34rem) { .assistant-bubble { max-width: 32rem; } }
+@container assistant (min-width: 52rem) { .assistant-bubble { max-width: 40rem; } }
+
+/* 列幅の下限を 20rem に固定し、何列入るかはグリッドの実幅に任せる。閾値で列数を決めていた頃は
+   normal lg(280px列)・xl(257px列)で「カートに追加」が必ず2行に折れていた。
+   min() が無いと 320px 端末（コンテナ288px）でトラック下限が溢れる。 */
 .assistant-product-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
   gap: 0.5rem;
-}
-
-@container assistant (min-width: 30rem) {
-  .assistant-product-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container assistant (min-width: 46rem) {
-  .assistant-product-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
