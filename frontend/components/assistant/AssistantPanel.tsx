@@ -1,18 +1,21 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { FormEvent, MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import type { AssistantMessage, AssistantProduct, AssistantSource } from '@/lib/types';
 import Spinner from '@/components/Spinner';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import {
   ArrowDownIcon,
   ArrowPathIcon,
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,
   PaperAirplaneIcon,
-  SparklesIcon,
   XMarkIcon,
 } from '@/components/Icons';
+import { btn, iconBtn } from '@/lib/buttonStyles';
 import AssistantProductCard from '@/components/assistant/AssistantProductCard';
 
 // 会話IDの永続化キー。端末単位で会話を継続する（未ログインでも利用可）。
@@ -28,6 +31,7 @@ const WELCOME_MESSAGE =
   'こんにちは。生活道具店 Hibino の店員AIです。ご予算やお探しの用途を教えていただければ、ぴったりの商品をご提案します。';
 
 // サジェスト chips。タップで入力欄に文言を挿入する（自動送信はしない）。
+// 複数タップは追記になる（書きかけを消さない）。
 const SUGGESTIONS = [
   'ギフトを探す',
   '予算5,000円で探す',
@@ -39,6 +43,14 @@ const SUGGESTIONS = [
 
 // 人気カテゴリのショートカット。タップで「〇〇を見たい」を入力欄へ挿入する。
 const CATEGORY_SHORTCUTS = ['キッチン用品', '食器・グラス', '掃除・洗濯', '収納・整理', 'インテリア'];
+
+// 丸型 chip の共通クラス。ウェルカムのサジェスト chip・カテゴリ chip と、失敗・0件で
+// 行き止まったときのアクション行を同じ造形で揃える（同じ「次の一手」なのに見えが割れると
+// 押せる部品と分からない）。
+// 罫は brand-500（対 surface 4.37:1 / 対 page 3.61:1）。brand-200 は対 surface 1.48:1 で
+// 地との差が 1.21 しかなく、押せる部品の輪郭として成立しない（WCAG 1.4.11 は 3:1 が下限）。
+const CHIP_CLASS =
+  'inline-flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-full border border-brand-500 bg-surface px-3.5 py-1.5 text-caption text-brand-700 transition-colors duration-fast ease-standard hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0';
 
 // はじめての方向けの簡単な使い方ガイド。
 const USAGE_GUIDE = [
@@ -54,11 +66,14 @@ const SIZE_ORDER: PanelSize[] = ['normal', 'wide', 'full'];
 // デスクトップ（sm 以上）でのパネル寸法。モバイルは常に全画面（inset-0）。
 const SIZE_CLASSES: Record<PanelSize, string> = {
   // normal でも lg/xl/2xl では幅・高さを段階的に広げ、開いた瞬間から大画面を活用する。
-  // 幅が広がるとスクロール領域のコンテナクエリが働き、xl(≈820px)以上で商品リストが3列化する。
-  // 高さの上限は calc(100vh-11rem)。bottom-24(6rem) と合わせ上端に約5rem の余白を残し、
-  // サイトヘッダー（検索/カート/ログイン）に重ならないようにする。
+  // 商品リストの列数はスクロール領域の実幅から auto-fill が決める（globals.css の
+  // .assistant-product-grid）ので、ここで与えるのは幅だけでよい。
+  // 高さの上限は sm から一貫して calc(100vh-11rem)。bottom-24(6rem) と合わせ上端に約5rem の
+  // 余白を残し、サイトヘッダー（検索/カート/ログイン。--header-h: 4rem）に重ならないようにする。
+  // 横向きスマホ（高さ約390px）ではこの上限で 214px の箱になる。狭さ自体はここでは解かず、
+  // ヘッダーとの重なりだけを断つ。
   normal:
-    'sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[600px] sm:max-h-[calc(100vh-9rem)] sm:w-[400px] md:w-[440px] lg:h-[720px] lg:max-h-[calc(100vh-11rem)] lg:w-[600px] xl:h-[820px] xl:w-[820px] 2xl:w-[900px]',
+    'sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[600px] sm:max-h-[calc(100vh-11rem)] sm:w-[400px] md:w-[440px] lg:h-[720px] lg:max-h-[calc(100vh-11rem)] lg:w-[600px] xl:h-[820px] xl:w-[820px] 2xl:w-[900px]',
   // wide は上端をヘッダー下（top-20）に置き、大画面の縦幅をほぼ占有しつつヘッダーを露出させる。
   wide: 'sm:inset-auto sm:top-20 sm:bottom-6 sm:right-6 sm:h-auto sm:w-[560px] md:w-[680px] lg:w-[820px] xl:w-[960px]',
   full: 'sm:inset-6 sm:h-auto sm:w-auto',
@@ -88,6 +103,11 @@ interface ChatMessage {
   products: AssistantProduct[];
   // API 通信失敗などのクライアント側エラー表示。会話上限・障害時もここで表示する（throw しない）。
   isError?: boolean;
+  // エラーの種類。会話上限（limit）のときだけ「新しい会話を始める」を出し分ける。
+  errorKind?: 'limit' | 'other';
+  // 「もう一度聞く」で再送する文言。失敗した発話は楽観バブルごと取り消すため messages から
+  // 導出できない（直前に成功した別の質問を誤って再送してしまう）。エラーバブル自身に持たせる。
+  retryText?: string;
 }
 
 let messageCounter = 0;
@@ -124,21 +144,37 @@ function toChatMessage(msg: AssistantMessage): ChatMessage {
 
 interface AssistantPanelProps {
   onClose: () => void;
+  /**
+   * パネル内のリンクで遷移するときに呼ぶ。閉じないと背景に張った inert が残り、
+   * 遷移先のページが一切操作できなくなる（onClose と違いフォーカスは FAB へ戻さない）。
+   */
+  onNavigate: () => void;
 }
 
-export default function AssistantPanel({ onClose }: AssistantPanelProps) {
+export default function AssistantPanel({ onClose, onNavigate }: AssistantPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [initializing, setInitializing] = useState(true);
-  const [size, setSize] = useState<PanelSize>('normal');
+  const [size, setSize] = useState<PanelSize>(() => getStoredPanelSize());
   // 入場アニメーション用。マウント直後に true にしてフェード/スライドインさせる。
   const [entered, setEntered] = useState(false);
   // 上へスクロール中に新着が届いたことを示す「新着へ移動」インジケータ。
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  // 「新しい会話」の確認ダイアログ。履歴の消去は破壊的操作なので確認を挟む（サイト内の他4箇所と同じ扱い）。
+  const [resetOpen, setResetOpen] = useState(false);
+  // 継続中の会話IDを持っているか。ref だけだと再描画されないので state にも映す。
+  // 「新しい会話」ボタンの表示条件は「画面に消すものがあるか」ではなく「消せる会話があるか」。
+  // 履歴復元が 404 以外（500・通信断）で失敗すると messages は空のまま会話IDだけが残るので、
+  // messages.length だけで判定するとその会話を捨てる手段が画面から消える。
+  const [hasConversation, setHasConversation] = useState(false);
 
   // 送信時に最新の会話IDを参照するため ref で保持（stale closure 回避）。
   const conversationIdRef = useRef<string | null>(null);
+  // 会話の世代。「新しい会話」を押すたびに増やし、飛行中の send() の結果を捨てる目印にする。
+  // これが無いと、送信中にリセットしても応答が返った時点で会話IDが復活し、
+  // 空のスレッドに「問いの無い回答」だけが積まれる。
+  const sessionRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -147,12 +183,19 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
   // ユーザーが最下部付近を見ているか。自動スクロール要否の判定に使う。
   const atBottomRef = useRef(true);
 
-  // 広い表示（wide/full）では商品カードを複数列化し、バブル行長も広げる。
-  const expanded = size !== 'normal';
+  // 会話IDの更新点をここ1箇所に集約する。ref（送信時の参照先）・localStorage（次回オープンの復元）・
+  // state（「新しい会話」ボタンの表示条件）の3つがずれると、消したはずの会話へ追記される／
+  // 会話を捨てる手段が画面から消える、といった食い違いがそのまま表に出る。
+  const applyConversationId = useCallback((id: string | null) => {
+    conversationIdRef.current = id;
+    setHasConversation(id !== null);
+    if (id) storeConversationId(id);
+    else clearStoredConversationId();
+  }, []);
 
-  // 保存済みの表示サイズを復元し、入場アニメーションを開始する。
+  // 入場アニメーションを開始する（表示サイズは useState の遅延初期化で初回ペイントから確定させる。
+  // effect で後から入れると transition-all で 280ms の変形が見える）。
   useEffect(() => {
-    setSize(getStoredPanelSize());
     const raf = requestAnimationFrame(() => setEntered(true));
     return () => cancelAnimationFrame(raf);
   }, []);
@@ -166,7 +209,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
   useEffect(() => {
     let cancelled = false;
     const storedId = getStoredConversationId();
-    conversationIdRef.current = storedId;
+    applyConversationId(storedId);
 
     if (!storedId) {
       setInitializing(false);
@@ -183,10 +226,10 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
         if (cancelled) return;
         // 会話が無効（404）なら localStorage を破棄して新規会話扱いにする。
         if (err instanceof ApiError && err.status === 404) {
-          clearStoredConversationId();
-          conversationIdRef.current = null;
+          applyConversationId(null);
         }
         // それ以外のエラーは黙ってウェルカム表示にフォールバック（次回送信で継続を試みる）。
+        // 会話IDは保持したままなので、hasConversation により「新しい会話」で捨てられる。
       })
       .finally(() => {
         if (!cancelled) setInitializing(false);
@@ -195,7 +238,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyConversationId]);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -208,6 +251,16 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
   // 自分の発言、または最下部を見ているときだけ追従し、そうでなければ新着インジケータを出す。
   useEffect(() => {
     if (initializing) return;
+    // ウェルカム表示（履歴が空）のときは追従しない。ウェルカム塊はスクロール域より背が高く、
+    // 最下部へ送ると挨拶バブルとサジェスト chip が開いた瞬間に画面外へ流れてしまう。
+    if (messages.length === 0) {
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+      atBottomRef.current = true;
+      // 履歴が空になる経路（「新しい会話」）では新着インジケータも必ず畳む。押されると
+      // ウェルカム塊が最下部まで送られ、この分岐が防いでいる「頭が見えない」状態を作ってしまう。
+      setShowJumpToLatest(false);
+      return;
+    }
     const last = messages[messages.length - 1];
     if (atBottomRef.current || last?.role === 'user' || sending) {
       scrollToBottom();
@@ -230,18 +283,30 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
       const trimmed = text.trim();
       if (!trimmed || sending) return;
 
-      setInput('');
+      // 待っている間に「新しい会話」が押されたら、この送信の結果は捨てる（世代ガード）。
+      const session = sessionRef.current;
+      // 失敗時に楽観バブルを取り消せるよう、自分が積んだ user 発言のIDを控える。
+      const userMsgId = nextMessageId();
+
+      // 入力欄は「いま送る文言がそのまま残っているとき」だけ空にする。無条件に消していた頃は、
+      // 「もう一度聞く」（フォームを経由せずここへ来る）が、catch で気を遣って戻した文言や
+      // 書きかけの相談文まで巻き添えで捨てていた（サジェスト chip の追記仕様と同じ規律）。
+      setInput((cur) => (cur.trim() === trimmed ? '' : cur));
       atBottomRef.current = true;
       setMessages((prev) => [
         ...prev,
-        { id: nextMessageId(), role: 'user', content: trimmed, products: [] },
+        { id: userMsgId, role: 'user', content: trimmed, products: [] },
       ]);
       setSending(true);
+      // タイピング表示は視覚的な合図でしかないので、送信を受け付けたことを言葉でも伝える。
+      setLiveMessage('送信しました。回答を作成しています');
 
       try {
         const res = await api.assistant.chat(conversationIdRef.current, trimmed);
-        conversationIdRef.current = res.conversation_id;
-        storeConversationId(res.conversation_id);
+        if (sessionRef.current !== session) return;
+        applyConversationId(res.conversation_id);
+        // 型上は必ず配列だが、古いバックエンドでの欠損に備えて防御的に畳んでおく。
+        const products = Array.isArray(res.products) ? res.products : [];
         setMessages((prev) => [
           ...prev,
           {
@@ -249,28 +314,61 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
             role: 'assistant',
             content: res.reply,
             source: res.source,
-            products: Array.isArray(res.products) ? res.products : [],
+            products,
           },
         ]);
-        setLiveMessage(res.reply);
+        // 提案商品はカード群としてしか現れないので、何件届いたかを本文と一緒に読み上げさせる。
+        setLiveMessage(
+          products.length ? `${res.reply} 商品を${products.length}件ご提案しています` : res.reply,
+        );
       } catch (err) {
+        // 世代が変わっている（待っている間に「新しい会話」が押された）送信は、成功も失敗も
+        // 一切の副作用を起こさない。ここより後ろに 404 の後始末を置くと、破棄すべき応答が
+        // 現在有効な別の会話IDを localStorage から消してしまう。
+        if (sessionRef.current !== session) return;
         // 会話上限・API エラー時もメッセージとして表示し、throw しない。
         const message =
           err instanceof ApiError
             ? err.message
             : '申し訳ありません。通信に失敗しました。しばらくしてから再度お試しください。';
+        // 会話上限（400）だけは「新しい会話」への案内を出したいので種別を分ける。
+        const errorKind: 'limit' | 'other' =
+          err instanceof ApiError && err.status === 400 ? 'limit' : 'other';
+        // 会話が無効（404）なら会話IDを捨てる。次回送信が新規会話に落ち、
+        // 無効なIDのまま永久に失敗し続けるループを断つ（履歴復元側と扱いを揃える）。
+        if (err instanceof ApiError && err.status === 404) {
+          applyConversationId(null);
+        }
+        // 失敗時はサーバー側に何も保存されていない（chat は成功時にしか commit しない）ので、
+        // 楽観表示した user バブルを取り消して表示とサーバー履歴を一致させ、
+        // 入力文を戻してそのまま再送できるようにする（書きかけがあれば上書きしない）。
+        // 消した発話はエラーバブルに retryText として預け、「もう一度聞く」の再送元にする。
         setMessages((prev) => [
-          ...prev,
-          { id: nextMessageId(), role: 'assistant', content: message, products: [], isError: true },
+          ...prev.filter((m) => m.id !== userMsgId),
+          {
+            id: nextMessageId(),
+            role: 'assistant',
+            content: message,
+            products: [],
+            isError: true,
+            errorKind,
+            retryText: trimmed,
+          },
         ]);
+        setInput((cur) => (cur ? cur : trimmed));
         setLiveMessage(message);
       } finally {
-        setSending(false);
-        // 送信後に入力欄へフォーカスを戻す。
-        inputRef.current?.focus();
+        // 世代が変わっていたら送信状態には触らない。「新しい会話」は sending を落として
+        // 即座に入力を受け付けるので、ここで無条件に実行すると破棄されたはずの応答が
+        // 最大60秒後（backend の _CHAT_TIMEOUT）にフォーカスを奪いに来る。
+        if (sessionRef.current === session) {
+          setSending(false);
+          // 送信後に入力欄へフォーカスを戻す。
+          inputRef.current?.focus();
+        }
       }
     },
-    [sending],
+    [sending, applyConversationId],
   );
 
   const handleSubmit = (e: FormEvent) => {
@@ -278,9 +376,11 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
     void send(input);
   };
 
-  // サジェスト chip タップ：入力欄に挿入してフォーカス（自動送信はしない）。
+  // サジェスト chip タップ：入力欄へ**追記**してフォーカス（自動送信はしない）。
+  // 上書きにすると、書きかけの相談文が chip を1つ触っただけで消える。追記なら
+  // 「ギフトを探す」＋「予算5,000円で探す」のように条件を重ねられる。
   const handleSuggestion = (text: string) => {
-    setInput(text);
+    setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
     inputRef.current?.focus();
   };
 
@@ -290,14 +390,32 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
   };
 
   // 「新しい会話を始める」：localStorage の会話IDを破棄して画面をリセットする。
+  // 世代を進めることで、飛行中の send() が返ってきても会話IDを書き戻さないようにする。
+  // sending も落とす：飛行中のリクエストは世代ガードで捨てられるので待つ理由が無く、
+  // 残したままだと真新しい会話が応答（最大60秒）まで readOnly で固まる。
   const handleReset = () => {
-    clearStoredConversationId();
-    conversationIdRef.current = null;
+    sessionRef.current += 1;
+    applyConversationId(null);
     setMessages([]);
     setInput('');
     setLiveMessage('');
+    setSending(false);
+    setShowJumpToLatest(false);
     inputRef.current?.focus();
   };
+
+  // パネル内のリンクで遷移するときの共通ハンドラ。修飾キー付きクリックと中クリックは
+  // ブラウザが新規タブ／ウィンドウで開き、next/link も router.push をスキップする（isModifiedEvent）。
+  // ここで畳むと、現在のタブでは何も起きないのに相談中の会話だけが視界から消える。
+  // 引数なしでも呼べるようにしてあるのは、ボタンから router.push する経路（カードのログイン導線）で
+  // 無条件に閉じたいため。
+  const handleNavigate = useCallback(
+    (e?: MouseEvent<HTMLElement>) => {
+      if (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)) return;
+      onNavigate();
+    },
+    [onNavigate],
+  );
 
   // 表示サイズを normal→wide→full→normal と循環させ、localStorage に保持する。
   const cycleSize = () => {
@@ -310,6 +428,10 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
 
   // Esc で閉じる／Tab を dialog 内に閉じ込める（フォーカストラップ）。
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // 確認ダイアログが開いている間はキー操作をそちらへ譲る。ConfirmDialog は body へポータルしても
+    // React の合成イベントは JSX ツリーを辿るのでこの onKeyDown まで上がってくる。ダイアログ側の Esc は
+    // document リスナなので、譲らないとキャンセルより先にパネルごと閉じてしまう。
+    if (resetOpen) return;
     if (e.key === 'Escape') {
       e.stopPropagation();
       onClose();
@@ -338,50 +460,68 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
   const remaining = MAX_INPUT_LENGTH - input.length;
   const nearLimit = remaining <= 50;
 
-  // バブルの行長：狭い時は幅いっぱい寄り、広い時は ch 上限で読みやすさを保つ（全角30〜40字目安）。
-  const bubbleWidth = expanded
-    ? 'max-w-[88%] lg:max-w-[70ch]'
-    : 'max-w-[88%] lg:max-w-[42ch] xl:max-w-[48ch]';
-  // 商品リストはパネル実幅に追従（コンテナクエリ）。normal でも広ければ複数列化する。
+  // バブルの行長は .assistant-bubble（globals.css §6）がスクロール領域の実幅から決める。
+  // 表示サイズ（normal/wide/full）で分岐させないのは、同じ幅でも size が違えば行長が変わる
+  // ような二重の基準を作らないため。
+  // 商品リストの列数は auto-fill がグリッド実幅から決める（列幅の下限 20rem は
+  // 「カートに追加」が1行に収まる寸法）。normal でも広ければそのぶん列が増える。
   const productLayout = 'assistant-product-grid';
 
+  // ルートの tabIndex={-1} は、本文のドラッグ選択・バブル余白やカードの空き部分のタップで
+  // activeElement が body へ落ちて onKeyDown が発火しなくなる（Escape も Tab トラップも死ぬ）
+  // 経路を塞ぐためのもの。-1 なので Tab の巡回対象（[tabindex]:not([tabindex="-1"])）には入らない。
+  //
+  // ルートで補間するのは入場の opacity/transform だけ（transition-[opacity,transform]）。
+  // transition-all だと表示サイズの切り替え（normal→wide）で top が auto→80px、
+  // height が 820px→auto と補間できない値をまたぐため、幅だけが滑って上端と高さが瞬間移動していた。
   return (
     <div
       ref={panelRef}
       role="dialog"
       aria-modal="true"
       aria-label="ショッピングアシスタント"
+      tabIndex={-1}
       onKeyDown={handleKeyDown}
-      className={`fixed inset-0 z-50 flex flex-col bg-surface shadow-float transition-all duration-slow ease-standard sm:rounded-2xl ${
+      className={`fixed inset-0 z-50 flex flex-col bg-surface shadow-float transition-[opacity,transform] duration-slow ease-standard sm:rounded-2xl ${
         SIZE_CLASSES[size]
       } ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}
     >
-      {/* ヘッダー */}
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-          <SparklesIcon className="h-4 w-4" />
-        </span>
+      {/* ヘッダー。丸アイコンではなく節記号（brand の縦罫）＋ eyebrow ＋ 明朝の見出しで、
+          サイトの扉（PageMasthead・ProductFilters の絞り込みドロワー）と同じ組み方に揃える。
+          text-h3 の fontWeight:500 は Zen Old Mincho が 700 しか持たないためフォントマッチングで
+          700 面が選ばれる（合成ボールドにはならない）。
+          下端の罫は line ではなく line-strong。すぐ下がスクロール面（bg-page）で、
+          line は対 page 1.28:1 とほぼ見えず、ヘッダーが帯として閉じない。 */}
+      <div className="flex items-center gap-3 border-b border-line-strong px-4 py-3">
+        <span aria-hidden className="h-5 w-[2px] shrink-0 bg-brand-600" />
         <div className="min-w-0 flex-1">
-          <p className="font-mincho text-base font-bold leading-tight text-ink">Hibino の店員AI</p>
-          <p className="text-caption leading-tight text-ink-muted">お買い物のご相談を承ります</p>
+          <p className="text-eyebrow uppercase font-num text-ink-muted">ASK HIBINO</p>
+          <p className="mt-1 font-mincho text-h3 text-ink jp-head">Hibino の店員AI</p>
+          <p className="text-caption text-ink-muted">お買い物のご相談を承ります</p>
         </div>
-        <button
-          type="button"
-          onClick={handleReset}
-          title="新しい会話を始める"
-          aria-label="新しい会話を始める"
-          className="inline-flex min-h-[44px] items-center gap-1 rounded-md px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0"
-        >
-          <ArrowPathIcon className="h-4 w-4" />
-          <span className="hidden sm:inline">新しい会話</span>
-        </button>
-        {/* 拡大/縮小トグル。モバイルは常に全画面のため非表示。 */}
+        {/* 捨てられる会話が無い（履歴も会話IDも無い）ときだけ出さない。復元に失敗して画面が空でも
+            会話IDが残っていれば出す。送信中も無効化しない（世代ガードで整合が取れる）。
+            btn('ghost','sm') は h-9 だが .hit（globals.css §5）が ±6px 広げるので実効48px。 */}
+        {(messages.length > 0 || hasConversation) && (
+          <button
+            type="button"
+            onClick={() => setResetOpen(true)}
+            title="新しい会話を始める"
+            aria-label="新しい会話を始める"
+            className={btn('ghost', 'sm')}
+          >
+            <ArrowPathIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">新しい会話</span>
+          </button>
+        )}
+        {/* 拡大/縮小トグル。モバイルは常に全画面のため非表示。
+            iconBtn('sm') は .hit で実効44pxを作るので、モバイル用の h-11 分岐は要らない。 */}
         <button
           type="button"
           onClick={cycleSize}
           title={SIZE_LABELS[size]}
           aria-label={SIZE_LABELS[size]}
-          className="hidden h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:inline-flex"
+          className={`${iconBtn('sm')} hidden sm:inline-flex`}
         >
           {size === 'full' ? (
             <ArrowsPointingInIcon className="h-5 w-5" />
@@ -389,22 +529,24 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
             <ArrowsPointingOutIcon className="h-5 w-5" />
           )}
         </button>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="閉じる"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:h-9 sm:w-9"
-        >
+        <button type="button" onClick={onClose} aria-label="閉じる" className={iconBtn('sm')}>
           <XMarkIcon className="h-5 w-5" />
         </button>
       </div>
 
       {/* メッセージリスト */}
       <div className="relative flex-1 overflow-hidden">
+        {/* テキストだけの応答が続くとスクロール領域に一つもフォーカス対象が無くなり、
+            キーボードだけでは履歴を遡れなくなる。tabIndex={0} で領域自体を到達可能にし、
+            何の領域かを role/aria-label で名乗る。親が overflow-hidden なのでフォーカスリングは
+            ring-inset にしないと切り取られる。 */}
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="assistant-scroll h-full space-y-4 overflow-y-auto bg-page px-4 py-4"
+          tabIndex={0}
+          role="region"
+          aria-label="会話履歴"
+          className="assistant-scroll h-full space-y-4 overflow-y-auto bg-page px-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
         >
           {initializing ? (
             <div className="flex justify-center py-8">
@@ -415,20 +557,24 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
               {showWelcome && (
                 // ウェルカムは上詰めで各セクションを一定間隔（gap-4）に並べ、
                 // chips とガイドの間に大きな空白が残らないようにする。
-                <div className="mx-auto flex max-w-[70ch] flex-col gap-4">
-                  <div className={`${bubbleWidth} rounded-2xl rounded-tl-sm bg-surface px-4 py-3 text-sm leading-relaxed text-ink-soft shadow-paper`}>
+                // mx-auto は付けない：中央寄せにすると、下に続くメッセージ列（左原点）と
+                // ウェルカムの左端が段差する。
+                <div className="flex max-w-[40rem] flex-col gap-4">
+                  <div className="assistant-bubble rounded-2xl bg-surface px-4 py-3 text-body text-ink-soft shadow-paper">
                     {WELCOME_MESSAGE}
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold text-gray-600">こんなご相談から</p>
+                    {/* 小見出しは和文の太字ゴシックではなく、サイト共通の eyebrow 体系
+                        （Footer の columnHeadClass・注文履歴の ledgerHeadClass と同じ語彙）で組む。 */}
+                    <p className="text-eyebrow uppercase font-num text-ink-muted">SUGGESTED</p>
                     <div className="flex flex-wrap gap-2">
                       {SUGGESTIONS.map((s) => (
                         <button
                           key={s}
                           type="button"
                           onClick={() => handleSuggestion(s)}
-                          className="inline-flex min-h-[44px] items-center rounded-full border border-brand-200 bg-surface px-3.5 py-1.5 text-xs text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0"
+                          className={CHIP_CLASS}
                         >
                           {s}
                         </button>
@@ -437,14 +583,14 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold text-gray-600">人気のカテゴリから</p>
+                    <p className="text-eyebrow uppercase font-num text-ink-muted">CATEGORIES</p>
                     <div className="flex flex-wrap gap-2">
                       {CATEGORY_SHORTCUTS.map((c) => (
                         <button
                           key={c}
                           type="button"
                           onClick={() => handleCategory(c)}
-                          className="inline-flex min-h-[44px] items-center rounded-full border border-gray-200 bg-surface px-3.5 py-1.5 text-xs text-gray-700 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0"
+                          className={CHIP_CLASS}
                         >
                           {c}
                         </button>
@@ -452,12 +598,14 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl bg-surface/70 p-4 shadow-paper">
-                    <p className="mb-2 text-xs font-semibold text-gray-600">かんたん3ステップ</p>
+                  {/* 地は surface。面の階層は surface > tile > page > sunken の4段しかないので、
+                      surface/70 のような5段目の中間色をここだけ作らない。 */}
+                  <div className="rounded-2xl bg-surface p-4 shadow-paper">
+                    <p className="mb-2 text-eyebrow uppercase font-num text-ink-muted">HOW IT WORKS</p>
                     <ol className="space-y-2">
                       {USAGE_GUIDE.map((step, i) => (
-                        <li key={step} className="flex items-start gap-2 text-xs leading-relaxed text-gray-700">
-                          <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[11px] font-bold text-brand-700">
+                        <li key={step} className="flex items-start gap-2 text-caption text-ink-soft">
+                          <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 text-eyebrow tnum text-brand-700">
                             {i + 1}
                           </span>
                           {step}
@@ -468,46 +616,113 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
                 </div>
               )}
 
-              {messages.map((msg) =>
-                msg.role === 'user' ? (
-                  <div key={msg.id} className="flex justify-end">
-                    <div className={`${bubbleWidth} whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-brand-600 px-4 py-2.5 text-sm leading-relaxed text-white`}>
-                      {msg.content}
-                    </div>
-                  </div>
-                ) : (
-                  <div key={msg.id} className="space-y-2">
-                    <div
-                      className={`${bubbleWidth} whitespace-pre-wrap break-words rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm leading-relaxed shadow-paper ${
-                        msg.isError ? 'bg-critical-50 text-critical-700' : 'bg-surface text-ink-soft'
-                      }`}
-                    >
-                      {msg.content}
-                    </div>
-                    {msg.products.length > 0 && (
-                      <div className={productLayout}>
-                        {msg.products.map((item) => (
-                          <AssistantProductCard
-                            key={item.product.id}
-                            product={item.product}
-                            reason={item.reason}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    {msg.source === 'fallback' && !msg.isError && (
-                      <p className="text-xs text-gray-600">キーワード検索の結果です</p>
-                    )}
-                  </div>
-                ),
+              {/* 発言の区切りが左右配置と背景色にしか無いと、SR には無名の文章の羅列として届く。
+                  list セマンティクスで1発言=1項目にし、話者は sr-only の固定文言で名乗る。
+                  role="log" は付けない（list を壊し、下の status 領域と二重に読み上げられる）。
+                  0件のときは描画しない：空の ul でも space-y-4 の margin は残り、ウェルカムの下に
+                  余白が増えるうえ SR が「リスト 0項目」と読み上げる。 */}
+              {messages.length > 0 && (
+                <ul className="space-y-4">
+                  {messages.map((msg, index) => {
+                    const isLast = index === messages.length - 1;
+                    // 会話が本当に行き止まりになる末尾の応答にだけ、次の一手を並べる。
+                    // 「0件」だけを条件にしない：LLM が「ご予算はいくらでしょうか」と聞き返す応答も
+                    // 商品0件で返る（services/assistant.py）。進行中の会話に離脱導線を出すと、
+                    // 同じ質問を再送して同じ聞き返しが返るループになる。
+                    // fallback も商品付きで返るのが既定（_fallback は人気順に落ちる）なので、
+                    // カードが並んでいる限り行き止まりではない。
+                    const showActions =
+                      isLast &&
+                      msg.role === 'assistant' &&
+                      (msg.isError || (msg.source === 'fallback' && msg.products.length === 0));
+                    // 再送する文言はエラーバブル自身が持つ（messages からは取り消し済みで拾えない）。
+                    const retryText = msg.retryText;
+                    return msg.role === 'user' ? (
+                      <li key={msg.id}>
+                        {/* sr-only は position:absolute なので、直下に置いても flex の配置に響かない。 */}
+                        <span className="sr-only">あなた: </span>
+                        {/* 自分の発言は右寄せ（この flex）だけで判別できるので、地は brand 塗りにしない。
+                            塗りを外して淡い brand の面＋内側リングにし、誌面の面の階層に戻す。 */}
+                        <div className="flex justify-end">
+                          <div className="assistant-bubble whitespace-pre-wrap break-words rounded-2xl bg-brand-50 px-4 py-2.5 text-body text-brand-900 ring-1 ring-inset ring-brand-200">
+                            {msg.content}
+                          </div>
+                        </div>
+                      </li>
+                    ) : (
+                      <li key={msg.id} className="space-y-2">
+                        <div
+                          className={`assistant-bubble whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-body shadow-paper ${
+                            msg.isError ? 'bg-critical-50 text-critical-700' : 'bg-surface text-ink-soft'
+                          }`}
+                        >
+                          {/* 話者名は li 直下ではなくバブルの中に置く。li の space-y-2 は最初の子以外に
+                              margin-top を付けるので、直下に挿すとバブルが 8px 下がってしまう。
+                              エラーであることも色でしか示していないため、ここで言葉にする。 */}
+                          <span className="sr-only">{msg.isError ? '店員AI（エラー）: ' : '店員AI: '}</span>
+                          {msg.content}
+                        </div>
+                        {msg.products.length > 0 && (
+                          <div
+                            className={productLayout}
+                            role="group"
+                            aria-label={`提案商品 ${msg.products.length}件`}
+                          >
+                            {msg.products.map((item) => (
+                              <AssistantProductCard
+                                key={item.product.id}
+                                product={item.product}
+                                reason={item.reason}
+                                onNavigate={handleNavigate}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        {showActions && (
+                          // 行き止まりを作らないための次の一手。会話上限のときだけ「新しい会話」を出す
+                          // （もう操作できない履歴なので、ここでは確認ダイアログを挟まない）。
+                          // 「もう一度聞く」は失敗した発話があるとき（＝エラー）だけ。0件のフォールバックで
+                          // 出すと、同じ質問を投げ直して同じ結果を受け取るだけの chip になる。
+                          // 一覧へは検索クエリを付けない：/products の検索は文字列全体の部分一致で、
+                          // 相談文をそのまま渡すとほぼ確実に0件の、より悪い行き止まりへ着地する。
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {msg.errorKind === 'limit' && (
+                              <button type="button" onClick={handleReset} className={CHIP_CLASS}>
+                                新しい会話を始める
+                              </button>
+                            )}
+                            {retryText && (
+                              <button
+                                type="button"
+                                onClick={() => void send(retryText)}
+                                className={CHIP_CLASS}
+                              >
+                                もう一度聞く
+                              </button>
+                            )}
+                            <Link href="/products" onClick={handleNavigate} className={CHIP_CLASS}>
+                              商品一覧から探す
+                            </Link>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
 
+              {/* 生成待ちのタイピングインジケータ。点滅は体系の keyframe（bump）を使う
+                  （Tailwind 既定の animate-bounce は使わない）。ProductQA.tsx と同じ実装。 */}
               {sending && (
                 <div className="flex justify-start">
-                  <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm bg-surface px-3 py-3 shadow-paper">
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-line-strong [animation-delay:-0.3s]" />
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-line-strong [animation-delay:-0.15s]" />
-                    <span className="h-2 w-2 animate-bounce rounded-full bg-line-strong" />
+                  <div className="flex items-center gap-1.5 rounded-2xl bg-surface px-4 py-3 shadow-paper">
+                    {[0, 150, 300].map((delay) => (
+                      <span
+                        key={delay}
+                        className="h-1.5 w-1.5 rounded-full bg-line-strong motion-safe:animate-[bump_1.1s_ease-in-out_infinite] motion-reduce:animate-none"
+                        style={{ animationDelay: `${delay}ms` }}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
@@ -520,7 +735,7 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
           <button
             type="button"
             onClick={scrollToBottom}
-            className="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-brand-600 px-3 py-1.5 text-xs font-medium text-white shadow-lift hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+            className={`${btn('secondary', 'sm')} absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full shadow-lift`}
           >
             <ArrowDownIcon className="h-4 w-4" />
             新着メッセージへ移動
@@ -538,27 +753,41 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
         onSubmit={handleSubmit}
         className="border-t border-line px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       >
+        {/* 送信中も input/button を disabled にしない。disabled にすると activeElement が body へ落ち、
+            応答が返るまで（最大60秒）Escape も Tab トラップも効かなくなるうえ、finally の
+            inputRef.focus() は再描画前に走るため復帰もしない。readOnly / aria-disabled なら
+            フォーカスは入力欄に留まったまま、編集と押下の意味だけを止められる。
+            二重送信・空送信は send() 冒頭の `if (!trimmed || sending) return;` が防ぐ。
+            入力欄には aria-disabled を **付けない**。readOnly は「フォーカスできるが編集できない」を
+            aria-readonly として自動で公開するのに対し、aria-disabled は「操作できない」と名乗る別の状態で、
+            両者を併記すると支援技術に矛盾が届く。スクリーンリーダーのフォームモードには
+            aria-disabled の要素を読み飛ばす実装があり、それではフォーカスを入力欄へ留めた意味が消える。
+            送信中であることは上の status 領域が可聴で伝えている。 */}
         <div className="flex items-center gap-2">
           <input
             ref={inputRef}
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            disabled={sending}
+            readOnly={sending}
             maxLength={MAX_INPUT_LENGTH}
+            aria-describedby="assistant-input-hint"
             placeholder={sending ? 'AIが考えています…' : 'メッセージを入力'}
-            className="min-w-0 flex-1 rounded-full border border-line-input bg-surface px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand-600 disabled:bg-sunken"
+            // 本文バブルと違い text-sm のまま。text-body は行送り1.85なので、py-2.5＋罫と合わせると
+            // 実高が約50pxになり、隣の送信ボタン（h-11=44px）と行内で高さが揃わない。
+            className="min-w-0 flex-1 rounded-full border border-line-input bg-surface px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-brand-600 read-only:bg-sunken"
           />
           <button
             type="submit"
-            disabled={sending || !input.trim()}
+            aria-disabled={sending || !input.trim()}
             aria-label="送信"
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white hover:bg-brand-700 aria-disabled:cursor-not-allowed aria-disabled:bg-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           >
             {sending ? (
+              // 中身が空のまま新規挿入される live 領域は読まれない組み合わせが多いので通知役は持たせない
+              // （状態通知は上の status 領域へ一本化する）。地が brand-600 のまま保たれる利点もある。
               <span
-                role="status"
-                aria-label="送信中"
+                aria-hidden="true"
                 className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
               />
             ) : (
@@ -566,16 +795,46 @@ export default function AssistantPanel({ onClose }: AssistantPanelProps) {
             )}
           </button>
         </div>
-        {/* 文字数カウンタ。上限が近づいたら警告色で残数を示す。 */}
+        {/* 上限は静的な説明として一度だけ伝える。カウンタを aria-live で流すと1打鍵ごとに
+            「12/500」が割り込み、かな漢字変換の候補読み上げを潰す。maxLength が上限を物理的に
+            保証しているので、逐次通知には情報価値がない。 */}
+        <span id="assistant-input-hint" className="sr-only">
+          最大{MAX_INPUT_LENGTH}文字
+        </span>
+        {/* 文字数カウンタ。上限が近づいたら警告色で残数を示す（目で見るための表示）。 */}
         <div className="mt-1 flex justify-end px-1">
           <span
-            className={`text-[11px] tabular-nums ${nearLimit ? 'text-accent-700' : 'text-ink-muted'}`}
-            aria-live="polite"
+            aria-hidden="true"
+            className={`text-caption tnum ${nearLimit ? 'text-accent-700' : 'text-ink-muted'}`}
           >
             {input.length}/{MAX_INPUT_LENGTH}
           </span>
         </div>
       </form>
+
+      {/* 確認ダイアログは body 直下へポータルする。このパネルのルートは入場アニメの translate-y を
+          常に持ち、transform を持つ要素は position:fixed の含有ブロックになるため、ツリー内に
+          置くと `fixed inset-0` の膜と中央寄せがパネルの箱（400〜900px）に閉じ込められ、
+          ページ全体が暗転しない・ボタン行が 320px に潰れる。
+          React の合成イベントはポータル越しでも JSX ツリーを辿って伝わるので、handleKeyDown 先頭の
+          `if (resetOpen) return;`（Esc をダイアログへ譲るガード）は引き続き必要。
+          パネルはクリック後にしかマウントされないが、SSR で document が無い場合に備えて存在を確かめる。 */}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <ConfirmDialog
+            open={resetOpen}
+            title="新しい会話を始めますか"
+            description="いまの相談内容は表示されなくなります。"
+            confirmLabel="新しい会話を始める"
+            danger
+            onConfirm={() => {
+              setResetOpen(false);
+              handleReset();
+            }}
+            onCancel={() => setResetOpen(false)}
+          />,
+          document.body,
+        )}
     </div>
   );
 }

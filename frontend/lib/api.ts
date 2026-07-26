@@ -52,6 +52,11 @@ const KNOWN_ERROR_MESSAGES: Record<string, string> = {
   'Current password is incorrect': '現在のパスワードが正しくありません。',
   'Slug already exists': 'このスラッグは既に使用されています。',
   'Coupon code already exists': 'このクーポンコードは既に使用されています。',
+  // アシスタント（会話）。ここに無いと LOOKS_UNTRANSLATED_ENGLISH に一致して
+  // status 別の汎用文言（400なら「入力内容に誤りがあります」）へ化け、原因が伝わらない。
+  'Conversation message limit reached':
+    '会話が長くなりました。お手数ですが「新しい会話」から始めてください。',
+  'Conversation not found': 'この会話は見つかりませんでした。「新しい会話」から始めてください。',
 };
 
 // "Minimum order amount is {n}" のようにサーバー側で埋め込まれる可変値を含む detail に対応する。
