@@ -181,7 +181,7 @@
       <li><b>多層フォールバック</b>: pgvector 不在・Ollama 停止・埋め込み 0 件・プロフィール構築不能のいずれでも 200 を返す。<code>build_context</code> の各取得は <code>_safe</code>、各ビルダーは <code>_safe_build</code> で個別に隔離し、失敗時は必ず <code>db.rollback()</code>（rollback しないと以後同一セッションの全クエリが InFailedSqlTransaction で連鎖失敗し、後続レーンまで巻き添えになる）。1 本のレーンの失敗がページ全体を落とさない</li>
       <li><b>source 判定</b>: パーソナライズされたレーンが 1 本でも載れば <code>personalized</code>、非パーソナライズのみ（コールドスタート）なら <code>popular</code></li>
     </ul>
-    <div class="note warn"><span class="lbl">既知の性能課題（Phase 3 TODO）</span><p style="margin:.3em 0 0"><code>product_embeddings.embedding</code> に ANN インデックス（HNSW）が無いため、ベクトル近傍を引くレーン（billboard/for_you/byw/category/sale）ごとに全件コサインスキャンが走る。商品数が数千を超えたら <code>CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)</code> が必要。マイグレーション未導入のため、追加時は create_all 後の DDL 実行として lifespan に入れる形になる。</p></div>
+    <div class="note warn"><span class="lbl">既知の性能課題（Phase 3 TODO）</span><p style="margin:.3em 0 0"><code>product_embeddings.embedding</code> に ANN インデックス（HNSW）が無いため、ベクトル近傍を引くレーン（billboard/for_you/byw/category/sale）ごとに全件コサインスキャンが走る。商品数が数千を超えたら <code>CREATE INDEX ... USING hnsw (embedding vector_cosine_ops)</code> が必要。追加は Alembic のリビジョンを1本足して行う（<code>make migrate-new</code>）。</p></div>
 
     <h3><span class="num">8.8</span>商品Q&amp;A（購入前 AI 回答）</h3>
     <p><code>services/product_qa.py</code>。アシスタント（§8.5）の設計思想——構造化出力・フォールバック・「500 を返さない」——を<b>単一商品向けに簡素化</b>したもの。商品横断の候補検索（<code>get_candidates</code>）や埋め込み検索は使わず、対象商品の情報をプロンプトへ直接注入する。データモデルは §5.7、API は §6.2。</p>

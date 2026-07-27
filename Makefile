@@ -2,7 +2,8 @@
 COMPOSE := docker compose
 
 .PHONY: help up up-d build down stop restart logs logs-backend logs-frontend ps \
-        backend-shell frontend-shell db-shell lint reset clean fonts
+        backend-shell frontend-shell db-shell lint reset clean fonts \
+        migrate migrate-new migrate-down migrate-status
 
 help: ## このヘルプを表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -58,6 +59,23 @@ frontend-shell: ## フロントエンドコンテナでシェルを開く
 
 db-shell: ## PostgreSQL に psql で接続
 	$(COMPOSE) exec db psql -U ec -d ecdb
+
+## --- DB マイグレーション ------------------------------------------
+# バックエンド起動時に自動で `upgrade head` が走るため、通常は make up-d だけでよい。
+# 以下は手で流したいとき・新しいリビジョンを作るときに使う。
+migrate: ## 未適用のマイグレーションを適用（alembic upgrade head）
+	$(COMPOSE) exec backend alembic upgrade head
+
+migrate-new: ## モデルの差分からリビジョンを生成（例: make migrate-new m="add product tags"）
+	@test -n "$(m)" || { echo 'メッセージが必要です: make migrate-new m="add product tags"'; exit 1; }
+	$(COMPOSE) exec backend alembic revision --autogenerate -m "$(m)"
+
+migrate-down: ## マイグレーションを1つ戻す（alembic downgrade -1）
+	$(COMPOSE) exec backend alembic downgrade -1
+
+migrate-status: ## 適用済みリビジョンと履歴を表示
+	$(COMPOSE) exec backend alembic current
+	$(COMPOSE) exec backend alembic history
 
 ## --- 開発補助 ----------------------------------------------------
 lint: ## フロントエンドの Lint を実行

@@ -107,7 +107,7 @@ Ollama 接続不可・タイムアウト時:
 
   <section id="s4">
     <h2><span class="num">04</span>DB 設計</h2>
-    <p>マイグレーションツールは未導入のため、モデル追加後は <code>make reset</code> で反映する（既存ルール通り）。</p>
+    <p>モデル追加後は <code>make migrate-new m="..."</code> でリビジョンを足して反映する（起動時に自動適用。既存ルール通り）。</p>
 <pre class="codeblock">class AssistantConversation(Base):
     __tablename__ = "assistant_conversations"
     id: str            # UUID (PK)。未ログインでも端末の localStorage で継続できるよう UUID にする

@@ -36,8 +36,10 @@
     <div class="tw"><table>
       <thead><tr><th>決定</th><th>内容 / 理由</th></tr></thead>
       <tbody>
-        <tr><td>マイグレーション未導入</td><td>Alembic 等は入れない。テーブルは <code>main.py</code> lifespan の <code>Base.metadata.create_all</code> で自動生成（OperationalError で最大 10 回リトライ）。モデル変更は <code>make reset</code> で DB 作り直さないと反映されない</td></tr>
-        <tr><td>既存テーブルへの追加は不可</td><td>マイグレーション未導入のため、レコメンド機能は既存テーブルにカラムを足さず新規 5 テーブル（埋め込み・SID・キャッシュ 4 ＋ 閲覧履歴 <code>product_views</code>）に分離。将来の拡張も新規テーブル追加で行う</td></tr>
+        <tr><td>マイグレーションは Alembic</td><td>テーブルは <code>backend/alembic/versions/</code> のリビジョンが作る（<code>Base.metadata.create_all</code> は廃止）。<code>main.py</code> lifespan が起動時に <code>alembic upgrade head</code> を実行するため、起動するだけで DB は最新になる。モデル変更時は <code>make migrate-new m="..."</code> でリビジョンを1本足す</td></tr>
+        <tr><td>pgvector 依存は別リビジョン</td><td><code>0001</code>（全テーブル）と <code>0002</code>（<code>CREATE EXTENSION vector</code> + <code>product_embeddings</code>）に分離。<code>env.py</code> の <code>transaction_per_migration=True</code> によりリビジョン単位でコミットされるため、pgvector が無い DB では <code>0002</code> だけが失敗し、アプリはレコメンドをフォールバックさせたまま起動できる</td></tr>
+        <tr><td>導入前 DB の自動 stamp</td><td><code>alembic_version</code> が無く <code>users</code> がある DB は、起動時に <code>0001</code>（<code>product_embeddings</code> があれば <code>0002</code>）として記録する（<code>_stamp_legacy_schema</code>）。create_all 時代の DB を作り直さずに移行できる</td></tr>
+        <tr><td>AI 周辺データは別テーブル</td><td>レコメンド機能は既存テーブルにカラムを足さず新規 5 テーブル（埋め込み・SID・キャッシュ 4 ＋ 閲覧履歴 <code>product_views</code>）に分離。もとはマイグレーション未導入という制約由来だが、EC 中核のテーブルを LLM 都合の列で汚さないため Alembic 導入後も維持する</td></tr>
         <tr><td>パーソナライズ信号の分離と時間減衰</td><td>閲覧履歴は専用テーブル <code>product_views</code>（1 ユーザー×1 商品 1 行の upsert）に持ち既存テーブルを汚さない。行動重みは半減期 30 日で時間減衰させ「今の好み」を優先。<code>profile_hash</code> には <code>種別:product_id</code> の集合のみを入れ重み・時刻は含めない（時間経過だけでキャッシュが陳腐化しないため）。§8.6</td></tr>
         <tr><td>商品は論理削除のみ</td><td>Product を物理削除してはならない。<code>status="archived"</code> にする。過去注文のスナップショットは不変に保たれる</td></tr>
         <tr><td>status が可視性・購入可否の唯一の源</td><td>6 状態から <code>is_listed</code>/<code>is_viewable</code>/<code>purchasable</code> を導出。個別の真偽フラグを増やさない（旧 is_active は archived に統合）</td></tr>

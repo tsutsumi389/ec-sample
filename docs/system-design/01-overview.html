@@ -38,7 +38,7 @@
       <div class="card"><h4>対象読者</h4><p>本リポジトリで開発・レビューを行うエンジニア、アーキテクチャを把握したいテクニカルリード、AI レコメンド機構の理解者。</p></div>
       <div class="card"><h4>スコープ</h4><p>バックエンド（FastAPI）・フロントエンド（Next.js）・データベース（PostgreSQL/pgvector）・AI 連携（Ollama）の設計。インフラ/デプロイ詳細は対象外。</p></div>
     </div>
-    <div class="note"><span class="lbl">前提</span><p style="margin:.3em 0 0">記述はコードベースの構造化分析結果に厳密に基づく。マイグレーションツールは未導入で、テーブルは起動時の <code>Base.metadata.create_all</code> で自動生成される（詳細は §11）。</p></div>
+    <div class="note"><span class="lbl">前提</span><p style="margin:.3em 0 0">記述はコードベースの構造化分析結果に厳密に基づく。スキーマは Alembic のリビジョンで管理され、起動時の <code>alembic upgrade head</code> で自動適用される（詳細は §11）。</p></div>
   </section>
 
   <nav class="pager">

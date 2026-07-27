@@ -330,8 +330,8 @@ def build_context(
     ベクトル近傍を引くレーン（billboard/for_you/byw/category/sale）ごとに全件コサイン
     スキャンが走る。商品数が数千を超えたら
         CREATE INDEX ON product_embeddings USING hnsw (embedding vector_cosine_ops);
-    を追加すること。マイグレーションツール未導入のため、追加時は create_all 後の
-    DDL 実行として main.py の lifespan に入れる形になる。
+    を追加すること。追加は Alembic のリビジョンを1本足して行う
+    （`make migrate-new m="add hnsw index on product embeddings"`）。
     """
     viewed = recently_viewed_ids[:_MAX_RECENTLY_VIEWED_IDS]
 
