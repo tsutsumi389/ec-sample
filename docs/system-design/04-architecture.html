@@ -52,7 +52,7 @@
           <div class="box"><b>services</b><span>embedding / semantic_id / recommendation / llm_catalog / assistant / home_page</span></div>
         </div>
         <div class="row">
-          <div class="box side"><b>lifespan（起動時）</b><span>pgvector 有効化 → create_all → seed_data → 埋め込み同期スレッド</span></div>
+          <div class="box side"><b>lifespan（起動時）</b><span>DB 接続待ち → alembic upgrade head → seed_data → 埋め込み同期スレッド</span></div>
           <div class="box side"><b>BackgroundTasks</b><span>単一商品埋め込み更新 / LLM レコメンド生成（非同期）</span></div>
         </div>
       </div>

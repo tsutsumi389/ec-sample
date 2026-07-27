@@ -32,7 +32,7 @@
 
   <section id="s5">
     <h2><span class="num">05</span>データモデル設計</h2>
-    <p><code>backend/app/models.py</code> に全 17 モデル（EC 中核 10 + レコメンド・パーソナライズ 5 + アシスタント会話 2）を定義する。<code>database.py</code> が <code>Base</code> / <code>engine</code> / <code>SessionLocal</code> / <code>get_db</code> を提供し、<code>seed.py</code> が初期データを冪等投入する。全テーブルは <code>main.py</code> の lifespan 内 <code>Base.metadata.create_all</code> で自動生成される（マイグレーションツール未導入）。</p>
+    <p><code>backend/app/models.py</code> に全 17 モデル（EC 中核 10 + レコメンド・パーソナライズ 5 + アシスタント会話 2）を定義する。<code>database.py</code> が <code>Base</code> / <code>engine</code> / <code>SessionLocal</code> / <code>get_db</code> を提供し、<code>seed.py</code> が初期データを冪等投入する。全テーブルは <code>backend/alembic/versions/</code> のリビジョンが作り、<code>main.py</code> の lifespan が起動時に <code>alembic upgrade head</code> で適用する。</p>
 
     <h3><span class="num">5.1</span>Product 状態機械（可視性・購入可否の唯一の源）</h3>
     <p>商品の一覧表示・商品ページ表示・購入可否はすべて <code>Product.status</code> の 6 状態から導出する。個別の真偽フラグは持たない（旧 <code>is_active</code> は <code>archived</code> に統合し廃止）。判定は <code>is_listed</code> / <code>is_viewable</code> / <code>purchasable</code> プロパティと <code>LISTED_STATUSES</code> / <code>VIEWABLE_STATUSES</code> 定数に集約される。</p>
@@ -83,7 +83,7 @@
     </div>
 
     <h3><span class="num">5.4</span>レコメンド・パーソナライズ用テーブル</h3>
-    <p>既存テーブルにカラムを足さず新規 5 テーブルに分離している（マイグレーション未導入のため既存テーブルへの追加ができず、新規テーブル追加のみ許容される運用に合わせた設計）。うち <code>product_views</code> は購入・お気に入りと並ぶパーソナライズの行動シグナルで、他 4 テーブルは埋め込み・SID・生成キャッシュを担う。</p>
+    <p>既存テーブルにカラムを足さず新規 5 テーブルに分離している（もとはマイグレーション未導入という制約由来の設計だが、EC 中核のテーブルを LLM 都合の列で汚さず切り離せる形を保つため Alembic 導入後も維持する）。うち <code>product_views</code> は購入・お気に入りと並ぶパーソナライズの行動シグナルで、他 4 テーブルは埋め込み・SID・生成キャッシュを担う。</p>
     <div class="tw">
       <table class="col-mono">
         <thead><tr><th>テーブル</th><th>主なカラム</th><th>役割</th></tr></thead>
@@ -109,7 +109,7 @@
     </ul>
 
     <h3><span class="num">5.6</span>アシスタント会話テーブル</h3>
-    <p>チャット型ショッピングアシスタントの会話とメッセージを永続化する新規 2 テーブル。既存テーブルにはカラムを足さず分離する（マイグレーション未導入の運用に合わせる）。会話は 1:N でメッセージを持つ（<code>cascade="all, delete-orphan"</code>）。会話 ID は推測困難な UUID（文字列 PK）で、未ログインでも端末の <code>localStorage</code> に UUID を保持することでパネル再オープン時に会話を継続できる。</p>
+    <p>チャット型ショッピングアシスタントの会話とメッセージを永続化する新規 2 テーブル。既存テーブルにはカラムを足さず分離する（AI 機能の周辺データを EC 中核のテーブルに混ぜない方針）。会話は 1:N でメッセージを持つ（<code>cascade="all, delete-orphan"</code>）。会話 ID は推測困難な UUID（文字列 PK）で、未ログインでも端末の <code>localStorage</code> に UUID を保持することでパネル再オープン時に会話を継続できる。</p>
     <div class="tw">
       <table class="col-mono">
         <thead><tr><th>テーブル</th><th>主なカラム</th><th>役割 / 制約</th></tr></thead>

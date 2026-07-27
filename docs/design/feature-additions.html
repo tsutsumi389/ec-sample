@@ -41,7 +41,7 @@
   <section id="s1">
     <h2><span class="num">01</span>前提・不変条件（CLAUDE.md 準拠）</h2>
     <ul>
-      <li>マイグレーションツールは導入しない。モデル変更後は <code>make reset</code> で DB 再作成（<code>Base.metadata.create_all</code> + シード）。</li>
+      <li>スキーマ変更は Alembic のリビジョンで行う。モデル変更後は <code>make migrate-new m="..."</code> でリビジョンを1本足す（起動時に自動適用）。</li>
       <li>商品は論理削除のみ（<code>is_active=False</code>）。物理削除禁止。</li>
       <li>注文明細（<code>OrderItem</code>）は注文時点のスナップショット。商品マスタから再計算しない。</li>
       <li>全 API は <code>/api</code> プレフィックス配下。CORS 許可は <code>http://localhost:3000</code> のみ。</li>

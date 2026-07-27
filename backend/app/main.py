@@ -2,13 +2,16 @@ import logging
 import threading
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal, engine
 from app.routers import (
     addresses,
     admin,
@@ -40,25 +43,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _create_tables_with_retry(
-    vector_available: bool = True, max_attempts: int = 10, delay_seconds: float = 1.5
-) -> None:
-    """Create tables, retrying briefly in case the DB container is still starting up.
+# backend/ 直下（alembic.ini と alembic/ がある場所）。
+BACKEND_DIR = Path(__file__).resolve().parent.parent
 
-    vector 拡張が使えない環境では product_embeddings（Vector カラムを持つ）を作成対象から
-    外す。そのまま create_all すると vector 型未定義で ProgrammingError（OperationalError
-    ではない）が送出され起動が落ちてしまうため、対象テーブルを絞って起動継続させる。
-    """
-    tables = None
-    if not vector_available:
-        tables = [
-            table
-            for table in Base.metadata.sorted_tables
-            if table.name != "product_embeddings"
-        ]
+
+def _wait_for_db(max_attempts: int = 10, delay_seconds: float = 1.5) -> None:
+    """DB コンテナの起動待ち。接続できるまで短くリトライする。"""
     for attempt in range(1, max_attempts + 1):
         try:
-            Base.metadata.create_all(bind=engine, tables=tables)
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
             return
         except OperationalError:
             if attempt == max_attempts:
@@ -66,32 +60,75 @@ def _create_tables_with_retry(
             time.sleep(delay_seconds)
 
 
-def _ensure_pgvector_extension() -> bool:
-    """pgvector 拡張を有効化する（create_all の前に必要）。
+def _pgvector_available() -> bool:
+    """pgvector 拡張が使える DB か（導入済み、または導入可能）を調べる。
 
-    pgvector が入っていない DB でも起動が落ちないよう、失敗時は警告ログにして続行する。
-    その場合 product_embeddings テーブルは作成できずレコメンドはフォールバック動作になる。
-    戻り値: vector 拡張が利用可能なら True、そうでなければ False。
+    拡張の作成そのものはマイグレーション 0002 の仕事なので、ここでは判定だけする。
+    pgvector が無い DB でも起動が落ちないようにするための分岐に使う。
     """
-    for attempt in range(1, 11):
-        try:
-            with engine.connect() as conn:
-                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-                conn.commit()
-            return True
-        except OperationalError:
-            # DB 起動待ち。少し待って再試行する。
-            if attempt == 10:
-                logger.warning("DB 接続待ちで pgvector 拡張の有効化を諦めました")
-                return False
-            time.sleep(1.5)
-        except Exception as exc:  # noqa: BLE001 - 拡張が無い等でも起動は止めない
-            logger.warning(
-                "pgvector 拡張を有効化できませんでした（レコメンドはフォールバック動作になります）: %s",
-                exc,
-            )
-            return False
-    return False
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT 1 FROM pg_available_extensions WHERE name = 'vector'")
+            ).first()
+        return row is not None
+    except Exception as exc:  # noqa: BLE001 - 判定できない場合も起動は止めない
+        logger.warning("pgvector 拡張の有無を判定できませんでした: %s", exc)
+        return False
+
+
+def _alembic_config() -> Config:
+    """アプリから alembic を叩くための設定。
+
+    script_location を絶対パスで上書きするのは、alembic.ini の相対パスが
+    カレントディレクトリ基準で解決されるため（uvicorn の起動場所に依存させない）。
+    configure_logger=False は env.py 側で参照し、fileConfig によるロガー無効化を防ぐ。
+    """
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    cfg.attributes["configure_logger"] = False
+    return cfg
+
+
+def _stamp_legacy_schema(cfg: Config) -> None:
+    """Alembic 導入前に create_all で作られた DB に、対応する版数を刻む。
+
+    そのまま upgrade すると「テーブルが既に存在する」で 0001 が落ちるため、
+    既存スキーマ = 0001（+ pgvector があれば 0002）とみなして stamp する。
+    まっさらな DB では何もしない（通常どおり 0001 から流す）。
+    """
+    inspector = inspect(engine)
+    if inspector.has_table("alembic_version"):
+        return
+    if not inspector.has_table("users"):
+        return
+    revision = "0002" if inspector.has_table("product_embeddings") else "0001"
+    command.stamp(cfg, revision)
+    logger.info(
+        "Alembic 導入前のスキーマを検出したため、リビジョン %s として記録しました", revision
+    )
+
+
+def _run_migrations(vector_available: bool) -> None:
+    """未適用のマイグレーションを適用する（alembic upgrade head 相当）。
+
+    pgvector が無い DB では 0002（product_embeddings）が必ず失敗するが、
+    env.py の transaction_per_migration=True により 0001 まではコミット済みなので、
+    レコメンドをフォールバック動作にしたままアプリは起動できる。
+    """
+    cfg = _alembic_config()
+    _stamp_legacy_schema(cfg)
+    if vector_available:
+        command.upgrade(cfg, "head")
+        return
+    try:
+        command.upgrade(cfg, "head")
+    except Exception as exc:  # noqa: BLE001 - pgvector 不在でも起動は止めない
+        logger.warning(
+            "pgvector が無いため product_embeddings を作成できませんでした"
+            "（レコメンドはフォールバック動作になります）: %s",
+            exc,
+        )
 
 
 def _startup_embedding_sync() -> None:
@@ -123,8 +160,8 @@ def _startup_embedding_sync() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    vector_available = _ensure_pgvector_extension()
-    _create_tables_with_retry(vector_available)
+    _wait_for_db()
+    _run_migrations(_pgvector_available())
     db = SessionLocal()
     try:
         seed_data(db)
