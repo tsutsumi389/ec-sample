@@ -1,19 +1,23 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { ChatBubbleIcon } from '@/components/Icons';
 import AssistantPanel from '@/components/assistant/AssistantPanel';
+import { useAssistant } from '@/lib/assistant-context';
 
 /**
  * 全ページ右下に常駐する AIショッピングアシスタントのウィジェット。
  * フローティングボタンでパネルを開く（閉じるのはパネルヘッダーの × と Escape）。
  * 開いている間 FAB は隠すので、このボタンは「開く」専用。
  * 管理画面（/admin 配下）では表示しない。
+ *
+ * 開閉状態は lib/assistant-context.tsx が持つ（検索0件の画面など、ページ側からも
+ * 開けるようにするため）。パネルの描画・FAB・背景の不活性化はここが引き続き受け持つ。
  */
 export default function AssistantWidget() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const { open, prefill, returnFocusRef, openAssistant, closeAssistant } = useAssistant();
 
   // アシスタントを出さないページ。
   // ・/admin: 買い物文脈が無い。
@@ -23,23 +27,38 @@ export default function AssistantWidget() {
   //   カード内寸の右端と FAB の座標は幅で決まるので、偶然ではなく必ず重なる。
   const hidden =
     pathname?.startsWith('/admin') || pathname === '/login' || pathname === '/register';
-  // 開くトリガ（FAB）への参照。閉じたときにフォーカスを戻し、キーボード操作の文脈を保つ。
-  // FAB は開いている間 display:none なので、フォーカスを戻せるのは setOpen(false) の再描画後。
+  // 開くトリガ（FAB）への参照。フォーカスの戻し先が消えていたときの退避先でもある。
   const fabRef = useRef<HTMLButtonElement>(null);
+  // 閉じた後にフォーカスを戻す先。handleClose が控え、下の effect が実際に当てる。
+  const pendingFocusRef = useRef<HTMLElement | null>(null);
 
-  // パネルを閉じたら開く前のトリガ（FAB）へフォーカスを返す。
+  // パネルを閉じたら開く前のトリガへフォーカスを返す。
   // 呼び出し元はパネルヘッダーの × と Escape だけ（FAB は開く専用にしたのでここへは来ない）。
-  // パネルのアンマウント後に確実に当てるため次フレームで実行する。
   const handleClose = useCallback(() => {
-    setOpen(false);
-    requestAnimationFrame(() => fabRef.current?.focus());
-  }, []);
+    // 戻し先は「開いた側が渡したボタン」。ページ側から開いた場合（検索0件の相談導線など）に
+    // FAB へ戻すと、画面の反対側へフォーカスが飛んで操作の文脈が切れる。
+    pendingFocusRef.current = returnFocusRef.current;
+    closeAssistant();
+  }, [closeAssistant, returnFocusRef]);
 
-  // パネル内のリンクで遷移するときに閉じる経路。閉じるだけで FAB へフォーカスは戻さない。
-  // フォーカスは遷移先の先頭へ移るべきで、右下のボタンに取り残すと文脈が壊れるため。
+  // 実際にフォーカスを当てるのはここ。requestAnimationFrame では当たらない——
+  // FAB は開いている間 display:none で、rAF のコールバックは再描画のコミットより先に
+  // 走ることがあり、display:none の要素は focus() を受け取れないため（無言で失敗する）。
+  // effect なら DOM への反映後に走るので、FAB が現れてから確実に当たる。
+  useEffect(() => {
+    if (open) return;
+    const target = pendingFocusRef.current;
+    if (!target) return;
+    pendingFocusRef.current = null;
+    // 開いている間に呼び出し側が消えている（検索結果が入れ替わった等）ときは FAB へ退避する。
+    (target.isConnected ? target : fabRef.current)?.focus();
+  }, [open]);
+
+  // パネル内のリンクで遷移するときに閉じる経路。閉じるだけでフォーカスは戻さない。
+  // フォーカスは遷移先の先頭へ移るべきで、元のボタンに取り残すと文脈が壊れるため。
   // 閉じれば背景の inert は上の effect（依存 [open]）のクリーンアップで必ず外れる。
   // これを通さずに遷移すると header/main/footer の inert が残り、遷移先が一切操作できない。
-  const handleCloseForNavigation = useCallback(() => setOpen(false), []);
+  const handleCloseForNavigation = useCallback(() => closeAssistant(), [closeAssistant]);
 
   // パネル（role="dialog" aria-modal）を開いている間は背景ページ（ヘッダー/本文/フッター）を
   // inert + aria-hidden にして不活性化する。Tab フォーカストラップだけでは塞げない
@@ -66,8 +85,8 @@ export default function AssistantWidget() {
   // 開いたまま return null にすると、上の inert 効果のクリーンアップが走らず
   // header/main/footer に inert が残って全ページが操作不能になる。
   useEffect(() => {
-    if (hidden) setOpen(false);
-  }, [hidden]);
+    if (hidden) closeAssistant();
+  }, [hidden, closeAssistant]);
 
   if (hidden) return null;
 
@@ -91,7 +110,16 @@ export default function AssistantWidget() {
 
   return (
     <>
-      {open && <AssistantPanel onClose={handleClose} onNavigate={handleCloseForNavigation} />}
+      {/* パネルは開くたびにマウントし直されるので、prefill は初期値としてそのまま渡してよい
+          （開いている間に prefill が変わる経路は無い。開いている間、背景は inert なので
+          ページ側の「相談する」ボタンは押せない）。 */}
+      {open && (
+        <AssistantPanel
+          prefill={prefill}
+          onClose={handleClose}
+          onNavigate={handleCloseForNavigation}
+        />
+      )}
 
       {/* フローティングボタン。開いている間は全幅で隠すので「開く」専用（開閉トグルではない）。
           FAB は z-50 かつパネルより後ろの DOM なので、重なった領域では必ず FAB が勝つ。
@@ -109,7 +137,7 @@ export default function AssistantWidget() {
       <button
         ref={fabRef}
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => openAssistant({ returnFocusTo: fabRef })}
         aria-label="アシスタントを開く"
         aria-expanded={open}
         className={`fixed z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-float ring-1 ring-washi-50/25 transition-[background-color,transform] duration-fast ease-standard hover:bg-brand-700 active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${fabRight} ${fabPosition} ${

@@ -10,6 +10,7 @@ import { AuthProvider } from '@/lib/auth-context';
 import { CartProvider } from '@/lib/cart-context';
 import { ToastProvider } from '@/lib/toast-context';
 import { ExperimentProvider } from '@/lib/experiment-context';
+import { AssistantProvider } from '@/lib/assistant-context';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AssistantWidget from '@/components/assistant/AssistantWidget';
@@ -65,22 +66,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ExperimentProvider>
             <CartProvider>
               <ToastProvider>
-                <AnalyticsTracker />
-                <Header />
-                {/*
-                  下端のセーフエリアはここでは取らない。FAB は position:fixed なので
-                  main に padding を足しても被りは変わらず、全ページ一律で 80px の
-                  無地帯が本文と奥付のあいだに挟まるだけだった（モバイルで顕著）。
-                  固定バーを持つページ（商品詳細）だけが自分の器で逃げ幅を持つ。
-                */}
-                {/* スキップリンク（components/Header.tsx 先頭）の着地点。
-                    tabIndex={-1} が無いと href="#main" でスクロールはしてもフォーカスが
-                    移らず、次の Tab がヘッダーの先頭へ戻ってしまう。 */}
-                <main id="main" tabIndex={-1} className="flex-1 focus-visible:outline-none">
-                  {children}
-                </main>
-                <Footer />
-                <AssistantWidget />
+                {/* アシスタントの開閉状態。ページ側（検索0件の相談導線など）からも開けるよう、
+                    本文（main）と AssistantWidget の両方を覆う位置に置く。 */}
+                <AssistantProvider>
+                  <AnalyticsTracker />
+                  <Header />
+                  {/*
+                    下端のセーフエリアはここでは取らない。FAB は position:fixed なので
+                    main に padding を足しても被りは変わらず、全ページ一律で 80px の
+                    無地帯が本文と奥付のあいだに挟まるだけだった（モバイルで顕著）。
+                    固定バーを持つページ（商品詳細）だけが自分の器で逃げ幅を持つ。
+                  */}
+                  {/* スキップリンク（components/Header.tsx 先頭）の着地点。
+                      tabIndex={-1} が無いと href="#main" でスクロールはしてもフォーカスが
+                      移らず、次の Tab がヘッダーの先頭へ戻ってしまう。 */}
+                  <main id="main" tabIndex={-1} className="flex-1 focus-visible:outline-none">
+                    {children}
+                  </main>
+                  <Footer />
+                  <AssistantWidget />
+                </AssistantProvider>
               </ToastProvider>
             </CartProvider>
           </ExperimentProvider>

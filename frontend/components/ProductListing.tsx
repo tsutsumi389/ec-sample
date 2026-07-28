@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
@@ -14,11 +14,12 @@ import { CupMotif, PlantMotif } from '@/components/BrandMotifs';
 import { ProductGridSkeleton } from '@/components/Skeleton';
 import EmptyState from '@/components/EmptyState';
 import ErrorNotice from '@/components/ErrorNotice';
-import { XMarkIcon } from '@/components/Icons';
+import { ChatBubbleIcon, XMarkIcon } from '@/components/Icons';
 import ProductFilters, { type ProductFiltersValue, type ProductSort } from '@/components/ProductFilters';
 import { btn } from '@/lib/buttonStyles';
 import { listingGrid } from '@/lib/gridStyles';
 import { EVENT_SEARCH_NO_RESULT, track } from '@/lib/analytics';
+import { useAssistant } from '@/lib/assistant-context';
 
 const LIMIT = 12;
 
@@ -136,6 +137,9 @@ export default function ProductListing({
 }: ProductListingProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { openAssistant } = useAssistant();
+  // 0件からアシスタントを開くボタン。閉じたときフォーカスをここへ戻すため ref を渡す。
+  const assistantCtaRef = useRef<HTMLButtonElement>(null);
   const search = searchParams.get('search') || '';
   const page = Number(searchParams.get('page') || '1') || 1;
   // カテゴリはパス（/categories/[id]）で固定されている場合はそちらを唯一の源とし、
@@ -317,6 +321,10 @@ export default function ProductListing({
   const hasActiveFilters = Boolean(
     search || categoryId || minPrice || maxPrice || (sortParam && sortParam !== 'newest')
   );
+
+  // 結果の**件数を減らしうる**条件が掛かっているか。0件の空状態で最重要 CTA をどちらに
+  // するかの判定に使う。並び替えは含めない（順番を変えるだけで 0件の原因になり得ない）。
+  const hasNarrowingFilters = Boolean(categoryId || minPrice || maxPrice);
 
   const categoryName = fixedCategory
     ? fixedCategory.name
@@ -563,13 +571,39 @@ export default function ProductListing({
                     </div>
                   )}
                   {hasActiveFilters && (
-                    <button
-                      type="button"
-                      onClick={() => router.push('/products')}
-                      className={btn('primary', 'md')}
-                    >
-                      絞り込みをすべて解除する
-                    </button>
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => router.push('/products')}
+                        className={btn(hasNarrowingFilters ? 'primary' : 'secondary', 'md')}
+                      >
+                        絞り込みをすべて解除する
+                      </button>
+                      {/* 言葉で探して空振りした人の行き止まりを断つ。何を探していたかを
+                          持ったままアシスタントを開き、入力欄へ入れて渡す（送信はしない。
+                          予算や用途を書き足してから送れるようにするため）。
+                          最重要 CTA をどちらにするかは 0件の原因の当たりで決める——
+                          カテゴリや価格帯で絞り込んでいるなら条件側が原因である方が多いので、
+                          機械的に直せる「絞り込み解除」に primary を譲る。 */}
+                      {search && (
+                        <button
+                          ref={assistantCtaRef}
+                          type="button"
+                          onClick={() =>
+                            openAssistant({
+                              prefill: `「${search}」を探しています`,
+                              returnFocusTo: assistantCtaRef,
+                            })
+                          }
+                          data-track-click="search_no_result_assistant"
+                          data-track-props={JSON.stringify({ search })}
+                          className={btn(hasNarrowingFilters ? 'secondary' : 'primary', 'md')}
+                        >
+                          <ChatBubbleIcon className="h-4 w-4" />
+                          アシスタントに相談する
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : undefined
