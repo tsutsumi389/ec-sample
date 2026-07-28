@@ -149,11 +149,17 @@ interface AssistantPanelProps {
    * 遷移先のページが一切操作できなくなる（onClose と違いフォーカスは FAB へ戻さない）。
    */
   onNavigate: () => void;
+  /**
+   * 開いた直後に入力欄へ入れておく文言（検索0件からの相談導線など）。
+   * **自動送信はしない**——サジェスト chip と同じ規律で、送る前に予算などを書き足せる
+   * 状態にしておく。パネルは開くたびにマウントし直されるので初期値として読むだけでよい。
+   */
+  prefill?: string;
 }
 
-export default function AssistantPanel({ onClose, onNavigate }: AssistantPanelProps) {
+export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: AssistantPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(prefill);
   const [sending, setSending] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [size, setSize] = useState<PanelSize>(() => getStoredPanelSize());
@@ -201,8 +207,14 @@ export default function AssistantPanel({ onClose, onNavigate }: AssistantPanelPr
   }, []);
 
   // マウント（＝パネルオープン）時に入力欄へフォーカスする。
+  // prefill 付きで開いたときはキャレットを末尾へ送る。focus() だけだと初期値が全選択される
+  // 実装があり、条件を書き足すつもりの1打鍵で渡した文言ごと消えてしまう。
   useEffect(() => {
-    inputRef.current?.focus();
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
   }, []);
 
   // マウント（＝パネルオープン）時に履歴を復元する。
