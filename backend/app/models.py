@@ -105,6 +105,15 @@ class Product(Base):
         cascade="all, delete-orphan",
         order_by="ProductImage.sort_order, ProductImage.id",
     )
+    # 仕様は一覧・レコメンド・カートの ProductOut にも載る（= 1ページで最大12商品ぶん
+    # 引かれる）ため selectin で1クエリにまとめる。images が素の lazy select なのは
+    # 単に古いからで、揃えるならこちらが正しい。
+    specs: Mapped[list["ProductSpec"]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="ProductSpec.sort_order, ProductSpec.id",
+        lazy="selectin",
+    )
 
     @property
     def effective_price(self) -> int:
@@ -142,6 +151,36 @@ class ProductImage(Base):
     )
 
     product: Mapped["Product"] = relationship(back_populates="images")
+
+
+class ProductSpec(Base):
+    """商品の仕様（サイズ・重量・素材・保証など）を1行1項目で持つ。
+
+    description のフリーテキストに溶けていた「モノの事実」を構造化するためのテーブル。
+    商品ページの「仕様」欄はこの行がそのまま出る。
+
+    **在庫・価格・販売状態をここに入れないこと。** あれは「いまの状態」であって仕様ではない。
+    仕様として並べると、商品ページで StockLabel（残りN点）と同じ数字が同一画面に二度出る。
+
+    label / value を自由文字列にしてあるのは、カテゴリ横断で属性名を固定できないため
+    （「容量」はケトルにはあるがマフラーには無い）。絞り込み条件に使う予定は無く、
+    あくまで表示と埋め込み原文のための構造化に留める。
+    """
+
+    __tablename__ = "product_specs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # selectin ローディングは product_id IN (...) で引くため索引を張る。
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id"), nullable=False, index=True
+    )
+    # 項目名（例: 本体サイズ / 重量 / 素材）。
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    # 値（例: 幅24×奥行18×高さ30cm）。単位まで含めた表示用の文字列で持つ。
+    value: Mapped[str] = mapped_column(String, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    product: Mapped["Product"] = relationship(back_populates="specs")
 
 
 class Review(Base):

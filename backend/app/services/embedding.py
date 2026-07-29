@@ -33,7 +33,16 @@ def _client() -> ollama.Client:
 
 
 def build_product_text(product: Product) -> str:
-    """埋め込み元テキスト。名前・カテゴリ名・説明・価格帯を結合する。"""
+    """埋め込み元テキスト。名前・カテゴリ名・説明・価格帯・仕様を結合する。
+
+    仕様（product_specs）を含めるのは、素材・容量・サイズといった具体語が description の
+    書きぶりに左右されずベクトルに乗るようにするため（seed.py の SEED_PRODUCTS 冒頭が
+    「用途・素材・シーン・サイズなど固有の具体語を必ず入れる」と要求しているのを、
+    構造化した側から満たす）。仕様を持たない商品は従来どおりの本文だけになる。
+
+    この関数の出力が変わると source_hash が全商品ぶん変わり、次回の sync_embeddings で
+    全件が再埋め込みされる（起動時に自動で走る）。意図した挙動。
+    """
     category_name = product.category.name if product.category is not None else "その他"
     price = product.effective_price
     # 価格帯をざっくり言語化して、近い価格の商品が近いベクトルになりやすくする。
@@ -52,6 +61,11 @@ def build_product_text(product: Product) -> str:
         f"説明: {product.description or ''}",
         f"価格帯: {price_band}（¥{price:,}）",
     ]
+    # 仕様が無い商品では行ごと落とす（「仕様: 」という空の見出しがベクトルに乗ると、
+    # 仕様を持たない商品どうしが「仕様が無い」という理由で近くなる）。
+    if product.specs:
+        specs = "、".join(f"{spec.label} {spec.value}" for spec in product.specs)
+        parts.append(f"仕様: {specs}")
     return "\n".join(parts)
 
 

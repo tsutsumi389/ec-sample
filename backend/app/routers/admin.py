@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_admin
 from app.database import SessionLocal, get_db
-from app.models import Category, Coupon, Order, Product, ProductImage, User
+from app.models import Category, Coupon, Order, Product, ProductImage, ProductSpec, User
 from app.schemas import (
     AdminOrderOut,
     AdminUserOut,
@@ -63,6 +63,22 @@ def _sync_images(product: Product, image_urls: list[str]) -> None:
     ]
 
 
+def _sync_specs(product: Product, specs: list[dict]) -> None:
+    """商品の仕様行を与えられた列で丸ごと置き換える（表示順は配列順）。
+
+    label / value のどちらかが空の行は捨てる（管理画面の入力欄は空行のまま残せるため）。
+    sort_order は残った行に 0 から振り直す。
+    """
+    rows = []
+    for spec in specs:
+        label = spec["label"].strip()
+        value = spec["value"].strip()
+        if not label or not value:
+            continue
+        rows.append(ProductSpec(label=label, value=value, sort_order=len(rows)))
+    product.specs = rows
+
+
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
 def create_product(
     payload: ProductCreate,
@@ -71,8 +87,10 @@ def create_product(
 ) -> Product:
     data = payload.model_dump()
     image_urls = data.pop("image_urls", [])
+    specs = data.pop("specs", [])
     product = Product(**data)
     _sync_images(product, image_urls)
+    _sync_specs(product, specs)
     db.add(product)
     db.commit()
     db.refresh(product)
@@ -93,12 +111,15 @@ def update_product(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
     data = payload.model_dump(exclude_unset=True)
-    # image_urls は None=変更しない / [] や配列=その内容で丸ごと置換、として扱う。
+    # image_urls / specs は None=変更しない / [] や配列=その内容で丸ごと置換、として扱う。
     image_urls = data.pop("image_urls", None)
+    specs = data.pop("specs", None)
     for field, value in data.items():
         setattr(product, field, value)
     if image_urls is not None:
         _sync_images(product, image_urls)
+    if specs is not None:
+        _sync_specs(product, specs)
 
     db.commit()
     db.refresh(product)

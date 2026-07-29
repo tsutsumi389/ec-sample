@@ -21,6 +21,15 @@ export interface ProductImage {
   sort_order: number;
 }
 
+/**
+ * 商品の仕様1行（サイズ・素材・保証など）。
+ * 在庫・価格・販売状態はここに来ない（状態であって仕様ではないため）。
+ */
+export interface ProductSpec {
+  label: string;
+  value: string;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -36,6 +45,7 @@ export interface Product {
   purchasable: boolean;
   image_url: string;
   images: ProductImage[];
+  specs: ProductSpec[];
   category_id: number | null;
   avg_rating: number | null;
   review_count: number;

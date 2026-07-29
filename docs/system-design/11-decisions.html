@@ -44,6 +44,10 @@
         <tr><td>商品は論理削除のみ</td><td>Product を物理削除してはならない。<code>status="archived"</code> にする。過去注文のスナップショットは不変に保たれる</td></tr>
         <tr><td>status が可視性・購入可否の唯一の源</td><td>6 状態から <code>is_listed</code>/<code>is_viewable</code>/<code>purchasable</code> を導出。個別の真偽フラグを増やさない（旧 is_active は archived に統合）</td></tr>
         <tr><td>実売価格は effective_price</td><td>sale_price があればそれ、なければ price。カート小計・注文金額・OrderItem スナップショットは全て effective_price を使い price を直接使わない</td></tr>
+        <tr><td>モノの事実は product_specs</td><td>サイズ・重量・素材・保証は <code>ProductSpec</code>（label / value / sort_order）に 1 行 1 項目で持ち、<code>description</code> のフリーテキストから切り出す。<b>在庫・価格・販売状態はここに入れない</b>（状態であって仕様ではなく、商品ページで <code>StockLabel</code> と同じ数字が同一画面に二度出る。価格行が席を 1 つに絞っているのと同じ規律）。項目名はカテゴリを跨いで使い回し、値は単位まで含んだ表示用の文字列（絞り込みには使わない）</td></tr>
+        <tr><td>仕様は埋め込み原文にも入る</td><td><code>build_product_text</code> が仕様を 1 行に連ねてベクトル化する（素材・容量が description の書きぶりに左右されず検索に乗るため）。この関数の出力が変わると <code>source_hash</code> が全商品ぶん変わり次回起動で全件再埋め込みされる。仕様が空の商品では行ごと落とす（空見出しを残すと「仕様が無い」商品どうしがベクトル上近づく）</td></tr>
+        <tr><td>仕様のデモデータは 2 経路</td><td>新規 DB は <code>seed.py</code> の <code>PRODUCT_SPECS</code>、既存 DB はリビジョン <code>0004</code> が SKU を手がかりに流し込む（<code>seed_data</code> は users が空のときしか走らないため。<code>make reset</code> は不要）。新規 DB ではマイグレーション → シードの順に走り <code>0004</code> の時点で商品が 0 件なので二重には入らない。<code>0004</code> の <code>SPECS_BY_SKU</code> は seed からの<b>凍結した写し</b>で <code>app.seed</code> を import しない（過去のリビジョンの挙動が将来のシード変更で変わってはならない。<code>app.models</code> を import しないのと同じ理由）</td></tr>
+        <tr><td>レビューの分布はフロントで数える</td><td><code>GET /products/{id}/reviews</code> はページングせず全件返すため、<code>ReviewSection</code> が取得済みの配列を数えて星ごとの分布を出す（集計 API を足さない）。平均だけでは「全員 4 点」と「5 点と 2 点が割れている」を区別できず、同じ 4.2 でも購入判断が変わるため</td></tr>
         <tr><td>注文明細はスナップショット</td><td>OrderItem は注文時点の product_name / price を保持。Order も coupon_code を文字列で、discount_amount / total_amount を確定値で持つ。商品マスタを再参照しない</td></tr>
         <tr><td>在庫整合性</td><td>注文確定・キャンセルとも対象商品行を <code>with_for_update</code> で行ロックしてから在庫を増減し、同時実行による超過販売を防止</td></tr>
         <tr><td>リソース所有権の限定</td><td>カート・注文・住所の各操作は必ず <code>user_id == current_user.id</code> でフィルタし、他人のリソースは 404 で隠蔽</td></tr>
@@ -63,12 +67,12 @@
         <tr><td>ホームは何があっても 200</td><td>pgvector 不在・Ollama 停止・埋め込み 0 件・プロフィール構築不能でも、載せられるレーンだけでページを組んで返す。<code>_safe</code> / <code>_safe_build</code> で各処理を隔離し失敗時は必ず <code>rollback</code>（残すと以後同一セッションが InFailedSqlTransaction で連鎖失敗）。コールドスタートは新着レーンが最後の砦</td></tr>
         <tr><td>プロフィールは 1 リクエスト 1 回</td><td>ホームの全ビルダーが共有するプロフィール・除外 ID・LLM キャッシュ鮮度は <code>build_context</code> で 1 回だけ構築して使い回す（ビルダーごとに <code>build_profile</code> を呼ぶとレーン本数ぶん重複実行される）。ゲストは <code>recently_viewed_ids</code> の位置減衰加重平均で擬似プロフィールを作りパーソナライズする</td></tr>
         <tr><td>冪等性</td><td>seed_data は users が非空なら即 return。お気に入り追加は重複時に既存返却、削除は非存在時 204</td></tr>
-        <tr><td>テスト未整備</td><td>テストコードは無い。追加する場合は <code>backend/</code>（pytest 想定）から</td></tr>
+        <tr><td>テストは DB 不要の純ロジックのみ</td><td><code>backend/tests/</code>（pytest）に DB を要さないユニットテストだけを置く（時間減衰・カート合算・実験の割り当て・埋め込み原文の組み立てなど）。実行は <code>docker compose exec backend python -m pytest tests/ -q</code>。フロントは <code>make lint</code> と実画面での確認に委ねる</td></tr>
       </tbody>
     </table></div>
 
     <footer class="docfoot">
-      Hibino EC システム設計書 — 更新日 2026-07-20 ／ 本書はコードベースの構造化分析（7 サブシステム）に基づく統合設計書である。
+      Hibino EC システム設計書 — 更新日 2026-07-30 ／ 本書はコードベースの構造化分析（7 サブシステム）に基づく統合設計書である。
       <div style="margin-top:8px"><a href="#">▲ ページ先頭へ戻る</a></div>
     </footer>
   </section>

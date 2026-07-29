@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
-import type { Category, Product, ProductStatus } from '@/lib/types';
+import type { Category, Product, ProductSpec, ProductStatus } from '@/lib/types';
 import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
 import { ADMIN_SELECTABLE_STATUSES, PRODUCT_STATUS_META } from '@/lib/productStatus';
 
@@ -16,6 +16,8 @@ export interface ProductFormValues {
   status: ProductStatus;
   image_url: string;
   image_urls: string[];
+  /** 仕様（サイズ・素材など）。表示順は配列順。空行はサーバー側でも捨てられる。 */
+  specs: ProductSpec[];
   category_id: number | null;
 }
 
@@ -35,6 +37,7 @@ const emptyForm: ProductFormValues = {
   status: 'draft',
   image_url: '',
   image_urls: [],
+  specs: [],
   category_id: null,
 };
 
@@ -99,6 +102,7 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
         status: ADMIN_SELECTABLE_STATUSES.includes(product.status) ? product.status : 'draft',
         image_url: product.image_url,
         image_urls: product.images.map((i) => i.image_url),
+        specs: product.specs.map((s) => ({ label: s.label, value: s.value })),
         category_id: product.category_id,
       });
     } else {
@@ -106,15 +110,32 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
     }
   }, [product]);
 
+  /** 仕様の1行を書き換える。行の追加・削除は下の2つのハンドラが受け持つ。 */
+  const updateSpec = (index: number, patch: Partial<ProductSpec>) =>
+    setValues((v) => ({
+      ...v,
+      specs: v.specs.map((spec, i) => (i === index ? { ...spec, ...patch } : spec)),
+    }));
+
+  const addSpec = () =>
+    setValues((v) => ({ ...v, specs: [...v.specs, { label: '', value: '' }] }));
+
+  const removeSpec = (index: number) =>
+    setValues((v) => ({ ...v, specs: v.specs.filter((_, i) => i !== index) }));
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError('');
     try {
       // 追加画像は空行を除いて送る（メイン画像とは別のギャラリー用）。
+      // 仕様も同様に、項目名か値が空の行は送らない（サーバー側でも同じ判定をしている）。
       const cleaned: ProductFormValues = {
         ...values,
         image_urls: values.image_urls.map((u) => u.trim()).filter(Boolean),
+        specs: values.specs
+          .map((s) => ({ label: s.label.trim(), value: s.value.trim() }))
+          .filter((s) => s.label && s.value),
       };
       await onSubmit(cleaned);
     } catch (err) {
@@ -312,6 +333,57 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
               }
               className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
             />
+          </div>
+
+          {/* 仕様（product_specs）。商品ページの「仕様」欄がこの行をそのまま出し、
+              検索の埋め込み原文にも入る。在庫・価格はここに書かないこと（状態であって
+              仕様ではなく、商品ページで在庫の数字が二度出る）。 */}
+          <div>
+            <span className="block text-sm font-medium text-gray-700 mb-2">
+              仕様
+              <span className="ml-1 text-xs font-normal text-gray-600">
+                （任意・サイズや素材など。在庫や価格は入れない）
+              </span>
+            </span>
+            {values.specs.length > 0 && (
+              <ul className="space-y-2">
+                {values.specs.map((spec, index) => (
+                  <li key={index} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={spec.label}
+                      onChange={(e) => updateSpec(index, { label: e.target.value })}
+                      aria-label={`仕様${index + 1}の項目名`}
+                      placeholder="項目名（例: 重量）"
+                      className="w-1/3 border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+                    />
+                    <input
+                      type="text"
+                      value={spec.value}
+                      onChange={(e) => updateSpec(index, { value: e.target.value })}
+                      aria-label={`仕様${index + 1}の値`}
+                      placeholder="値（例: 約350g）"
+                      className="flex-1 min-w-0 border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeSpec(index)}
+                      aria-label={`仕様${index + 1}を削除`}
+                      className="shrink-0 rounded-md border border-gray-300 px-3 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      削除
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button
+              type="button"
+              onClick={addSpec}
+              className="mt-2 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              仕様を追加
+            </button>
           </div>
 
           {error && (

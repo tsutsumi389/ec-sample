@@ -30,6 +30,7 @@ import RecentlyViewed from '@/components/RecentlyViewed';
 import { type BreadcrumbItem } from '@/components/Breadcrumbs';
 import PageMasthead from '@/components/PageMasthead';
 import { motifForCategory } from '@/lib/categoryMotifs';
+import { withWordBreaks } from '@/lib/wordBreak';
 import SectionHead from '@/components/SectionHead';
 import { Skeleton } from '@/components/Skeleton';
 import { btn, iconBtn } from '@/lib/buttonStyles';
@@ -339,14 +340,18 @@ export default function ProductDetailPage() {
     img.src = '/no-image.svg';
   };
 
-  // 商品の「奥付」。すでに取得済みの値だけを並べる。
+  // 商品の「奥付」。
   // 以前は左（図版）カラムの中に閉じていたため、右カラムが購入パネルで終わって
   // 下半分が空になり、7:5 の版面が最後まで持たなかった。買い物かごパネルの直後、
   // 右カラムの末尾に置いて2段組を下端まで閉じる。
+  //
+  // 本体はサーバーが持つ仕様（product_specs）で、末尾に商品コードとカテゴリを添える。
+  // **在庫はここに置かない** ——「残り N点」は状態であって仕様ではなく、上の StockLabel と
+  // 同じ数字が同一画面に二度出る（価格行が席を1つに絞っているのと同じ規律）。
   const specRows: { label: string; value: string }[] = [
+    ...product.specs,
     ...(product.sku ? [{ label: '商品コード', value: product.sku }] : []),
     ...(categoryName ? [{ label: 'カテゴリ', value: categoryName }] : []),
-    ...(isOnSale ? [{ label: '在庫', value: `${product.stock} 点` }] : []),
   ];
 
   return (
@@ -588,14 +593,21 @@ export default function ProductDetailPage() {
           {specRows.length > 0 && (
             <section className="mt-16 border-t border-line pt-8">
               <SectionHead as="h2" size="sm" eyebrow="SPECIFICATION" title="仕様" />
-              <dl className="mt-5 grid sm:grid-cols-2 sm:gap-x-12 lg:grid-cols-3">
-                {specRows.map((row) => (
+              {/* 3列だったのは中身が商品コード・カテゴリ・在庫の3行しか無かった頃の名残。
+                  仕様の値は「幅57.5×奥行42.5×厚さ0.9cm」のように長い和文が来るので、
+                  lg でも2列までに留めて1行あたりの幅を確保する。 */}
+              <dl className="mt-5 grid sm:grid-cols-2 sm:gap-x-12">
+                {specRows.map((row, index) => (
                   <div
-                    key={row.label}
+                    // 項目名は管理画面から自由に入れられる＝重複し得るので、位置で一意にする。
+                    key={`${row.label}-${index}`}
                     className="flex items-baseline justify-between gap-6 border-b border-line py-3"
                   >
                     <dt className="shrink-0 text-caption text-ink-muted">{row.label}</dt>
-                    <dd className="min-w-0 text-right text-body tnum text-ink">{row.value}</dd>
+                    {/* 可変長の和文なので withWordBreaks() を通す（語中改行とカタカナのアキ）。 */}
+                    <dd className="min-w-0 text-right text-body tnum jp-body text-ink">
+                      {withWordBreaks(row.value)}
+                    </dd>
                   </div>
                 ))}
               </dl>

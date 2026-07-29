@@ -30,6 +30,10 @@
 ### GET /products/{id} （拡張）
 - レスポンス `ProductOut` に `avg_rating` / `review_count` を含む。
 - エラー: 404 `detail="Product not found"`（存在しない or `is_active=false`）
+- **注**: 本書は追加当時の仕様。その後 `is_active` は廃止され可視性は `Product.status`
+  （`is_viewable`）から導出するようになり、`ProductOut` には `sku` / `effective_price` /
+  `purchasable` / `images` / `specs`（仕様。`{ label, value }` の配列）が加わった。
+  現行のデータモデルは `docs/system-design/05-data-model.html` を参照。
 
 ---
 
@@ -39,6 +43,8 @@
 - 認可: 不要
 - レスポンス: `ReviewOut[]`（新しい順） = `{ id, product_id, user_id, user_name, rating, comment, created_at }`
 - エラー: 404 `detail="Product not found"`
+- **注**: ページングしない。星ごとの分布はフロント（`ReviewSection`）がこの配列を数えて出すため、
+  集計用のエンドポイントは持たない。
 
 ### POST /products/{id}/reviews
 - 認可: 必須（ログインユーザー）
