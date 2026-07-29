@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import type { Review } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
@@ -52,6 +52,24 @@ export default function ReviewSection({ productId, avgRating, reviewCount }: Rev
   const alreadyReviewed = user != null && reviews.some((r) => r.user_id === user.id);
   const canShowForm = user != null && !alreadyReviewed;
 
+  /**
+   * 星ごとの件数（[★1, ★2, ★3, ★4, ★5]）。
+   *
+   * GET /products/{id}/reviews はページングせず全件返すので、取得済みの配列を数えるだけで
+   * 出せる（サーバー集計もエンドポイント追加も要らない）。件数が数百を超えるようなら
+   * サーバー側で集計する必要があるが、その規模では一覧そのものが先に破綻する。
+   *
+   * 平均だけでは「全員が4点」と「5点と2点が割れている」を区別できない。同じ 4.2 でも
+   * 買うかどうかの判断は変わるので、分布は平均と並べて出す。
+   */
+  const distribution = useMemo(() => {
+    const counts = [0, 0, 0, 0, 0];
+    for (const review of reviews) {
+      if (review.rating >= 1 && review.rating <= 5) counts[review.rating - 1] += 1;
+    }
+    return counts;
+  }, [reviews]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (rating < 1) {
@@ -92,22 +110,54 @@ export default function ReviewSection({ productId, avgRating, reviewCount }: Rev
         }
       />
 
-      {/* サマリーヘッダ: 平均点の大きな表示 + 星 + 件数 */}
-      <div className="mt-6 flex items-center gap-4">
-        <div className="flex items-baseline gap-1">
-          {/* 数値は自前トークン（num-lg）で組む。素の Tailwind 目盛り（text-4xl）に
-              逃げると、同じ「大きい数字」がページごとに別の号数になる。 */}
-          <span className="tnum text-num-lg text-ink">
-            {avgRating != null ? avgRating.toFixed(1) : '—'}
-          </span>
-          <span className="text-caption text-ink-muted">/ 5</span>
+      {/* サマリーヘッダ: 平均点の大きな表示 + 星 + 件数。右に星ごとの分布を並べる。 */}
+      <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-10">
+        <div className="flex shrink-0 items-center gap-4">
+          <div className="flex items-baseline gap-1">
+            {/* 数値は自前トークン（num-lg）で組む。素の Tailwind 目盛り（text-4xl）に
+                逃げると、同じ「大きい数字」がページごとに別の号数になる。 */}
+            <span className="tnum text-num-lg text-ink">
+              {avgRating != null ? avgRating.toFixed(1) : '—'}
+            </span>
+            <span className="text-caption text-ink-muted">/ 5</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <RatingStars value={avgRating} size="md" showValue={false} />
+            <span className="text-caption text-ink-muted">
+              {reviewCount > 0 ? `${reviewCount}件のレビュー` : 'まだレビューはありません'}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <RatingStars value={avgRating} size="md" showValue={false} />
-          <span className="text-caption text-ink-muted">
-            {reviewCount > 0 ? `${reviewCount}件のレビュー` : 'まだレビューはありません'}
-          </span>
-        </div>
+
+        {/* 分布。取得前（loading）と0件のときは器ごと出さない（空の目盛りだけが並ぶのを避ける）。 */}
+        {!loading && reviews.length > 0 && (
+          <dl className="w-full max-w-[22rem] space-y-1">
+            {[5, 4, 3, 2, 1].map((star) => {
+              const count = distribution[star - 1];
+              const ratio = count / reviews.length;
+              return (
+                <div key={star} className="flex items-center gap-3">
+                  <dt className="shrink-0 text-caption tnum text-ink-muted">★{star}</dt>
+                  {/* 目盛りは装飾。読み上げには dt（★5）と dd（12件）の対で伝わる。
+                      空の帯は星の空側と同じ罫色（fill-line と対応）。 */}
+                  <div
+                    className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-line"
+                    aria-hidden="true"
+                  >
+                    <div
+                      className="h-full rounded-full bg-accent-300"
+                      style={{ width: `${ratio * 100}%` }}
+                    />
+                  </div>
+                  {/* 3桁（100件）でも折り返さない幅を確保しておく。 */}
+                  <dd className="w-12 shrink-0 text-right text-caption tnum text-ink-soft">
+                    {count}件
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        )}
       </div>
 
       {/* 投稿フォームの造形は Q&A と1つに揃える（同じ役割の箱が同じページに2種あると

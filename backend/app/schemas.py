@@ -88,6 +88,20 @@ class ProductImageOut(BaseModel):
     sort_order: int
 
 
+class ProductSpecOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    label: str
+    value: str
+
+
+class ProductSpecIn(BaseModel):
+    """仕様1行の入力。id は持たせず、常に配列ごと差し替える（画像と同じ扱い）。"""
+
+    label: str
+    value: str
+
+
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -105,6 +119,8 @@ class ProductOut(BaseModel):
     purchasable: bool
     image_url: str | None = None
     images: list[ProductImageOut] = []
+    # 仕様（サイズ・素材など）。在庫・価格は状態であって仕様ではないのでここには来ない。
+    specs: list[ProductSpecOut] = []
     category_id: int | None = None
     avg_rating: float | None = None
     review_count: int = 0
@@ -149,6 +165,8 @@ class ProductCreate(BaseModel):
     image_url: str | None = None
     # 追加画像URL（メイン image_url とは別のギャラリー用）。表示順は配列順。
     image_urls: list[str] = []
+    # 仕様行。表示順は配列順。label / value のどちらかが空の行は捨てられる。
+    specs: list[ProductSpecIn] = []
     category_id: int | None = None
 
 
@@ -163,6 +181,8 @@ class ProductUpdate(BaseModel):
     image_url: str | None = None
     # None は「変更しない」、[] は「全画像を削除」を意味する。
     image_urls: list[str] | None = None
+    # 同上。None は「変更しない」、[] は「全仕様行を削除」。
+    specs: list[ProductSpecIn] | None = None
     category_id: int | None = None
 
 

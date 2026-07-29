@@ -37,7 +37,7 @@
     <h3><span class="num">8.1</span>パイプライン概観</h3>
     <div class="arch">
       <div class="tier"><span class="tlabel">① 埋め込み</span><div class="row">
-        <div class="box"><b>build_product_text</b><span>商品名・カテゴリ・説明・価格帯（effective_price を 4 区分に言語化）を結合、sha256 で変更検知</span></div>
+        <div class="box"><b>build_product_text</b><span>商品名・カテゴリ・説明・価格帯（effective_price を 4 区分に言語化）・仕様（<code>product_specs</code> を「項目名 値」で連結、空なら行ごと省略）を結合、sha256 で変更検知</span></div>
         <div class="box"><b>Ollama embed</b><span><code>embeddinggemma</code>（768d）。差分 upsert（source_hash / embed_model 一致でスキップ）</span></div>
       </div></div>
       <div class="flowdown">▼</div>
