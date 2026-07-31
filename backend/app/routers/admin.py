@@ -1,3 +1,5 @@
+from typing import TypeVar
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -16,6 +18,7 @@ from app.schemas import (
     OrderStatusUpdate,
     ProductCreate,
     ProductOut,
+    ProductSpecIn,
     ProductUpdate,
 )
 from app.services import embedding
@@ -23,6 +26,9 @@ from app.services import embedding
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(get_current_admin)])
 
 VALID_ORDER_STATUSES = {"pending", "paid", "shipped", "delivered", "cancelled"}
+
+# 配列ごと差し替える子コレクション（どちらも sort_order を持つ）。
+_ChildRow = TypeVar("_ChildRow", ProductImage, ProductSpec)
 
 
 def _refresh_embedding_task(product_id: int) -> None:
@@ -54,29 +60,39 @@ def list_all_products(db: Session = Depends(get_db)) -> list[Product]:
     return db.query(Product).order_by(Product.id).all()
 
 
+def _ordered(rows: list[_ChildRow]) -> list[_ChildRow]:
+    """子行に 0 から詰めて表示順を振る。
+
+    採番を1箇所に寄せるためのヘルパ。捨てた行のぶんを欠番にしないので、画像と仕様で
+    「空行を残したまま保存」したときの結果が揃う。
+    """
+    for index, row in enumerate(rows):
+        row.sort_order = index
+    return rows
+
+
 def _sync_images(product: Product, image_urls: list[str]) -> None:
-    """商品のギャラリー画像を与えられた URL 列で丸ごと置き換える（表示順は配列順）。"""
-    product.images = [
-        ProductImage(image_url=url, sort_order=index)
-        for index, url in enumerate(image_urls)
-        if url.strip()
-    ]
+    """商品のギャラリー画像を与えられた URL 列で丸ごと置き換える（表示順は配列順）。
+
+    空白だけの行は捨てる（管理画面の入力欄は空行のまま残せるため）。
+    """
+    product.images = _ordered(
+        [ProductImage(image_url=url.strip()) for url in image_urls if url.strip()]
+    )
 
 
-def _sync_specs(product: Product, specs: list[dict]) -> None:
+def _sync_specs(product: Product, specs: list[ProductSpecIn]) -> None:
     """商品の仕様行を与えられた列で丸ごと置き換える（表示順は配列順）。
 
-    label / value のどちらかが空の行は捨てる（管理画面の入力欄は空行のまま残せるため）。
-    sort_order は残った行に 0 から振り直す。
+    label / value のどちらかが空の行は捨てる（画像と同じ規律）。
     """
-    rows = []
-    for spec in specs:
-        label = spec["label"].strip()
-        value = spec["value"].strip()
-        if not label or not value:
-            continue
-        rows.append(ProductSpec(label=label, value=value, sort_order=len(rows)))
-    product.specs = rows
+    product.specs = _ordered(
+        [
+            ProductSpec(label=spec.label.strip(), value=spec.value.strip())
+            for spec in specs
+            if spec.label.strip() and spec.value.strip()
+        ]
+    )
 
 
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
@@ -85,12 +101,11 @@ def create_product(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> Product:
-    data = payload.model_dump()
-    image_urls = data.pop("image_urls", [])
-    specs = data.pop("specs", [])
+    # 子コレクションは Product(**data) に渡せないので除いておき、検証済みのモデルのまま渡す。
+    data = payload.model_dump(exclude={"image_urls", "specs"})
     product = Product(**data)
-    _sync_images(product, image_urls)
-    _sync_specs(product, specs)
+    _sync_images(product, payload.image_urls)
+    _sync_specs(product, payload.specs)
     db.add(product)
     db.commit()
     db.refresh(product)
@@ -110,16 +125,14 @@ def update_product(
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    data = payload.model_dump(exclude_unset=True)
-    # image_urls / specs は None=変更しない / [] や配列=その内容で丸ごと置換、として扱う。
-    image_urls = data.pop("image_urls", None)
-    specs = data.pop("specs", None)
+    data = payload.model_dump(exclude_unset=True, exclude={"image_urls", "specs"})
     for field, value in data.items():
         setattr(product, field, value)
-    if image_urls is not None:
-        _sync_images(product, image_urls)
-    if specs is not None:
-        _sync_specs(product, specs)
+    # image_urls / specs は None=変更しない / [] や配列=その内容で丸ごと置換、として扱う。
+    if payload.image_urls is not None:
+        _sync_images(product, payload.image_urls)
+    if payload.specs is not None:
+        _sync_specs(product, payload.specs)
 
     db.commit()
     db.refresh(product)

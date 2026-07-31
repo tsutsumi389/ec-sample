@@ -88,18 +88,17 @@ class ProductImageOut(BaseModel):
     sort_order: int
 
 
-class ProductSpecOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    label: str
-    value: str
-
-
 class ProductSpecIn(BaseModel):
     """仕様1行の入力。id は持たせず、常に配列ごと差し替える（画像と同じ扱い）。"""
 
     label: str
     value: str
+
+
+class ProductSpecOut(ProductSpecIn):
+    # 出力は入力と同じ形。継承で揃えておかないと、項目を足したとき片方だけ直して
+    # 「管理画面から送っているのに API が黙って捨てる」形でずれる。
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductOut(BaseModel):
