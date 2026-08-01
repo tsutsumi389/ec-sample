@@ -22,6 +22,19 @@ const MAX_LANES = 5;
  */
 const MAX_PLAIN_LANES = 2;
 
+/**
+ * ホームの別の器が描くので、レーンにはしないセクションの key。
+ * 新着は app/page.tsx 末尾の NewArrivals グリッドが担う。
+ *
+ * ⚠ 判定に表示文字列（section.title）を混ぜないこと。以前は
+ * `key === 'new_arrivals' || title === '新着アイテム'` の二段構えで、
+ * 「将来 key が変わっても title で拾える」保険のつもりだった。実際には
+ * バックエンドが表題を変えた瞬間に無言で効かなくなり（＝同じ商品がホームに二度出る）、
+ * 逆に別レーンがたまたま同じ表題を名乗ると原因不明の消失になる。どちらも型でもテストでも
+ * 捕まらない。key は lib/types.ts が「同一レスポンス内で一意」と契約している唯一の識別子。
+ */
+const LANES_RENDERED_ELSEWHERE = ['new_arrivals'];
+
 /** レーンの欧文の柱。key はバックエンドの build_* が付ける名前。 */
 const LANE_LABEL: Record<string, string> = {
   cart_reminder: 'Left in your cart',
@@ -50,7 +63,7 @@ function laneEyebrow(key: string, order: number): string {
 /**
  * 出すレーンを選ぶ。ここが誌面のリズムを決める唯一の場所。
  *  - 新着はページ下部の NewArrivals グリッドが担うのでレーンにしない
- *    （key と title の二段構えで弾く。将来 key が変わっても title で拾える）
+ *    （LANES_RENDERED_ELSEWHERE の key で弾く）
  *  - 通常レーンは MAX_PLAIN_LANES 本まで。残りは捨てる（「◯◯を見たあなたに」系が
  *    2本3本と続くと、同じ造形のレーンだけで 4,000px スクロールすることになる）
  *  - 既に出した商品は後続の通常レーンから落とす。ただし ranked は順位が意味を持つので
@@ -66,7 +79,7 @@ function selectLanes(sections: HomeSection[]) {
 
   for (const section of sections) {
     if (section.layout === 'hero') continue;
-    if (section.key === 'new_arrivals' || section.title === '新着アイテム') continue;
+    if (LANES_RENDERED_ELSEWHERE.includes(section.key)) continue;
 
     const ranked = section.layout === 'ranked';
     const items = ranked

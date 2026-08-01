@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import Link from 'next/link';
 import type { Product } from '@/lib/types';
 import ProductPrice, { DiscountBadge, discountPercent } from '@/components/ProductPrice';
@@ -5,10 +6,11 @@ import Badge from '@/components/Badge';
 import StockLabel from '@/components/StockLabel';
 import RatingStars from '@/components/RatingStars';
 import WishlistButton from '@/components/WishlistButton';
-import { PRODUCT_STATUS_META, SOLD_OUT_BADGE } from '@/lib/productStatus';
+import { onImageError } from '@/lib/productImage';
+import { isLowStock, isSoldOut, PRODUCT_STATUS_META, SOLD_OUT_BADGE } from '@/lib/productStatus';
 import { withWordBreaks } from '@/lib/wordBreak';
 
-export default function ProductCard({
+function ProductCard({
   product,
   hideWishlistButton = false,
   size = 'md',
@@ -32,7 +34,7 @@ export default function ProductCard({
   const statusMeta = PRODUCT_STATUS_META[product.status];
   // 在庫切れは status ではなく stock で決まる（status は on_sale のまま）。
   // storefrontLabel を持つ状態とは排他（on_sale の storefrontLabel は null）。
-  const soldOut = product.status === 'on_sale' && product.stock <= 0;
+  const soldOut = isSoldOut(product);
   // 図版を沈ませる条件も、沈ませ方も1つに揃える。「在庫切れは全面スクリム＋中央スタンプ、
   // 販売停止中は opacity だけ＋左下の札」と2系統あると、同じ「買えない」が同じグリッドの中で
   // 別の造形になり、買えるかどうかを2度学習させることになる。
@@ -43,7 +45,7 @@ export default function ProductCard({
   // レビューが無い商品では行ごと出さない（空の星列がカードの一等地を占有していたのを解消）。
   const hasRating = product.review_count > 0 && product.avg_rating != null;
   // 在庫は「急ぐ理由がある」ときだけ知らせる。通常在庫の「在庫 78 点」はカードに出さない。
-  const lowStock = product.status === 'on_sale' && product.stock > 0 && product.stock <= 5;
+  const lowStock = isLowStock(product);
 
   return (
     // カード全体を relative なラッパーにし、Link は stretched-link（after 疑似要素で
@@ -79,12 +81,7 @@ export default function ProductCard({
           // 図版は装飾。直後の h3 のリンクテキストが同じ商品名を読ませるため、
           // alt に商品名を入れると支援技術で名前が2回読まれる（alt="" が正）。
           alt=""
-          onError={(e) => {
-            const img = e.currentTarget;
-            if (img.src.endsWith('/no-image.svg')) return;
-            img.onerror = null;
-            img.src = '/no-image.svg';
-          }}
+          onError={onImageError}
           // absolute inset-0: 図版の高さは器（aspect-[4/3] か flex-1）だけが決める。
           // 通常フローに置くと画像の固有比（商品SVGは 150×150 = 1:1）が器の
           // max-content 高になり、大判セルではそれが grid の行高を押し上げて
@@ -205,3 +202,11 @@ export default function ProductCard({
     </div>
   );
 }
+
+/**
+ * memo 境界。一覧は products と categories を同じコンポーネントの state に持ち、
+ * /categories は /products と独立に返るので**必ず**もう1回グリッド全体が再描画される。
+ * カード12枚にカテゴリは何の関係も無い（効くのは絞り込みチップのラベルだけ）。
+ * props は配列要素の同一性が保たれるので、比較関数は要らない。
+ */
+export default memo(ProductCard);

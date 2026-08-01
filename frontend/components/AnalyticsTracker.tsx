@@ -79,16 +79,29 @@ export default function AnalyticsTracker() {
     );
 
     const scan = () => {
+      scanFrame = 0;
       document.querySelectorAll('[data-track-view]').forEach((element) => {
         if (!seen.has(element)) observer.observe(element);
       });
     };
+
+    // 走査は文書全体の querySelectorAll なので、DOM が動くたびに素で走らせない。
+    // 検索サジェストの開閉・トーストの出入り・ドロワーの開閉はどれもノードの増減を起こすので、
+    // 間引かないとキー入力1打ごとに全文書スキャンが挟まる。同じフレーム内の変更は
+    // まとめて1回のスキャンで拾えるため、取りこぼしは起きない。
+    let scanFrame = 0;
+    const queueScan = () => {
+      if (scanFrame) return;
+      scanFrame = requestAnimationFrame(scan);
+    };
+
     scan();
     // 非同期に描画される要素（商品一覧やレコメンドなど）も後から拾う。
-    const mutationObserver = new MutationObserver(scan);
+    const mutationObserver = new MutationObserver(queueScan);
     mutationObserver.observe(document.body, { childList: true, subtree: true });
 
     return () => {
+      if (scanFrame) cancelAnimationFrame(scanFrame);
       mutationObserver.disconnect();
       observer.disconnect();
     };

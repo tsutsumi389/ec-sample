@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import type { AssistantMessage, AssistantProduct, AssistantSource } from '@/lib/types';
 import Spinner from '@/components/Spinner';
+import TypingDots from '@/components/TypingDots';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import {
   ArrowDownIcon,
@@ -16,6 +17,7 @@ import {
   XMarkIcon,
 } from '@/components/Icons';
 import { btn, iconBtn } from '@/lib/buttonStyles';
+import { trapTab } from '@/lib/focusTrap';
 import AssistantProductCard from '@/components/assistant/AssistantProductCard';
 
 // 会話IDの永続化キー。端末単位で会話を継続する（未ログインでも利用可）。
@@ -450,22 +452,9 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
       return;
     }
     if (e.key !== 'Tab') return;
-    const root = panelRef.current;
-    if (!root) return;
-    const focusable = root.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    const items = Array.from(focusable).filter((el) => el.offsetParent !== null || el === document.activeElement);
-    if (items.length === 0) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
+    // 巡回そのものは共有の trapTab に任せる（フォーカス可能要素の定義は lib/focusTrap.ts が唯一の源）。
+    // 罫を畳んだ問い合わせ履歴など隠れている要素があるので、visibleOnly で除く。
+    trapTab(panelRef.current, e, { visibleOnly: true });
   };
 
   const showWelcome = !initializing && messages.length === 0;
@@ -723,18 +712,11 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
                 </ul>
               )}
 
-              {/* 生成待ちのタイピングインジケータ。点滅は体系の keyframe（bump）を使う
-                  （Tailwind 既定の animate-bounce は使わない）。ProductQA.tsx と同じ実装。 */}
+              {/* 生成待ちのタイピングインジケータ（点の造形と周期は TypingDots が持つ）。 */}
               {sending && (
                 <div className="flex justify-start">
                   <div className="flex items-center gap-1.5 rounded-2xl bg-surface px-4 py-3 shadow-paper">
-                    {[0, 150, 300].map((delay) => (
-                      <span
-                        key={delay}
-                        className="h-1.5 w-1.5 rounded-full bg-line-strong motion-safe:animate-[bump_1.1s_ease-in-out_infinite] motion-reduce:animate-none"
-                        style={{ animationDelay: `${delay}ms` }}
-                      />
-                    ))}
+                    <TypingDots />
                   </div>
                 </div>
               )}

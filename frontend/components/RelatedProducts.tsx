@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, type SyntheticEvent } from 'react';
+import { useEffect, useState } from 'react';
+import { onImageError } from '@/lib/productImage';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import type { Product } from '@/lib/types';
@@ -8,7 +9,7 @@ import Badge from '@/components/Badge';
 import ProductPrice from '@/components/ProductPrice';
 import SectionHead from '@/components/SectionHead';
 import { Skeleton } from '@/components/Skeleton';
-import { PRODUCT_STATUS_META, SOLD_OUT_BADGE } from '@/lib/productStatus';
+import { isSoldOut, PRODUCT_STATUS_META, SOLD_OUT_BADGE } from '@/lib/productStatus';
 import { withWordBreaks } from '@/lib/wordBreak';
 
 interface RelatedProductsProps {
@@ -26,13 +27,6 @@ interface RelatedProductsProps {
    */
   excludeImageUrls?: string[];
 }
-
-const onImageError = (e: SyntheticEvent<HTMLImageElement>) => {
-  const img = e.currentTarget;
-  if (img.src.endsWith('/no-image.svg')) return;
-  img.onerror = null;
-  img.src = '/no-image.svg';
-};
 
 /**
  * 商品詳細ページ下部の「関連商品」(最大4件)。
@@ -118,7 +112,7 @@ export default function RelatedProducts({
       <ul className="stagger divide-y divide-line border-y border-line">
         {visible.map((product) => {
           const statusMeta = PRODUCT_STATUS_META[product.status];
-          const soldOut = product.status === 'on_sale' && product.stock <= 0;
+          const soldOut = isSoldOut(product);
           return (
             <li key={product.id} className="animate-rise">
               <Link

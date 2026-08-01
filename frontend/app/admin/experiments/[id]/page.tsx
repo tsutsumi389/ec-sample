@@ -15,18 +15,34 @@ import ScrollableTable from '@/components/ScrollableTable';
 import Spinner from '@/components/Spinner';
 import Badge from '@/components/Badge';
 import { ArrowLeftIcon } from '@/components/Icons';
+import {
+  EVENT_ADD_TO_CART,
+  EVENT_BEGIN_CHECKOUT,
+  EVENT_CLICK,
+  EVENT_IMPRESSION,
+  EVENT_PAGE_VIEW,
+  EVENT_SEARCH_NO_RESULT,
+  EVENT_VIEW_CART,
+  EVENT_VIEW_ITEM,
+} from '@/lib/analytics';
 
-/** ファネル各段の日本語ラベル。未知のイベント名はそのまま出す。 */
+/**
+ * ファネル各段の日本語ラベル。未知のイベント名はそのまま出す。
+ *
+ * キーは lib/analytics.ts の定数を経由する。生の文字列で書き直すと、イベント名を直したとき
+ * track() の呼び出し側は型で守られるのに、レポートのラベルだけが静かに未知扱い（英語のまま）に落ちる。
+ * purchase はサーバー（routers/orders.py）だけが記録する段なのでフロントに定数が無い。
+ */
 const FUNNEL_LABELS: Record<string, string> = {
-  page_view: 'ページ閲覧',
-  impression: 'セクション表示',
-  click: 'クリック',
-  view_item: '商品ページ閲覧',
-  add_to_cart: 'カート投入',
-  view_cart: 'カート閲覧',
-  begin_checkout: '注文手続き開始',
+  [EVENT_PAGE_VIEW]: 'ページ閲覧',
+  [EVENT_IMPRESSION]: 'セクション表示',
+  [EVENT_CLICK]: 'クリック',
+  [EVENT_VIEW_ITEM]: '商品ページ閲覧',
+  [EVENT_ADD_TO_CART]: 'カート投入',
+  [EVENT_VIEW_CART]: 'カート閲覧',
+  [EVENT_BEGIN_CHECKOUT]: '注文手続き開始',
   purchase: '購入',
-  search_no_result: '検索0件',
+  [EVENT_SEARCH_NO_RESULT]: '検索0件',
 };
 
 function formatDate(iso: string | null): string {

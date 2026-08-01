@@ -7,6 +7,7 @@ import ProductPrice from '@/components/ProductPrice';
 import WishlistButton from '@/components/WishlistButton';
 import { KettleMotif } from '@/components/BrandMotifs';
 import { btn } from '@/lib/buttonStyles';
+import { onImageError } from '@/lib/productImage';
 // 和文の改行位置（<wbr>）とカタカナの字送り（span.kana）を1箇所に閉じた共通処理。
 // 可変長の和文をテキストとして描く場所は例外なくこれを通す（lib/wordBreak.ts の頭注を参照）。
 import { withWordBreaks } from '@/lib/wordBreak';
@@ -133,12 +134,7 @@ export default function HomeBillboard({ item }: { item: RecommendationItem }) {
             <img
               src={product.image_url}
               alt={product.name}
-              onError={(e) => {
-                const img = e.currentTarget;
-                if (img.src.endsWith('/no-image.svg')) return;
-                img.onerror = null;
-                img.src = '/no-image.svg';
-              }}
+              onError={onImageError}
               // モバイルは 16/9 に寝かせて縦を稼がない（上のコメント参照）。
               // md は正方形。商品SVGが 600×600 なので切り取りが起きず、同時に 768px で
               // 右カラムの高さを左カラムに近づけられる（r2 は 213×172 しかなかった）。

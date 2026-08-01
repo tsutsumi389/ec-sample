@@ -73,12 +73,30 @@ const isAllKana = (s: string) => s.length > 0 && Array.from(s).every((ch) => KAN
  * どちらの段も改行"機会"を減らすだけで、増やす方向には働かない。
  * 機会が無くて器に入らない語は .jp-name の最後の手段（overflow-wrap）で折れる。
  */
+/**
+ * 語分割器はステートレスなので1個を使い回す。
+ * この関数は「可変長の和文はすべて通す」規約の入口で、一覧1枚の描画で十数回、
+ * ホームでは50回超呼ばれる。呼び出しごとに構築すると ICU のロケールデータ解決が
+ * その都度走り、実測で6倍前後遅い（17.3µs → 2.7µs）。
+ * undefined = 未判定 / null = Segmenter 非対応環境。
+ */
+let segmenter: Intl.Segmenter | null | undefined;
+
+function getSegmenter(): Intl.Segmenter | null {
+  if (segmenter === undefined) {
+    const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
+    segmenter = Segmenter ? new Segmenter('ja', { granularity: 'word' }) : null;
+  }
+  return segmenter;
+}
+
 export function toBreakableWords(text: string): string[] {
-  const Segmenter = (Intl as { Segmenter?: typeof Intl.Segmenter }).Segmenter;
-  if (!Segmenter) return [text];
+  const seg = getSegmenter();
+  if (!seg) return [text];
 
   const words: string[] = [];
-  for (const { segment } of Array.from(new Segmenter('ja', { granularity: 'word' }).segment(text))) {
+  // Array.from は必須（tsconfig の target では Segments を直接 for...of で回せない）。
+  for (const { segment } of Array.from(seg.segment(text))) {
     const prev = words[words.length - 1];
     if (
       prev !== undefined &&

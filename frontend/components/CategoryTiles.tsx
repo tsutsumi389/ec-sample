@@ -13,6 +13,7 @@ import { motifForCategory } from '@/lib/categoryMotifs';
 // word-break: auto-phrase は評価環境の Chromium では効かない（実測）ため、
 // 札の名前もここで改行位置を決める。
 import { withWordBreaks } from '@/lib/wordBreak';
+import { fetchCategories } from '@/lib/categories';
 
 /** ローディング時に場所を予約するタイル数。実データ（5件）と同じにして読み込み後の段差を消す。 */
 const SKELETON_TILES = 5;
@@ -42,8 +43,7 @@ export default function CategoryTiles({ order }: { order: number }) {
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<Category[]>('/categories')
+    fetchCategories()
       .then((data) => {
         if (!cancelled) setCategories(data);
       })

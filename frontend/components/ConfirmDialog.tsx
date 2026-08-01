@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { btn, btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { useFocusTrap } from '@/lib/focusTrap';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -40,62 +41,23 @@ export default function ConfirmDialog({
   // 出現時の scale+opacity トランジション用
   const [entered, setEntered] = useState(false);
 
-  // onCancel は呼び出し側でインラインアロー関数が渡されるため参照が毎レンダー変わる。
-  // effect の再実行（＝フォーカス奪取）を防ぐため ref に退避し、依存配列から外す。
-  const onCancelRef = useRef(onCancel);
-  useEffect(() => {
-    onCancelRef.current = onCancel;
-  }, [onCancel]);
+  // Escape・Tab の循環・トリガーへのフォーカス復帰は共有フックが持つ。
+  // 開いた瞬間（false→true 遷移時）だけ確認ボタンへフォーカスするのも initialFocus に委ねる。
+  useFocusTrap(dialogRef, {
+    active: open,
+    onEscape: onCancel,
+    initialFocus: confirmButtonRef,
+    restoreFocus: true,
+  });
 
-  // 開く直前のフォーカス要素（トリガー）を保持し、閉じたら戻す。
-  const triggerRef = useRef<HTMLElement | null>(null);
-
+  // 出現時のトランジション。次フレームで entered を立てる。
   useEffect(() => {
     if (!open) {
       setEntered(false);
       return;
     }
-
-    // 開く直前のフォーカス要素を保存しておく
-    triggerRef.current = document.activeElement as HTMLElement | null;
-
-    // 開いた瞬間（false→true 遷移時）だけ確認ボタンへフォーカス
-    confirmButtonRef.current?.focus();
-    // 次フレームでトランジション開始
     const raf = requestAnimationFrame(() => setEntered(true));
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCancelRef.current();
-        return;
-      }
-      if (e.key !== 'Tab' || !dialogRef.current) return;
-
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      cancelAnimationFrame(raf);
-      document.removeEventListener('keydown', handleKeyDown);
-      // 閉じたら元のトリガー要素へフォーカスを戻す
-      triggerRef.current?.focus();
-      triggerRef.current = null;
-    };
+    return () => cancelAnimationFrame(raf);
   }, [open]);
 
   if (!open) return null;

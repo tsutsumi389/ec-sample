@@ -1,4 +1,5 @@
 import Badge from '@/components/Badge';
+import { LOW_STOCK_THRESHOLD } from '@/lib/productStatus';
 
 interface StockLabelProps {
   /** 在庫数 */
@@ -26,7 +27,7 @@ export default function StockLabel({ stock, elevated = false, className = '' }: 
       </Badge>
     );
   }
-  if (stock <= 5) {
+  if (stock <= LOW_STOCK_THRESHOLD) {
     return (
       <Badge variant="accent" elevated={elevated} className={className}>
         残り <span className="tnum">{stock}</span>点

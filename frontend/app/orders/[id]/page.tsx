@@ -15,6 +15,7 @@ import {
 } from '@/lib/order-status';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
+import { withWordBreaks } from '@/lib/wordBreak';
 import Badge from '@/components/Badge';
 import PageMasthead from '@/components/PageMasthead';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -22,6 +23,7 @@ import ReorderButton from '@/components/ReorderButton';
 import SectionHead from '@/components/SectionHead';
 import { Skeleton } from '@/components/Skeleton';
 import { ArrowLeftIcon, CheckCircleIcon } from '@/components/Icons';
+import { withRedirect } from '@/lib/redirect';
 
 /** キャンセル操作をユーザーに許可するステータス */
 const CANCELLABLE_STATUSES: OrderStatus[] = ['pending', 'paid'];
@@ -126,7 +128,7 @@ function OrderDetailContent() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.replace('/login?redirect=/orders');
+      router.replace(withRedirect('/login', '/orders'));
     }
   }, [authLoading, user, router]);
 
@@ -278,9 +280,10 @@ function OrderDetailContent() {
               {items.map((item) => (
                 <li key={item.id} className="flex items-start justify-between gap-4 py-4">
                   <div className="min-w-0">
-                    <p className="text-h3 text-ink jp-name">{item.product_name}</p>
+                    <p className="text-h3 text-ink jp-name">{withWordBreaks(item.product_name)}</p>
                     <p className="mt-1 tnum text-caption text-ink-muted">
-                      ¥{item.price.toLocaleString()} × {item.quantity}
+                      {/* 単価。¥ の組版を同じページの他の金額と揃えるため Price を通す。 */}
+                      <Price value={item.price} size="sm" muted /> × {item.quantity}
                     </p>
                   </div>
                   <Price
@@ -336,12 +339,7 @@ function OrderDetailContent() {
                 </div>
                 <div className="flex items-baseline justify-between gap-4 border-t border-line pt-4">
                   <dt className="text-body font-medium text-ink-soft">合計</dt>
-                  <dd className="tnum text-num-lg text-ink">
-                    <span className="mr-[0.1em] align-baseline text-[0.68em] font-medium text-ink-muted">
-                      ¥
-                    </span>
-                    {order.total_amount.toLocaleString()}
-                  </dd>
+                  <Price value={order.total_amount} size="num-lg" inheritWeight as="dd" />
                 </div>
               </dl>
 

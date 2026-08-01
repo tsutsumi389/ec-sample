@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode, type SyntheticEvent } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { onImageError } from '@/lib/productImage';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError, getToken } from '@/lib/api';
@@ -35,9 +36,10 @@ import SectionHead from '@/components/SectionHead';
 import { Skeleton } from '@/components/Skeleton';
 import { btn, iconBtn } from '@/lib/buttonStyles';
 import { recordRecentlyViewed } from '@/lib/recentlyViewed';
-import { PRODUCT_STATUS_META } from '@/lib/productStatus';
+import { isSoldOut, LOW_STOCK_THRESHOLD, PRODUCT_STATUS_META } from '@/lib/productStatus';
 import { EVENT_ADD_TO_CART, EVENT_VIEW_ITEM, track } from '@/lib/analytics';
 import { addToGuestCart } from '@/lib/guestCart';
+import { fetchCategories } from '@/lib/categories';
 
 // 下部セクションの既定の並び。実験の config が無い・壊れている場合はこれを使う。
 const DEFAULT_SECTION_ORDER = ['recommendations', 'related', 'reviews', 'qa', 'recently'];
@@ -60,7 +62,7 @@ export default function ProductDetailPage() {
   const id = params?.id;
 
   const [product, setProduct] = useState<Product | null>(null);
-  const [categoryName, setCategoryName] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[] | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -124,26 +126,27 @@ export default function ProductDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  // パンくず用にカテゴリ名を解決する（category_id があるときのみ）。
+  // カテゴリ一覧はマウント時に取りに行く。**商品の取得完了を待たない**——
+  // 全件一覧なので id にも product にも依存せず、待つと往復が1本ぶん直列になり、
+  // 扉の線画とパンくずだけが遅れて差し替わる。product が要るのは突き合わせの瞬間だけ。
   useEffect(() => {
-    const categoryId = product?.category_id;
-    if (!categoryId) {
-      setCategoryName(null);
-      return;
-    }
     let cancelled = false;
-    api
-      .get<Category[]>('/categories')
+    fetchCategories()
       .then((cats) => {
-        if (!cancelled) setCategoryName(cats.find((c) => c.id === categoryId)?.name ?? null);
+        if (!cancelled) setCategories(cats);
       })
       .catch(() => {
-        if (!cancelled) setCategoryName(null);
+        if (!cancelled) setCategories([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [product?.category_id]);
+  }, []);
+
+  // パンくず・扉の線画・仕様欄で使うカテゴリ名。取得済みの一覧から引くだけなので state に持たない。
+  const categoryName = product?.category_id
+    ? categories?.find((c) => c.id === product.category_id)?.name ?? null
+    : null;
 
   // 曝露は「実験対象のUIを実際に描画した」時点で記録する。読み込み中や 404 の段階で
   // 記録すると、見ていない人まで分母に入って効果が薄まって見えるため。
@@ -269,7 +272,7 @@ export default function ProductDetailPage() {
 
   const statusMeta = PRODUCT_STATUS_META[product.status];
   const isOnSale = product.status === 'on_sale';
-  const soldOut = isOnSale && product.stock <= 0;
+  const soldOut = isSoldOut(product);
   const maxQty = Math.max(1, Math.min(product.stock, 10));
   const decQty = () => setQuantity((q) => Math.max(1, q - 1));
   const incQty = () => setQuantity((q) => Math.min(maxQty, q + 1));
@@ -332,13 +335,6 @@ export default function ProductDetailPage() {
       : []),
     { label: product.name },
   ];
-
-  const onImageError = (e: SyntheticEvent<HTMLImageElement>) => {
-    const img = e.currentTarget;
-    if (img.src.endsWith('/no-image.svg')) return;
-    img.onerror = null;
-    img.src = '/no-image.svg';
-  };
 
   // 商品の「奥付」。
   // 以前は左（図版）カラムの中に閉じていたため、右カラムが購入パネルで終わって
@@ -437,7 +433,7 @@ export default function ProductDetailPage() {
               <RatingStars value={product.avg_rating} count={product.review_count} size="sm" />
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <ProductPrice product={product} size="3xl" showBadge />
-                {isOnSale && product.stock <= 5 && <StockLabel stock={product.stock} />}
+                {isOnSale && product.stock <= LOW_STOCK_THRESHOLD && <StockLabel stock={product.stock} />}
                 {statusMeta.storefrontLabel && (
                   <Badge variant={statusMeta.variant}>{statusMeta.storefrontLabel}</Badge>
                 )}

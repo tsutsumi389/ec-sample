@@ -7,6 +7,8 @@ import ScrollableTable from '@/components/ScrollableTable';
 import Spinner from '@/components/Spinner';
 import { PlusIcon } from '@/components/Icons';
 import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { useFocusTrap } from '@/lib/focusTrap';
+import { invalidateCategories } from '@/lib/categories';
 
 interface CategoryFormValues {
   name: string;
@@ -24,50 +26,16 @@ function CategoryFormModal({
   onClose: () => void;
   onSubmit: (values: CategoryFormValues) => Promise<void>;
 }) {
-  const [values, setValues] = useState<CategoryFormValues>(emptyForm);
+  // 呼び出し側は編集対象を確定させてからモーダルをマウントするので、初期値は遅延初期化で足りる。
+  const [values, setValues] = useState<CategoryFormValues>(() =>
+    category ? { name: category.name, slug: category.slug } : emptyForm
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    nameInputRef.current?.focus();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab' || !dialogRef.current) return;
-
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (category) {
-      setValues({ name: category.name, slug: category.slug });
-    } else {
-      setValues(emptyForm);
-    }
-  }, [category]);
+  useFocusTrap(dialogRef, { onEscape: onClose, initialFocus: nameInputRef });
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -186,6 +154,9 @@ export default function AdminCategoriesPage() {
       await api.post('/admin/categories', values);
     }
     setModalOpen(false);
+    // 店頭側（GET /categories）の控えを捨てる。捨てないと、同じセッションで開いた
+    // 商品フォームの選択肢に今作ったカテゴリが出ない。
+    invalidateCategories();
     loadCategories();
   };
 
@@ -195,6 +166,7 @@ export default function AdminCategoriesPage() {
     setDeletingId(category.id);
     try {
       await api.delete(`/admin/categories/${category.id}`);
+      invalidateCategories();
       loadCategories();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '削除に失敗しました');

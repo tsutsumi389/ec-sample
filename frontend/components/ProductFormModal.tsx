@@ -4,7 +4,9 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import type { Category, Product, ProductSpec, ProductStatus } from '@/lib/types';
 import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { useFocusTrap } from '@/lib/focusTrap';
 import { ADMIN_SELECTABLE_STATUSES, PRODUCT_STATUS_META } from '@/lib/productStatus';
+import { fetchCategories } from '@/lib/categories';
 
 export interface ProductFormValues {
   name: string;
@@ -41,8 +43,29 @@ const emptyForm: ProductFormValues = {
   category_id: null,
 };
 
+/** 編集対象をフォームの初期値へ。新規（null）のときは空フォーム。 */
+function toFormValues(product: Product | null): ProductFormValues {
+  if (!product) return emptyForm;
+  return {
+    name: product.name,
+    sku: product.sku,
+    description: product.description,
+    price: product.price,
+    sale_price: product.sale_price,
+    stock: product.stock,
+    // archived な商品を編集する場合も、選択肢に無い値で壊れないよう draft に寄せる。
+    status: ADMIN_SELECTABLE_STATUSES.includes(product.status) ? product.status : 'draft',
+    image_url: product.image_url,
+    image_urls: product.images.map((i) => i.image_url),
+    specs: product.specs.map((s) => ({ label: s.label, value: s.value })),
+    category_id: product.category_id,
+  };
+}
+
 export default function ProductFormModal({ product, onClose, onSubmit }: ProductFormModalProps) {
-  const [values, setValues] = useState<ProductFormValues>(emptyForm);
+  // 呼び出し側は編集対象を確定させてからモーダルをマウントするので、初期値は遅延初期化で足りる。
+  // （空フォームを入れてから effect で埋め直すと、初回レンダーが必ず空になる2段構えになる。）
+  const [values, setValues] = useState<ProductFormValues>(() => toFormValues(product));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
@@ -50,65 +73,14 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    api
-      .get<Category[]>('/categories')
+    fetchCategories()
       .then(setCategories)
       .catch((e) => {
         if (!(e instanceof ApiError)) throw e;
       });
   }, []);
 
-  useEffect(() => {
-    nameInputRef.current?.focus();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab' || !dialogRef.current) return;
-
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (product) {
-      setValues({
-        name: product.name,
-        sku: product.sku,
-        description: product.description,
-        price: product.price,
-        sale_price: product.sale_price,
-        stock: product.stock,
-        // archived な商品を編集する場合も、選択肢に無い値で壊れないよう draft に寄せる。
-        status: ADMIN_SELECTABLE_STATUSES.includes(product.status) ? product.status : 'draft',
-        image_url: product.image_url,
-        image_urls: product.images.map((i) => i.image_url),
-        specs: product.specs.map((s) => ({ label: s.label, value: s.value })),
-        category_id: product.category_id,
-      });
-    } else {
-      setValues(emptyForm);
-    }
-  }, [product]);
+  useFocusTrap(dialogRef, { onEscape: onClose, initialFocus: nameInputRef });
 
   /** 仕様の1行を書き換える。行の追加・削除は下の2つのハンドラが受け持つ。 */
   const updateSpec = (index: number, patch: Partial<ProductSpec>) =>

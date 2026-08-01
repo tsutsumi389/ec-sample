@@ -7,7 +7,9 @@ import { api, ApiError } from '@/lib/api';
 import type { Product } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
-import { PRODUCT_STATUS_META, SOLD_OUT_BADGE } from '@/lib/productStatus';
+import { onImageError } from '@/lib/productImage';
+import { withRedirect } from '@/lib/redirect';
+import { isLowStock, isSoldOut, PRODUCT_STATUS_META, SOLD_OUT_BADGE } from '@/lib/productStatus';
 import { truncateAtSentence, withWordBreaks } from '@/lib/wordBreak';
 import Badge from '@/components/Badge';
 import ProductPrice from '@/components/ProductPrice';
@@ -67,10 +69,10 @@ export default function AssistantProductCard({
 
   const statusMeta = PRODUCT_STATUS_META[product.status];
   // 在庫切れは status ではなく stock で決まる（status は on_sale のまま）。
-  const soldOut = product.status === 'on_sale' && product.stock <= 0;
+  const soldOut = isSoldOut(product);
   // 在庫は「急ぐ理由がある」ときだけ知らせる。通常在庫の「在庫 78 点」は
   // ProductCard.tsx:39 と同じ規律でカードに出さない。
-  const lowStock = product.status === 'on_sale' && product.stock > 0 && product.stock <= 5;
+  const lowStock = isLowStock(product);
 
   // カート追加。API 呼び出しとカート再取得の手順は商品詳細ページ
   // （app/products/[id]/page.tsx の handleAddToCart）と揃える。ただし未ログイン時の遷移と
@@ -102,9 +104,7 @@ export default function AssistantProductCard({
   // layout 常駐の AssistantWidget 配下に Suspense 境界の要件を持ち込むので、クリック時に window から読む。
   const handleLogin = () => {
     onNavigate?.();
-    router.push(
-      `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`
-    );
+    router.push(withRedirect('/login', window.location.pathname + window.location.search));
   };
 
   const detailHref = `/products/${product.id}`;
@@ -122,12 +122,7 @@ export default function AssistantProductCard({
           <img
             src={product.image_url}
             alt={product.name}
-            onError={(e) => {
-              const img = e.currentTarget;
-              if (img.src.endsWith('/no-image.svg')) return;
-              img.onerror = null;
-              img.src = '/no-image.svg';
-            }}
+            onError={onImageError}
             className="h-full w-full object-cover transition-transform duration-slow ease-entrance group-hover:scale-[1.04] motion-reduce:group-hover:scale-100"
           />
         </Link>
