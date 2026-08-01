@@ -16,6 +16,7 @@ import { api } from '@/lib/api';
 import type { SuggestProduct, SuggestResponse } from '@/lib/types';
 import { SearchIcon, XMarkIcon } from '@/components/Icons';
 import Price from '@/components/Price';
+import { onImageError } from '@/lib/productImage';
 import {
   addSearchHistory,
   clearSearchHistory,
@@ -110,7 +111,6 @@ export default function SearchBox({
 
   const listboxId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   // 候補確定で query を書き換えた直後の 1 回だけサジェスト取得を抑止するフラグ。
   // これが無いと setQuery → useEffect 再発火でドロップダウンが開き直してしまう
   // （/products 上での再検索は pathname が変わらず、遷移による自動クローズも効かないため）。
@@ -347,7 +347,7 @@ export default function SearchBox({
   const showList = open && options.length > 0;
 
   return (
-    <div ref={rootRef} className={`relative ${className}`}>
+    <div className={`relative ${className}`}>
       <form onSubmit={handleSubmit} className="flex">
         <div className="relative flex-1">
           <input
@@ -561,12 +561,7 @@ function ProductOptionRow({ product }: { product: SuggestProduct }) {
           <img
             src={product.image_url}
             alt=""
-            onError={(e) => {
-              const img = e.currentTarget;
-              if (img.src.endsWith('/no-image.svg')) return;
-              img.onerror = null;
-              img.src = '/no-image.svg';
-            }}
+            onError={onImageError}
             className="h-full w-full object-cover"
           />
         ) : null}
@@ -574,10 +569,15 @@ function ProductOptionRow({ product }: { product: SuggestProduct }) {
       <span className="min-w-0 flex-1 truncate text-ink">{product.name}</span>
       <span className="flex shrink-0 items-baseline gap-1.5">
         <Price value={product.effective_price} size="sm" className="tnum" />
+        {/* 打ち消しの定価も Price を通す（直書きすると ¥ だけ素の全角で入り、
+            同じ行の中で記号の組版が2系統になる）。ProductPrice と同じ muted + line-through。 */}
         {onSale && (
-          <span className="tnum text-caption text-ink-muted line-through decoration-line-strong">
-            ¥{product.price.toLocaleString()}
-          </span>
+          <Price
+            value={product.price}
+            size="sm"
+            muted
+            className="line-through decoration-line-strong"
+          />
         )}
       </span>
     </>

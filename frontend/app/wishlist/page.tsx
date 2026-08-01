@@ -12,17 +12,18 @@ import ProductCard from '@/components/ProductCard';
 import { ProductGridSkeleton } from '@/components/Skeleton';
 import PageMasthead from '@/components/PageMasthead';
 import EmptyState from '@/components/EmptyState';
-import { PRODUCT_STATUS_META } from '@/lib/productStatus';
+import { isSoldOut, PRODUCT_STATUS_META } from '@/lib/productStatus';
 import { btn } from '@/lib/buttonStyles';
 import { recommendGrid } from '@/lib/gridStyles';
 import { CartIcon } from '@/components/Icons';
+import { withRedirect } from '@/lib/redirect';
 
 /** 購入可否と、追加ボタンに出す文言を status / stock から導出する。 */
 function addToCartState(product: Product): { disabled: boolean; label: string } {
   if (product.purchasable) {
     return { disabled: false, label: 'カートに追加' };
   }
-  if (product.status === 'on_sale' && product.stock <= 0) {
+  if (isSoldOut(product)) {
     return { disabled: true, label: '在庫切れ' };
   }
   const meta = PRODUCT_STATUS_META[product.status];
@@ -42,7 +43,7 @@ export default function WishlistPage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.replace('/login?redirect=/wishlist');
+      router.replace(withRedirect('/login', '/wishlist'));
     }
   }, [authLoading, user, router]);
 

@@ -82,22 +82,35 @@ export default function ProductLane({
     const el = scrollRef.current;
     if (!el) return;
 
+    // scrollWidth / clientWidth はレイアウトの同期読みを起こすが、スクロール中には変わらない
+    // （変わるのはリサイズと中身の入れ替えだけで、それは下の resize / ResizeObserver が拾う）。
+    // 毎フレーム読むと指のフリックのあいだじゅうレイアウトを強制することになるので、外に控える。
+    let scrollWidth = 0;
+    let clientWidth = 0;
+
     const update = () => {
-      const overflow = el.scrollWidth > el.clientWidth + 1;
+      const overflow = scrollWidth > clientWidth + 1;
       setCanScrollLeft(overflow && el.scrollLeft > 1);
-      setCanScrollRight(overflow && el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+      setCanScrollRight(overflow && el.scrollLeft + clientWidth < scrollWidth - 1);
     };
 
-    update();
+    /** 寸法を測り直してから矢印の出し分けを更新する。寸法が動きうる経路だけがこれを呼ぶ。 */
+    const measure = () => {
+      scrollWidth = el.scrollWidth;
+      clientWidth = el.clientWidth;
+      update();
+    };
+
+    measure();
     el.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
+    window.addEventListener('resize', measure);
     // カード画像の読み込みやフォント適用で幅が変わる場合にも追随する
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
     observer?.observe(el);
 
     return () => {
       el.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
+      window.removeEventListener('resize', measure);
       observer?.disconnect();
     };
   }, [items.length]);

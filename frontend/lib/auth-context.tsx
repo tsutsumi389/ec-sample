@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  ReactNode,
+} from 'react';
 import { api, getToken, setToken, clearToken } from './api';
 import { clearGuestCart, readGuestCart } from './guestCart';
 import type { AuthResponse, CartMergeResult, User } from './types';
@@ -95,11 +103,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser((prev) => (prev ? { ...prev, ...partial } : prev));
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
-      {children}
-    </AuthContext.Provider>
+  // value を固定する（関数はすべて useCallback 済みなので、実質 user と loading だけで変わる）。
+  // インラインのリテラルだと useAuth() の消費者が provider の再レンダーごとに巻き添えになる。
+  const value = useMemo(
+    () => ({ user, loading, login, register, logout, updateUser }),
+    [user, loading, login, register, logout, updateUser]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {

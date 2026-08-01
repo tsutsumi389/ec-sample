@@ -9,6 +9,7 @@ import { useToast } from '@/lib/toast-context';
 import { btn } from '@/lib/buttonStyles';
 import { safeRedirect, withRedirect } from '@/lib/redirect';
 import { KettleMotif, CupMotif, PlantMotif, UmbrellaMotif } from '@/components/BrandMotifs';
+import { inputClass, labelClass } from '@/lib/formStyles';
 
 type FieldErrors = {
   name?: string;
@@ -17,13 +18,6 @@ type FieldErrors = {
 };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** 入力欄の共通クラス（罫は line-input、高さ 44px）。 */
-const inputClass =
-  'h-11 w-full rounded-md border border-line-input bg-surface px-3.5 text-body text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:border-brand-600';
-
-/** 入力ラベルの共通クラス。 */
-const labelClass = 'mb-1.5 block text-caption font-medium text-ink-soft';
 
 /**
  * ブランド面。デスクトップは左カラム、モバイルはフォーム上の横帯として出す。

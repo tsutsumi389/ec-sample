@@ -6,7 +6,9 @@ import type { Category } from '@/lib/types';
 import { Skeleton } from '@/components/Skeleton';
 import { CloseIcon, MenuIcon } from '@/components/Icons';
 import { btn, iconBtn } from '@/lib/buttonStyles';
+import { useFocusTrap } from '@/lib/focusTrap';
 import { SELECT_CHEVRON } from '@/lib/selectChevron';
+import { fetchCategories } from '@/lib/categories';
 
 export type ProductSort = 'recommended' | 'newest' | 'price_asc' | 'price_desc' | 'rating';
 
@@ -114,35 +116,22 @@ function FilterBody({
             <Skeleton className="h-11 w-20 rounded-full" />
           </>
         ) : (
-          <>
+          // 「すべて」は id が null のチップとして同じ列に並べる（造形は1つだけ書く）。
+          [{ id: null, name: 'すべて' }, ...categories].map((category) => (
             <button
+              key={category.id ?? 'all'}
               type="button"
-              aria-pressed={value.categoryId === null}
-              onClick={() => onChange({ ...value, categoryId: null })}
+              aria-pressed={value.categoryId === category.id}
+              onClick={() => onChange({ ...value, categoryId: category.id })}
               className={`${chipBase} ${
-                value.categoryId === null
+                value.categoryId === category.id
                   ? 'bg-brand-600 text-white shadow-paper'
                   : 'bg-surface text-ink-soft hover:bg-brand-50 hover:text-brand-800'
               }`}
             >
-              すべて
+              {category.name}
             </button>
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                type="button"
-                aria-pressed={value.categoryId === category.id}
-                onClick={() => onChange({ ...value, categoryId: category.id })}
-                className={`${chipBase} ${
-                  value.categoryId === category.id
-                    ? 'bg-brand-600 text-white shadow-paper'
-                    : 'bg-surface text-ink-soft hover:bg-brand-50 hover:text-brand-800'
-                }`}
-              >
-                {category.name}
-              </button>
-            ))}
-          </>
+          ))
         )}
       </div>
 
@@ -239,61 +228,22 @@ function FilterDrawer({
   const titleId = useId();
   const [entered, setEntered] = useState(false);
 
-  // onClose は毎レンダー参照が変わり得るため ref に退避し、effect の依存から外す。
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  // 開く直前のフォーカス要素を保持し、閉じたら戻す。
-  const triggerRef = useRef<HTMLElement | null>(null);
+  // Escape・Tab の循環・フォーカス復帰・背面スクロール固定は共有フックが持つ。
+  useFocusTrap(panelRef, {
+    active: open,
+    onEscape: onClose,
+    initialFocus: closeButtonRef,
+    restoreFocus: true,
+    lockScroll: true,
+  });
 
   useEffect(() => {
     if (!open) {
       setEntered(false);
       return;
     }
-
-    triggerRef.current = document.activeElement as HTMLElement | null;
-    closeButtonRef.current?.focus();
     const raf = requestAnimationFrame(() => setEntered(true));
-
-    // 背景スクロール固定
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== 'Tab' || !panelRef.current) return;
-
-      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      cancelAnimationFrame(raf);
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = prevOverflow;
-      triggerRef.current?.focus();
-      triggerRef.current = null;
-    };
+    return () => cancelAnimationFrame(raf);
   }, [open]);
 
   if (!open) return null;
@@ -354,8 +304,7 @@ export default function ProductFilters({ value, onChange, searching }: ProductFi
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<Category[]>('/categories')
+    fetchCategories()
       .then((data) => {
         if (!cancelled) setCategories(data);
       })

@@ -7,7 +7,7 @@ import { ORDER_STATUS_LABELS, ORDER_STATUS_OPTIONS } from '@/lib/order-status';
 import ScrollableTable from '@/components/ScrollableTable';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
-import { ChevronRightIcon } from '@/components/Icons';
+import { SELECT_CHEVRON } from '@/lib/selectChevron';
 
 /**
  * ステータスの状態色はテキスト色で表現（select の造形は他の入力と同じ1系統に統一）。
@@ -100,22 +100,23 @@ export default function AdminOrdersPage() {
                       {new Date(order.created_at).toLocaleString('ja-JP')}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="relative inline-block">
-                        <select
-                          value={order.status}
-                          disabled={updatingId === order.id}
-                          onChange={(e) => handleStatusChange(order.id, e.target.value as OrderStatus)}
-                          aria-label={`注文 #${order.id} のステータス`}
-                          className={`appearance-none bg-white border border-gray-300 rounded-md pl-3 pr-8 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed ${STATUS_TEXT_COLORS[order.status]}`}
-                        >
-                          {ORDER_STATUS_OPTIONS.map((status) => (
-                            <option key={status} value={status}>
-                              {ORDER_STATUS_LABELS[status]}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronRightIcon className="w-4 h-4 rotate-90 text-gray-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
-                      </span>
+                      {/* 矢印は全画面共通の SELECT_CHEVRON を背景に敷く。
+                          アイコンを絶対配置で重ねると、器の span と rotate-90 が要るうえ
+                          矢印だけ体系外の冷たいグレーで残る。 */}
+                      <select
+                        value={order.status}
+                        disabled={updatingId === order.id}
+                        onChange={(e) => handleStatusChange(order.id, e.target.value as OrderStatus)}
+                        aria-label={`注文 #${order.id} のステータス`}
+                        style={{ backgroundImage: `url("${SELECT_CHEVRON}")` }}
+                        className={`appearance-none bg-white bg-[length:1rem_1rem] bg-[right_0.625rem_center] bg-no-repeat border border-gray-300 rounded-md pl-3 pr-9 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed ${STATUS_TEXT_COLORS[order.status]}`}
+                      >
+                        {ORDER_STATUS_OPTIONS.map((status) => (
+                          <option key={status} value={status}>
+                            {ORDER_STATUS_LABELS[status]}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                   </tr>
                 ))}

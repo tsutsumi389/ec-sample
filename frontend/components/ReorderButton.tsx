@@ -7,6 +7,7 @@ import type { CartLineResult, CartMergeResult } from '@/lib/types';
 import { useCart } from '@/lib/cart-context';
 import { useToast } from '@/lib/toast-context';
 import { btn, btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { useFocusTrap } from '@/lib/focusTrap';
 import Spinner from '@/components/Spinner';
 
 interface ReorderButtonProps {
@@ -15,13 +16,11 @@ interface ReorderButtonProps {
   variant?: 'primary' | 'compact';
 }
 
-const focusRing =
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
-
-const primaryClass = `${btnPrimary} ${focusRing}`;
+// フォーカスリングは buttonStyles の BASE が持っているので、ここで足さない。
+const primaryClass = btnPrimary;
 
 /** 一覧カード内に置く小さめのボタン。btn('secondary','sm') に brand の字面だけ足す。 */
-const compactClass = `${btn('secondary', 'sm')} text-brand-700 ${focusRing}`;
+const compactClass = `${btn('secondary', 'sm')} text-brand-700`;
 
 /** 部分成功時の内訳リスト。 */
 function ResultList({ title, items }: { title: string; items: CartLineResult[] }) {
@@ -60,50 +59,11 @@ function ReorderResultDialog({
   const titleId = useId();
   const [entered, setEntered] = useState(false);
 
-  // 呼び出し側からインラインアロー関数が渡るため、effect の再実行を防ぐ目的で ref に退避する。
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  const triggerRef = useRef<HTMLElement | null>(null);
+  useFocusTrap(dialogRef, { onEscape: onClose, restoreFocus: true });
 
   useEffect(() => {
-    triggerRef.current = document.activeElement as HTMLElement | null;
     const raf = requestAnimationFrame(() => setEntered(true));
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== 'Tab' || !dialogRef.current) return;
-
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      cancelAnimationFrame(raf);
-      document.removeEventListener('keydown', handleKeyDown);
-      // 閉じたら元のトリガー要素へフォーカスを戻す
-      triggerRef.current?.focus();
-      triggerRef.current = null;
-    };
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   return (

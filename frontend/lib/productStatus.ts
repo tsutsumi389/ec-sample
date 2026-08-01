@@ -1,6 +1,29 @@
 import type { BadgeVariant } from '@/components/Badge';
 import type { ProductStatus } from '@/lib/types';
 
+/**
+ * 「残り N点」で購入を急がせる在庫の上限。
+ * StockLabel の分岐と、札を出すかどうかを決める呼び出し側の判定が**同じ数**を見るための唯一の源。
+ * 以前は 5 が StockLabel・ProductCard・AssistantProductCard・商品詳細の4箇所に散っていて、
+ * 変えると「札が出る条件」と「札の文言」がずれた。
+ */
+export const LOW_STOCK_THRESHOLD = 5;
+
+/** 在庫と status を組み合わせた導出。status だけでは決まらないので個別に持つ。 */
+type StockFacts = { status: ProductStatus; stock: number };
+
+/** 販売中なのに在庫が尽きている（＝買えないが、状態としては on_sale）。 */
+export function isSoldOut(product: StockFacts): boolean {
+  return product.status === 'on_sale' && product.stock <= 0;
+}
+
+/** 残りわずか。急ぐ理由がある状態だけ色を使うため、在庫切れは含めない。 */
+export function isLowStock(product: StockFacts): boolean {
+  return (
+    product.status === 'on_sale' && product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
+  );
+}
+
 interface StatusMeta {
   /** 管理画面の状態カラム用ラベル（全状態）。 */
   adminLabel: string;

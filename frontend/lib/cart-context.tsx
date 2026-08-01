@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  ReactNode,
+} from 'react';
 import { api } from './api';
 import { useAuth } from './auth-context';
 import { guestCartCount, subscribeGuestCart } from './guestCart';
@@ -49,7 +57,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   }, [refresh]);
 
-  return <CartContext.Provider value={{ count, refresh }}>{children}</CartContext.Provider>;
+  // value を固定する。インラインのオブジェクトリテラルだと、provider が再レンダーする
+  // たびに同一性が変わり、useCart() の消費者（一覧なら ProductCard 12枚ぶん）が
+  // count も refresh も変わっていないのに全員再レンダーする。
+  const value = useMemo(() => ({ count, refresh }), [count, refresh]);
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
 export function useCart(): CartContextValue {

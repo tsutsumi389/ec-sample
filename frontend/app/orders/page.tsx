@@ -18,6 +18,7 @@ import ReorderButton from '@/components/ReorderButton';
 import { Skeleton } from '@/components/Skeleton';
 import { PlantMotif } from '@/components/BrandMotifs';
 import { btn } from '@/lib/buttonStyles';
+import { withRedirect } from '@/lib/redirect';
 
 /** キャンセル操作をユーザーに許可するステータス */
 const CANCELLABLE_STATUSES: OrderStatus[] = ['pending', 'paid'];
@@ -77,7 +78,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.replace('/login?redirect=/orders');
+      router.replace(withRedirect('/login', '/orders'));
     }
   }, [authLoading, user, router]);
 

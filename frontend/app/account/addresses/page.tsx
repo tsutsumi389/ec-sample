@@ -16,6 +16,7 @@ import AddressForm, { AddressFormValues } from '@/components/AddressForm';
 import SectionHead from '@/components/SectionHead';
 import { ArrowLeftIcon } from '@/components/Icons';
 import { btn } from '@/lib/buttonStyles';
+import { withRedirect } from '@/lib/redirect';
 
 /** 住所カード型のスケルトン。 */
 function AddressCardSkeleton() {
@@ -50,7 +51,7 @@ export default function AddressesPage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.replace('/login?redirect=/account/addresses');
+      router.replace(withRedirect('/login', '/account/addresses'));
     }
   }, [authLoading, user, router]);
 

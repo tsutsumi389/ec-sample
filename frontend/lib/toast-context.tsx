@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   ReactNode,
@@ -144,8 +145,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((prev) => [...prev, toast].slice(-MAX_TOASTS));
   }, []);
 
+  // トーストは1件出入りするたびに provider が再レンダーする。value を固定しないと、
+  // その都度 useToast() の消費者（一覧なら WishlistButton 12個）が巻き添えで再描画される。
+  const value = useMemo(() => ({ showToast }), [showToast]);
+
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={value}>
       {children}
       <div
         className="pointer-events-none fixed bottom-24 left-1/2 z-[60] flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 flex-col gap-2 sm:left-auto sm:right-6 sm:w-auto sm:translate-x-0"

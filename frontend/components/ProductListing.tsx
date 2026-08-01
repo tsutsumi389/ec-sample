@@ -20,6 +20,7 @@ import { btn } from '@/lib/buttonStyles';
 import { listingGrid } from '@/lib/gridStyles';
 import { EVENT_SEARCH_NO_RESULT, track } from '@/lib/analytics';
 import { useAssistant } from '@/lib/assistant-context';
+import { fetchCategories } from '@/lib/categories';
 
 const LIMIT = 12;
 
@@ -170,8 +171,7 @@ export default function ProductListing({
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<Category[]>('/categories')
+    fetchCategories()
       .then((data) => {
         if (!cancelled) setCategories(data);
       })

@@ -9,6 +9,7 @@ import Badge from '@/components/Badge';
 import Price from '@/components/Price';
 import { PlusIcon } from '@/components/Icons';
 import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { useFocusTrap } from '@/lib/focusTrap';
 
 interface CouponFormValues {
   code: string;
@@ -46,57 +47,25 @@ function CouponFormModal({
   onClose: () => void;
   onSubmit: (values: CouponFormValues) => Promise<void>;
 }) {
-  const [values, setValues] = useState<CouponFormValues>(emptyForm);
+  // 呼び出し側は編集対象を確定させてからモーダルをマウントするので、初期値は遅延初期化で足りる。
+  const [values, setValues] = useState<CouponFormValues>(() =>
+    coupon
+      ? {
+          code: coupon.code,
+          discount_type: coupon.discount_type,
+          discount_value: coupon.discount_value,
+          min_order_amount: coupon.min_order_amount,
+          is_active: coupon.is_active,
+          expires_at: toDatetimeLocalValue(coupon.expires_at),
+        }
+      : emptyForm
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
   const codeInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    codeInputRef.current?.focus();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab' || !dialogRef.current) return;
-
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (coupon) {
-      setValues({
-        code: coupon.code,
-        discount_type: coupon.discount_type,
-        discount_value: coupon.discount_value,
-        min_order_amount: coupon.min_order_amount,
-        is_active: coupon.is_active,
-        expires_at: toDatetimeLocalValue(coupon.expires_at),
-      });
-    } else {
-      setValues(emptyForm);
-    }
-  }, [coupon]);
+  useFocusTrap(dialogRef, { onEscape: onClose, initialFocus: codeInputRef });
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

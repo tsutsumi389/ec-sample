@@ -9,6 +9,7 @@ import ProductListing from '@/components/ProductListing';
 import { ProductGridSkeleton, Skeleton } from '@/components/Skeleton';
 import ErrorNotice from '@/components/ErrorNotice';
 import { listingGrid } from '@/lib/gridStyles';
+import { fetchCategories } from '@/lib/categories';
 
 /**
  * カテゴリ別の商品一覧ページ（/categories/[id]）。
@@ -32,8 +33,7 @@ export default function CategoryPage({ params }: { params: { id: string } }) {
     setLoading(true);
     setError('');
 
-    api
-      .get<Category[]>('/categories')
+    fetchCategories()
       .then((data) => {
         if (cancelled) return;
         const found = data.find((c) => c.id === categoryId);

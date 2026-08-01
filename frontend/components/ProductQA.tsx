@@ -11,6 +11,7 @@ import Badge from '@/components/Badge';
 import SectionHead from '@/components/SectionHead';
 import { PlantMotif } from '@/components/BrandMotifs';
 import { Skeleton } from '@/components/Skeleton';
+import TypingDots from '@/components/TypingDots';
 import { btn } from '@/lib/buttonStyles';
 
 interface ProductQAProps {
@@ -168,17 +169,10 @@ export default function ProductQA({ productId }: ProductQAProps) {
                 これまでの質問 <span className="tnum">{questions.length}</span> 件
               </p>
             )}
-            {/* 送信中は生成待ちのタイピングインジケータを先頭に表示する。
-                点滅は体系の keyframe（bump）を使う（Tailwind 既定の animate-bounce は使わない）。 */}
+            {/* 送信中は生成待ちのタイピングインジケータを先頭に表示する（点の造形は TypingDots）。 */}
             {submitting && (
               <div className="mb-4 flex items-center gap-1.5 rounded-lg bg-surface px-4 py-3 shadow-paper">
-                {[0, 150, 300].map((delay) => (
-                  <span
-                    key={delay}
-                    className="h-1.5 w-1.5 rounded-full bg-line-strong motion-safe:animate-[bump_1.1s_ease-in-out_infinite] motion-reduce:animate-none"
-                    style={{ animationDelay: `${delay}ms` }}
-                  />
-                ))}
+                <TypingDots />
                 <span className="ml-2 text-caption text-ink-muted">AIが回答を作成しています…</span>
               </div>
             )}

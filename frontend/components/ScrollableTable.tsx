@@ -22,19 +22,32 @@ export default function ScrollableTable({ children }: ScrollableTableProps) {
     const el = scrollRef.current;
     if (!el) return;
 
+    // 寸法（scrollWidth / clientWidth）はレイアウトの同期読みなので、スクロール中は読まない。
+    // 動くのはリサイズのときだけで、それは下の resize が拾う。
+    let scrollWidth = 0;
+    let clientWidth = 0;
+
     const update = () => {
-      const overflow = el.scrollWidth > el.clientWidth + 1;
-      const end = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
-      setHasOverflow(overflow);
-      setAtEnd(end);
+      setHasOverflow(scrollWidth > clientWidth + 1);
+      setAtEnd(el.scrollLeft + clientWidth >= scrollWidth - 1);
     };
 
-    update();
+    const measure = () => {
+      scrollWidth = el.scrollWidth;
+      clientWidth = el.clientWidth;
+      update();
+    };
+
+    measure();
     el.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
+    window.addEventListener('resize', measure);
+    // 中身の入れ替え（行の増減・フォント適用）でも測り直す。ProductLane と同じ手当て。
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    observer?.observe(el);
     return () => {
       el.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
+      window.removeEventListener('resize', measure);
+      observer?.disconnect();
     };
   }, []);
 

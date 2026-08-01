@@ -6,6 +6,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
 import { btn, iconButton } from '@/lib/buttonStyles';
+import { useFocusTrap } from '@/lib/focusTrap';
 import SearchBox from '@/components/SearchBox';
 import {
   SearchIcon,
@@ -75,42 +76,15 @@ export default function Header() {
   }, []);
 
   // ドロワー表示中は Esc で閉じ、背面スクロールを止め、Tab を内部で循環させる（フォーカストラップ）。
-  // 開いたら閉じるボタンにフォーカスし、閉じたら開いた元のハンバーガーボタンへフォーカスを戻す。
-  useEffect(() => {
-    if (!menuOpen) return;
-    const triggerButton = menuBtnRef.current;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setMenuOpen(false);
-        return;
-      }
-      if (e.key !== 'Tab' || !drawerRef.current) return;
-
-      const focusable = drawerRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    closeBtnRef.current?.focus();
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-      triggerButton?.focus();
-    };
-  }, [menuOpen]);
+  // 開いたら閉じるボタンにフォーカスし、閉じたら開いた元のハンバーガーボタンへフォーカスを戻す
+  // （復帰先は「開く直前にフォーカスしていた要素」＝ハンバーガーなので、フックの控えで足りる）。
+  useFocusTrap(drawerRef, {
+    active: menuOpen,
+    onEscape: () => setMenuOpen(false),
+    initialFocus: closeBtnRef,
+    restoreFocus: true,
+    lockScroll: true,
+  });
 
   const handleLogout = () => {
     setMenuOpen(false);
@@ -178,6 +152,32 @@ export default function Header() {
     `flex min-h-[2.75rem] items-center gap-3 rounded-md px-3 py-2.5 text-body transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
       isActive(href) ? 'bg-brand-50 font-semibold text-brand-700' : 'text-ink-soft hover:bg-brand-50'
     }`;
+
+  /**
+   * ドロワーの項目。ログイン状態での出し分けはここ（配列を組む側）に寄せ、
+   * 描画側は行の造形を1つだけ持つ。
+   * 一覧・検索は /products に独立した。ホーム自体へはロゴから戻れる。
+   */
+  const drawerItems: { href: string; icon: (p: { className?: string }) => JSX.Element; label: string }[] = [
+    { href: '/products', icon: BoxIcon, label: '商品一覧' },
+    { href: '/cart', icon: CartIcon, label: cartLabel },
+    ...(!loading && user
+      ? [
+          { href: '/orders', icon: PackageIcon, label: '注文履歴' },
+          { href: '/wishlist', icon: HeartIcon, label: 'お気に入り' },
+          { href: '/account', icon: UserIcon, label: 'アカウント' },
+          ...(user.role === 'admin'
+            ? [{ href: '/admin', icon: ClipboardListIcon, label: '管理画面' }]
+            : []),
+        ]
+      : []),
+    ...(!loading && !user
+      ? [
+          { href: '/login', icon: UserIcon, label: 'ログイン' },
+          { href: '/register', icon: UserIcon, label: '会員登録' },
+        ]
+      : []),
+  ];
 
   return (
     // ドロワーは <header> の外（body 直下）に置く。
@@ -480,59 +480,17 @@ export default function Header() {
           )}
 
           <nav className="flex-1 overflow-y-auto p-2">
-            {/* 一覧・検索は /products に独立した。ホーム自体へはロゴから戻れる。 */}
-            <Link href="/products" className={drawerLinkClass('/products')}>
-              <BoxIcon className="h-5 w-5 text-ink-faint" />
-              <span className="flex-1">商品一覧</span>
-              <ChevronRightIcon className="h-4 w-4 text-line-strong" />
-            </Link>
-            <Link href="/cart" className={drawerLinkClass('/cart')}>
-              <CartIcon className="h-5 w-5 text-ink-faint" />
-              <span className="flex-1">カート{count > 0 ? `（${count}点）` : ''}</span>
-              <ChevronRightIcon className="h-4 w-4 text-line-strong" />
-            </Link>
-
-            {!loading && user && (
-              <>
-                <Link href="/orders" className={drawerLinkClass('/orders')}>
-                  <PackageIcon className="h-5 w-5 text-ink-faint" />
-                  <span className="flex-1">注文履歴</span>
-                  <ChevronRightIcon className="h-4 w-4 text-line-strong" />
-                </Link>
-                <Link href="/wishlist" className={drawerLinkClass('/wishlist')}>
-                  <HeartIcon className="h-5 w-5 text-ink-faint" />
-                  <span className="flex-1">お気に入り</span>
-                  <ChevronRightIcon className="h-4 w-4 text-line-strong" />
-                </Link>
-                <Link href="/account" className={drawerLinkClass('/account')}>
-                  <UserIcon className="h-5 w-5 text-ink-faint" />
-                  <span className="flex-1">アカウント</span>
-                  <ChevronRightIcon className="h-4 w-4 text-line-strong" />
-                </Link>
-                {user.role === 'admin' && (
-                  <Link href="/admin" className={drawerLinkClass('/admin')}>
-                    <ClipboardListIcon className="h-5 w-5 text-ink-faint" />
-                    <span className="flex-1">管理画面</span>
-                    <ChevronRightIcon className="h-4 w-4 text-line-strong" />
-                  </Link>
-                )}
-              </>
-            )}
-
-            {!loading && !user && (
-              <>
-                <Link href="/login" className={drawerLinkClass('/login')}>
-                  <UserIcon className="h-5 w-5 text-ink-faint" />
-                  <span className="flex-1">ログイン</span>
-                  <ChevronRightIcon className="h-4 w-4 text-line-strong" />
-                </Link>
-                <Link href="/register" className={drawerLinkClass('/register')}>
-                  <UserIcon className="h-5 w-5 text-ink-faint" />
-                  <span className="flex-1">会員登録</span>
-                  <ChevronRightIcon className="h-4 w-4 text-line-strong" />
-                </Link>
-              </>
-            )}
+            {/* 項目はデータで持ち、行の造形は1つだけ書く。
+                以前は同じ3つ組（アイコン＋ラベル＋シェブロン）が8回写されていて、
+                シェブロンの色や間隔を変えるのに8箇所を直す必要があった。
+                ログイン状態での出し分けは配列を組む側に寄せる。 */}
+            {drawerItems.map(({ href, icon: Icon, label }) => (
+              <Link key={href} href={href} className={drawerLinkClass(href)}>
+                <Icon className="h-5 w-5 text-ink-faint" />
+                <span className="flex-1">{label}</span>
+                <ChevronRightIcon className="h-4 w-4 text-line-strong" />
+              </Link>
+            ))}
           </nav>
 
           {!loading && user && (

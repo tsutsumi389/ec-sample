@@ -24,6 +24,8 @@ import { Skeleton } from '@/components/Skeleton';
 import { TrashIcon, ChevronRightIcon } from '@/components/Icons';
 import { btn } from '@/lib/buttonStyles';
 import { EVENT_BEGIN_CHECKOUT, EVENT_VIEW_CART, track } from '@/lib/analytics';
+import { onImageError } from '@/lib/productImage';
+import { withRedirect } from '@/lib/redirect';
 import { SELECT_CHEVRON } from '@/lib/selectChevron';
 import { withWordBreaks } from '@/lib/wordBreak';
 
@@ -266,8 +268,9 @@ export default function CartPage() {
       } else {
         setGuestCartQuantity(row.targetId, quantity);
       }
-      const nextSubtotal = await refreshCart();
-      await refresh();
+      // 明細の取り直し（画面）とバッジの数（ヘッダー）は互いに依存しないので並べて投げる。
+      // 直列にすると数量を1回変えるたびに往復が1本ぶん余計に積み上がる。
+      const [nextSubtotal] = await Promise.all([refreshCart(), refresh()]);
       showToast('数量を変更しました');
       await revalidateAppliedCoupon(nextSubtotal);
     } catch (e) {
@@ -286,8 +289,7 @@ export default function CartPage() {
       } else {
         removeFromGuestCart(removeTarget.targetId);
       }
-      const nextSubtotal = await refreshCart();
-      await refresh();
+      const [nextSubtotal] = await Promise.all([refreshCart(), refresh()]);
       showToast('カートから削除しました');
       setRemoveTarget(null);
       await revalidateAppliedCoupon(nextSubtotal);
@@ -311,7 +313,8 @@ export default function CartPage() {
       setCouponResult(result);
       if (result.valid) {
         setAppliedCoupon({ code, discount_amount: result.discount_amount });
-        await refresh();
+        // カートの明細は変わらない（POST /coupons/validate は検証だけで何も書かない）ので
+        // バッジの数を取り直さない。
         showToast('クーポンを適用しました');
       } else {
         setAppliedCoupon(null);
@@ -346,8 +349,9 @@ export default function CartPage() {
   const addressMissing = !usingSavedAddress && !address.trim();
 
   const handleOrder = async () => {
-    const useSavedAddress = addresses.length > 0 && selectedAddressId !== 'manual';
-    if (!useSavedAddress && !address.trim()) {
+    // 判定は上の導出をそのまま使う。ここで組み直すと、CTA の直上に出す予告と
+    // 押したときの検証が別の式になり、「予告が出ないのに弾かれる」食い違いが生まれる。
+    if (addressMissing) {
       setAddressError('配送先住所を入力してください');
       focusAddress();
       return;
@@ -360,7 +364,7 @@ export default function CartPage() {
     track(EVENT_BEGIN_CHECKOUT, { value: total });
     try {
       const payload: Record<string, unknown> = {};
-      if (useSavedAddress) {
+      if (usingSavedAddress) {
         payload.address_id = selectedAddressId;
       } else {
         payload.shipping_address = address.trim();
@@ -493,12 +497,7 @@ export default function CartPage() {
                     <img
                       src={row.product.image_url}
                       alt={row.product.name}
-                      onError={(e) => {
-                        const img = e.currentTarget;
-                        if (img.src.endsWith('/no-image.svg')) return;
-                        img.onerror = null;
-                        img.src = '/no-image.svg';
-                      }}
+                      onError={onImageError}
                       /* 画像が載る面はイラストの地色（tile）にして額縁を消す。
                          買えない行は図版を沈ませる（一覧カードと同じ規律）。 */
                       className={`h-24 w-24 shrink-0 rounded-lg bg-tile object-cover ${
@@ -805,12 +804,7 @@ export default function CartPage() {
                   </div>
                   <div className="flex items-baseline justify-between gap-4 border-t border-line pt-4">
                     <dt className="text-body font-medium text-ink-soft">合計</dt>
-                    <dd className="tnum text-num-lg text-ink">
-                      <span className="mr-[0.1em] align-baseline text-[0.68em] font-medium text-ink-muted">
-                        ¥
-                      </span>
-                      {total.toLocaleString()}
-                    </dd>
+                    <Price value={total} size="num-lg" inheritWeight as="dd" />
                   </div>
                 </dl>
 
@@ -861,7 +855,7 @@ export default function CartPage() {
                         （そこで求めると、買う気になった瞬間の意思がほぼ戻ってこない）。
                         中身が引き継がれることを明示しないと、押す前に離脱する。 */}
                     <Link
-                      href="/login?redirect=/cart"
+                      href={withRedirect('/login', '/cart')}
                       aria-disabled={!canCheckout}
                       className={`${btn('primary', 'lg')} mt-6 w-full ${
                         canCheckout ? '' : 'pointer-events-none opacity-50'
@@ -870,7 +864,7 @@ export default function CartPage() {
                       ログインしてご注文へ
                     </Link>
                     <Link
-                      href="/register?redirect=/cart"
+                      href={withRedirect('/register', '/cart')}
                       className={`${btn('secondary', 'md')} mt-3 w-full`}
                     >
                       はじめての方は会員登録

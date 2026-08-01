@@ -44,8 +44,15 @@ interface PriceProps {
   muted?: boolean;
   /** 深緑帯（bg-invert）の上に置くときは 'onDark'。className での色上書きは効かないためこちらを使う。 */
   tone?: PriceTone;
+  /**
+   * 太さを指定せず、器から継承する。
+   * カート・注文詳細の「合計」行がこれ（`<dd>` の地の太さで組む）。
+   * ⚠ 新しい価格表示でこれを選ばないこと——太さの体系（通常 semibold / 合計 bold）から
+   *   外れる。既存2箇所の見た目を変えずに ¥ 記号の組版だけをここへ寄せるための逃げ道。
+   */
+  inheritWeight?: boolean;
   className?: string;
-  as?: 'span' | 'p';
+  as?: 'span' | 'p' | 'dd';
 }
 
 const TONE_CLASSES: Record<PriceTone, { text: string; symbol: string; muted: string }> = {
@@ -70,10 +77,17 @@ export default function Price({
   strong = false,
   muted = false,
   tone = 'default',
+  inheritWeight = false,
   className = '',
   as: Tag = 'span',
 }: PriceProps) {
-  const weightClass = muted ? 'font-normal' : strong ? 'font-bold' : 'font-semibold';
+  const weightClass = inheritWeight
+    ? ''
+    : muted
+      ? 'font-normal'
+      : strong
+        ? 'font-bold'
+        : 'font-semibold';
   const toneClasses = TONE_CLASSES[tone];
   const textClass = muted ? toneClasses.muted : toneClasses.text;
 

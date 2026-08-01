@@ -6,7 +6,7 @@ import type { Product } from '@/lib/types';
 import ProductFormModal, { ProductFormValues } from '@/components/ProductFormModal';
 import ScrollableTable from '@/components/ScrollableTable';
 import Spinner from '@/components/Spinner';
-import Price from '@/components/Price';
+import ProductPrice from '@/components/ProductPrice';
 import Badge from '@/components/Badge';
 import { PlusIcon } from '@/components/Icons';
 import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
@@ -112,7 +112,9 @@ export default function AdminProductsPage() {
                   <tr key={product.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 font-medium whitespace-nowrap">{product.name}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-right">
-                      <Price value={product.price} size="sm" />
+                      {/* 実売価格は effective_price（sale_price があればそれ）。
+                          price を直に出すと、セール中の商品だけ管理画面と店頭で違う額が並ぶ。 */}
+                      <ProductPrice product={product} size="sm" className="justify-end" />
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-right">{product.stock}</td>
                     <td className="px-4 py-3 whitespace-nowrap">

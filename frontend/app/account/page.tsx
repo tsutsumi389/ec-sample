@@ -12,6 +12,8 @@ import PageMasthead from '@/components/PageMasthead';
 import SectionHead from '@/components/SectionHead';
 import { btn } from '@/lib/buttonStyles';
 import { ClipboardListIcon, HeartIcon, PackageIcon, ArrowRightIcon } from '@/components/Icons';
+import { withRedirect } from '@/lib/redirect';
+import { inputClass, labelClass } from '@/lib/formStyles';
 
 /** 名前の先頭1文字をアバターのイニシャルにする（無ければ「H」）。 */
 function initialOf(name: string): string {
@@ -19,14 +21,21 @@ function initialOf(name: string): string {
   return trimmed ? Array.from(trimmed)[0] : 'H';
 }
 
-/** 入力欄・ラベルの共通クラス（ログイン／会員登録と同一の造形に揃える）。 */
-const inputClass =
-  'h-11 w-full rounded-md border border-line-input bg-surface px-3.5 text-body text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:border-brand-600';
-const labelClass = 'mb-1.5 block text-caption font-medium text-ink-soft';
-
 /** アカウント内の導線カード（注文履歴・お気に入り・住所帳・ログアウト）の共通クラス。 */
 const menuCardClass =
   'group flex h-full items-center gap-3 rounded-xl bg-surface p-4 text-left shadow-paper transition-[background-color,box-shadow] duration-base ease-standard hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600';
+
+/** アカウントから伸びる導線。ログアウトは button なのでここには入れない。 */
+const MENU_LINKS: {
+  href: string;
+  icon: (p: { className?: string }) => JSX.Element;
+  title: string;
+  description: string;
+}[] = [
+  { href: '/orders', icon: ClipboardListIcon, title: '注文履歴', description: 'これまでのご注文を確認' },
+  { href: '/wishlist', icon: HeartIcon, title: 'お気に入り', description: '保存した道具を見返す' },
+  { href: '/account/addresses', icon: PackageIcon, title: '住所帳', description: 'お届け先を管理' },
+];
 
 const breadcrumbs = [{ label: 'ホーム', href: '/' }, { label: 'アカウント' }];
 
@@ -46,7 +55,7 @@ export default function AccountPage() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.replace('/login?redirect=/account');
+      router.replace(withRedirect('/login', '/account'));
     }
   }, [authLoading, user, router]);
 
@@ -155,38 +164,20 @@ export default function AccountPage() {
       <div className="wrap band-lg">
         {/* カードメニュー */}
         <div className="mb-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Link href="/orders" className={`${menuCardClass} hover:bg-brand-50`}>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-              <ClipboardListIcon className="h-5 w-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-body font-medium text-ink jp-name">注文履歴</span>
-              <span className="block text-caption text-ink-muted jp-name">これまでのご注文を確認</span>
-            </span>
-            <ArrowRightIcon className="h-4 w-4 shrink-0 text-line-strong transition-colors group-hover:text-brand-600" />
-          </Link>
-
-          <Link href="/wishlist" className={`${menuCardClass} hover:bg-brand-50`}>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-              <HeartIcon className="h-5 w-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-body font-medium text-ink jp-name">お気に入り</span>
-              <span className="block text-caption text-ink-muted jp-name">保存した道具を見返す</span>
-            </span>
-            <ArrowRightIcon className="h-4 w-4 shrink-0 text-line-strong transition-colors group-hover:text-brand-600" />
-          </Link>
-
-          <Link href="/account/addresses" className={`${menuCardClass} hover:bg-brand-50`}>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-              <PackageIcon className="h-5 w-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-body font-medium text-ink jp-name">住所帳</span>
-              <span className="block text-caption text-ink-muted jp-name">お届け先を管理</span>
-            </span>
-            <ArrowRightIcon className="h-4 w-4 shrink-0 text-line-strong transition-colors group-hover:text-brand-600" />
-          </Link>
+          {/* 導線カードはデータで持つ。丸アイコンの寸法や矢印の色を変えるのに
+              同じ11行を3箇所直す必要が無いようにする（ログアウトだけは button なので下に別で置く）。 */}
+          {MENU_LINKS.map(({ href, icon: Icon, title, description }) => (
+            <Link key={href} href={href} className={`${menuCardClass} hover:bg-brand-50`}>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-body font-medium text-ink jp-name">{title}</span>
+                <span className="block text-caption text-ink-muted jp-name">{description}</span>
+              </span>
+              <ArrowRightIcon className="h-4 w-4 shrink-0 text-line-strong transition-colors group-hover:text-brand-600" />
+            </Link>
+          ))}
 
           <button type="button" onClick={handleLogout} className={`${menuCardClass} hover:bg-sunken`}>
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sunken text-ink-muted">
