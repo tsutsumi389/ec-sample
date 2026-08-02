@@ -76,6 +76,41 @@ export function iconBtn(size: BtnSize = 'md') {
   return `${BASE} ${DISABLED_ICON} ${box} rounded-full text-ink-soft hover:bg-sunken`;
 }
 
+/**
+ * 丸ピル。アシスタントのサジェスト chip・カテゴリ chip・行き止まりの次の一手と、
+ * 提案カードの操作行（「商品を見る」「カートに追加」）を同じ造形で揃える
+ * （同じ「次の一手」なのに見えが割れると、押せる部品と分からない）。
+ *
+ * btn() とは別系統。あちらは rounded-md の角丸と固定高（h-9/h-11/h-13）の体系で、
+ * ピルの丸みと「モバイル44px / デスクトップは詰める」の寸法をここへ持ち込むと
+ * 呼び出し側が6つも上書きすることになる。造形が違うものは別の関数で持つ。
+ *
+ * outline の罫は brand-500（対 surface 4.37:1 / 対 page 3.61:1）。brand-200 は
+ * 対 surface 1.48:1 で地との差が 1.21 しかなく、押せる部品の輪郭として成立しない
+ * （WCAG 1.4.11 は 3:1 が下限）。この根拠をここ1箇所に置くために切り出してある——
+ * 以前は同じ12トークンが AssistantPanel と AssistantProductCard に写されており、
+ * 濃度を見直すときに揃って直る保証が無かった。
+ *
+ * size … chip: 語幅ぶんだけ取る小さな粒（wrap して並ぶ） / action: 操作行に flex-1 で並ぶ粒。
+ * tone … outline: 生成りの面＋brand の罫 / solid: brand 塗り（行の中で1つだけ）。
+ */
+export function chip(size: 'chip' | 'action' = 'chip', tone: 'outline' | 'solid' = 'outline') {
+  const box =
+    size === 'chip'
+      ? 'min-h-[44px] shrink-0 px-3.5 py-1.5 text-caption sm:min-h-0'
+      : 'min-h-[44px] gap-1 px-3 text-body font-medium sm:min-h-0 sm:py-2';
+  const face =
+    tone === 'outline'
+      ? 'border border-brand-500 bg-surface text-brand-700 hover:bg-brand-50'
+      : 'bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-line-strong';
+  return (
+    'inline-flex items-center justify-center whitespace-nowrap rounded-full ' +
+    'transition-colors duration-fast ease-standard ' +
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ' +
+    `${face} ${box}`
+  );
+}
+
 /* ── 後方互換（既存の25箇所超の呼び出しを壊さない） ── */
 /** 最重要CTA用: brand 塗り */
 export const btnPrimary   = btn('primary', 'md');

@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.config import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL
 from app.models import Product
 from app.services import llm_catalog
 
@@ -133,8 +132,6 @@ def answer_question(db: Session, product: Product, question_text: str) -> QAResu
     例外はすべて握ってフォールバックへ落とすため、この関数は常に応答を返す
     （assistant.generate_reply と同じ設計思想）。
     """
-    import ollama  # 遅延 import（Ollama 未導入環境でも起動時に落とさない）
-
     try:
         avg_map = llm_catalog.avg_ratings(db, {product.id})
         product_block = build_product_block(product, avg_map.get(product.id))
@@ -145,21 +142,9 @@ def answer_question(db: Session, product: Product, question_text: str) -> QAResu
             {"role": "user", "content": user_prompt},
         ]
 
-        client = ollama.Client(host=OLLAMA_BASE_URL, timeout=_CHAT_TIMEOUT)
-        response = client.chat(
-            model=OLLAMA_CHAT_MODEL,
-            messages=messages,
-            format=_QAResponse.model_json_schema(),
-            options={"temperature": 0.2},
+        parsed = llm_catalog.chat_json(
+            _QAResponse, messages, timeout=_CHAT_TIMEOUT, temperature=0.2
         )
-        # ollama>=0.4 は typed オブジェクト / 旧版は dict。両対応で content を取る。
-        message = getattr(response, "message", None)
-        if message is None:
-            message = response["message"]
-        content = getattr(message, "content", None)
-        if content is None:
-            content = message["content"]
-        parsed = _QAResponse.model_validate_json(content)
 
         answer = (parsed.answer or "").strip()[:_ANSWER_MAX_LEN]
         if not answer:

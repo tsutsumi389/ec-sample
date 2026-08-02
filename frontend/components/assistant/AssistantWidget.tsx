@@ -54,12 +54,6 @@ export default function AssistantWidget() {
     (target.isConnected ? target : fabRef.current)?.focus();
   }, [open]);
 
-  // パネル内のリンクで遷移するときに閉じる経路。閉じるだけでフォーカスは戻さない。
-  // フォーカスは遷移先の先頭へ移るべきで、元のボタンに取り残すと文脈が壊れるため。
-  // 閉じれば背景の inert は上の effect（依存 [open]）のクリーンアップで必ず外れる。
-  // これを通さずに遷移すると header/main/footer の inert が残り、遷移先が一切操作できない。
-  const handleCloseForNavigation = useCallback(() => closeAssistant(), [closeAssistant]);
-
   // パネル（role="dialog" aria-modal）を開いている間は背景ページ（ヘッダー/本文/フッター）を
   // inert + aria-hidden にして不活性化する。Tab フォーカストラップだけでは塞げない
   // スクリーンリーダーの仮想カーソルやポインタ操作からも背景を隔離し、モーダル性を担保する。
@@ -113,12 +107,13 @@ export default function AssistantWidget() {
       {/* パネルは開くたびにマウントし直されるので、prefill は初期値としてそのまま渡してよい
           （開いている間に prefill が変わる経路は無い。開いている間、背景は inert なので
           ページ側の「相談する」ボタンは押せない）。 */}
+      {/* onNavigate は closeAssistant をそのまま渡す。パネル内のリンクで遷移するときは
+          閉じるだけでフォーカスは戻さない（フォーカスは遷移先の先頭へ移るべきで、元のボタンに
+          取り残すと文脈が壊れる）。閉じれば背景の inert は下の effect のクリーンアップで
+          必ず外れる——通さずに遷移すると header/main/footer の inert が残り、遷移先が
+          一切操作できなくなる。 */}
       {open && (
-        <AssistantPanel
-          prefill={prefill}
-          onClose={handleClose}
-          onNavigate={handleCloseForNavigation}
-        />
+        <AssistantPanel prefill={prefill} onClose={handleClose} onNavigate={closeAssistant} />
       )}
 
       {/* フローティングボタン。開いている間は全幅で隠すので「開く」専用（開閉トグルではない）。
@@ -141,7 +136,7 @@ export default function AssistantWidget() {
         aria-label="アシスタントを開く"
         aria-expanded={open}
         className={`fixed z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-float ring-1 ring-washi-50/25 transition-[background-color,transform] duration-fast ease-standard hover:bg-brand-700 active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${fabRight} ${fabPosition} ${
-          open ? 'hidden' : 'inline-flex'
+          open ? 'hidden' : ''
         }`}
       >
         <ChatBubbleIcon className="h-6 w-6" />

@@ -5,15 +5,55 @@
 使うため、重複実装せずここに集約する。PII（氏名・メール等）は一切含めない。
 """
 
-from typing import Protocol
+from typing import Protocol, TypeVar
 
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL
 from app.models import Product, Review
 
 # LLM が返した reason を保存する際の最大長（保険の切り詰め）。
 REASON_MAX_LEN = 200
+
+_T = TypeVar("_T", bound=BaseModel)
+
+
+def chat_json(
+    schema: type[_T],
+    messages: list[dict],
+    *,
+    timeout: int,
+    temperature: float,
+) -> _T:
+    """Ollama chat を構造化出力で呼び、schema で検証した結果を返す。
+
+    アシスタント・レコメンド・商品QAの3サービスが同じ手順（クライアント生成 →
+    format にスキーマを渡す → レスポンスから content を取る → 検証）を踏むので、
+    LLM transport の面倒はここ1箇所に閉じる。ollama SDK のレスポンス形が変わったとき、
+    直す場所を3つに散らさないため（例外は呼び出し側が握ってフォールバックへ落とすので、
+    修正漏れがあってもログにすら出ずに気づけない）。
+
+    例外は握らずそのまま送出する（フォールバックの判断は呼び出し側の責務）。
+    """
+    import ollama  # 遅延 import（Ollama 未導入環境でも起動時に落とさない）
+
+    client = ollama.Client(host=OLLAMA_BASE_URL, timeout=timeout)
+    response = client.chat(
+        model=OLLAMA_CHAT_MODEL,
+        messages=messages,
+        format=schema.model_json_schema(),
+        options={"temperature": temperature},
+    )
+    # ollama>=0.4 は typed オブジェクト / 旧版は dict。両対応で content を取る。
+    message = getattr(response, "message", None)
+    if message is None:
+        message = response["message"]
+    content = getattr(message, "content", None)
+    if content is None:
+        content = message["content"]
+    return schema.model_validate_json(content)
 
 
 class _HasSidReason(Protocol):

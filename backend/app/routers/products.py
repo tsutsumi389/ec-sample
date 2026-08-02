@@ -49,6 +49,26 @@ def _rating_stats(db: Session, product_id: int) -> tuple[float | None, int]:
     return (float(avg_rating) if avg_rating is not None else None, review_count or 0)
 
 
+def _rating_map(db: Session, product_ids: set[int]) -> dict[int, tuple[float | None, int]]:
+    """商品IDごとの (平均評価, レビュー数) を 1 クエリでまとめて引く。
+
+    上の _rating_stats は 1 商品 1 クエリなので、複数商品を並べる画面（ホームのレーン・
+    アシスタントの提案カード・会話履歴の復元）では商品数ぶん往復してしまう。
+    集合を先に確定できる場所ではこちらを使うこと。
+    """
+    if not product_ids:
+        return {}
+    rows = db.execute(
+        select(Review.product_id, func.avg(Review.rating), func.count(Review.id))
+        .where(Review.product_id.in_(product_ids))
+        .group_by(Review.product_id)
+    ).all()
+    return {
+        pid: (float(avg) if avg is not None else None, count or 0)
+        for pid, avg, count in rows
+    }
+
+
 @router.get("", response_model=ProductListOut)
 def list_products(
     search: str | None = Query(default=None),

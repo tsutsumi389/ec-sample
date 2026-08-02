@@ -9,13 +9,12 @@ services/home_page.py に置き、ここは HTTP 境界の責務だけを持つ:
 """
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user_optional
 from app.database import get_db
-from app.models import Review, User
-from app.routers.products import _to_product_out
+from app.models import User
+from app.routers.products import _rating_map, _to_product_out
 # 生成起動は /api/recommendations/home と同じ多重起動防止（advisory ロック + state 判定）に
 # 乗せる必要があるため、既存実装を再利用する。ここで別実装すると同一ユーザーに対して
 # 二重に LLM 生成が走り得る。
@@ -48,25 +47,6 @@ def _parse_recently_viewed_ids(raw: str | None) -> list[int]:
         if pid > 0 and pid not in ids:
             ids.append(pid)
     return ids[:home_page._MAX_RECENTLY_VIEWED_IDS]
-
-
-def _rating_map(db: Session, product_ids: set[int]) -> dict[int, tuple[float | None, int]]:
-    """商品IDごとの (平均評価, レビュー数) を 1 クエリでまとめて引く。
-
-    products.py の _rating_stats は 1 商品 1 クエリなので、レーン × 商品数ぶん
-    （最大で 100 回超）往復してしまう。ホームでは一括取得に置き換える。
-    """
-    if not product_ids:
-        return {}
-    rows = db.execute(
-        select(Review.product_id, func.avg(Review.rating), func.count(Review.id))
-        .where(Review.product_id.in_(product_ids))
-        .group_by(Review.product_id)
-    ).all()
-    return {
-        pid: (float(avg) if avg is not None else None, count or 0)
-        for pid, avg, count in rows
-    }
 
 
 @router.get("", response_model=HomeOut)
