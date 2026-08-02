@@ -8,10 +8,11 @@ GET /assistant/conversations/{id}/messages はウィジェット再オープン�
 """
 
 import uuid
+from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from app.auth import get_current_user_optional
 from app.database import get_db
@@ -22,7 +23,7 @@ from app.models import (
     Product,
     User,
 )
-from app.routers.products import _rating_stats, _to_product_out
+from app.routers.products import _rating_map, _to_product_out
 from app.schemas import (
     AssistantChatIn,
     AssistantChatOut,
@@ -37,13 +38,44 @@ router = APIRouter(prefix="/assistant", tags=["assistant"])
 _MAX_MESSAGES = 50
 
 
-def _item_out(product: Product, db: Session, reason: str | None) -> RecommendationItemOut:
-    """Product を RecommendationItemOut（product + reason）に整形する。"""
-    avg_rating, review_count = _rating_stats(db, product.id)
-    return RecommendationItemOut(
-        product=_to_product_out(product, avg_rating, review_count),
-        reason=reason,
+def _item_outs(
+    db: Session, pairs: Sequence[tuple[Product, str | None]]
+) -> list[RecommendationItemOut]:
+    """(Product, reason) の並びを RecommendationItemOut へ整形する。
+
+    評価は _rating_map で 1 クエリまとめ引き。1 件ずつ _rating_stats を呼ぶと
+    「提案4件で4クエリ」「履歴復元で商品数ぶん」の往復になる（並べる件数が
+    先に確定している場所では一括版を使う）。
+    """
+    ratings = _rating_map(db, {p.id for p, _ in pairs})
+    return [
+        RecommendationItemOut(
+            product=_to_product_out(product, *ratings.get(product.id, (None, 0))),
+            reason=reason,
+        )
+        for product, reason in pairs
+    ]
+
+
+def _listed_products_by_ids(db: Session, ids: Sequence[int]) -> dict[int, Product]:
+    """公開中の商品だけを ID の集合から 1 クエリで引く。
+
+    status はクエリに添える（CLAUDE.md の規律。Python 側で弾く形にすると、
+    次にこのループへ手を入れた人が絞りを落としても誰も気づけない）。
+    画像は ProductOut が読むので selectinload で連れてくる。
+    """
+    if not ids:
+        return {}
+    products = (
+        db.execute(
+            select(Product)
+            .where(Product.id.in_(set(ids)), Product.status.in_(LISTED_STATUSES))
+            .options(selectinload(Product.images))
+        )
+        .scalars()
+        .all()
     )
+    return {p.id: p for p in products}
 
 
 def _load_conversation(
@@ -109,21 +141,14 @@ def chat(
         conv = _load_conversation(
             db, payload.conversation_id, current_user, attach=True
         )
-        # メッセージ上限チェック（超過で新規投稿を拒否）。
-        count = (
-            db.scalar(
-                select(func.count(AssistantMessage.id)).where(
-                    AssistantMessage.conversation_id == conv.id
-                )
-            )
-            or 0
-        )
-        if count >= _MAX_MESSAGES:
+        # 履歴はどのみち全件引くので、件数はその長さで見る（_history は絞り込みも
+        # ページングもしないため COUNT と必ず一致する。別途 COUNT を投げると往復が1回増える）。
+        history = _history(db, conv.id)
+        if len(history) >= _MAX_MESSAGES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Conversation message limit reached",
             )
-        history = _history(db, conv.id)
 
     # ユーザーメッセージを永続化する。
     db.add(
@@ -158,12 +183,11 @@ def chat(
     )
     db.commit()
 
-    products = [_item_out(p, db, reason) for p, reason in result.products]
     return AssistantChatOut(
         conversation_id=conv.id,
         source=result.source,
         reply=result.reply,
-        products=products,
+        products=_item_outs(db, result.products),
     )
 
 
@@ -189,30 +213,36 @@ def list_messages(
         .all()
     )
 
-    out: list[AssistantMessageOut] = []
-    for msg in messages:
-        products: list[RecommendationItemOut] = []
-        if msg.role == "assistant" and msg.product_ids:
-            # 保存順を維持しつつ商品を引き直す。
-            found = {
-                p.id: p
-                for p in db.query(Product)
-                .filter(Product.id.in_(msg.product_ids))
-                .all()
-            }
-            for pid in msg.product_ids:
-                product = found.get(pid)
-                # 生成後に非公開化された商品はカードから除外する（可視性の再確認）。
-                if product is None or product.status not in LISTED_STATUSES:
-                    continue
-                products.append(_item_out(product, db, None))
-        out.append(
-            AssistantMessageOut(
-                role=msg.role,
-                content=msg.content,
-                source=msg.source,
-                products=products,
-                created_at=msg.created_at,
-            )
+    # 商品と評価は全メッセージぶんを先に 1 回ずつ引く。メッセージごとに引くと、
+    # 会話上限 50（= assistant 行は最大 25）× 提案件数ぶんの往復になる。
+    # 非公開化された商品は _listed_products_by_ids のクエリ側で落ちるので、
+    # 見つからなければそのままカードから除かれる。
+    all_ids = [
+        pid
+        for msg in messages
+        if msg.role == "assistant"
+        for pid in (msg.product_ids or [])
+    ]
+    found = _listed_products_by_ids(db, all_ids)
+    ratings = _rating_map(db, set(found))
+
+    return [
+        AssistantMessageOut(
+            role=msg.role,
+            content=msg.content,
+            source=msg.source,
+            # 保存順を維持しつつ、いま公開中のものだけを並べる。
+            products=[
+                RecommendationItemOut(
+                    product=_to_product_out(
+                        found[pid], *ratings.get(pid, (None, 0))
+                    ),
+                    reason=None,
+                )
+                for pid in (msg.product_ids or [])
+                if msg.role == "assistant" and pid in found
+            ],
+            created_at=msg.created_at,
         )
-    return out
+        for msg in messages
+    ]

@@ -1,6 +1,6 @@
 'use client';
 
-import { MouseEvent, useState } from 'react';
+import { MouseEvent, memo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -11,9 +11,11 @@ import { onImageError } from '@/lib/productImage';
 import { withRedirect } from '@/lib/redirect';
 import { isLowStock, isSoldOut, PRODUCT_STATUS_META, SOLD_OUT_BADGE } from '@/lib/productStatus';
 import { truncateAtSentence, withWordBreaks } from '@/lib/wordBreak';
+import { chip } from '@/lib/buttonStyles';
 import Badge from '@/components/Badge';
 import ProductPrice from '@/components/ProductPrice';
 import RatingStars from '@/components/RatingStars';
+import Spinner from '@/components/Spinner';
 import StockLabel from '@/components/StockLabel';
 import { ArrowRightIcon, CartIcon, CheckCircleIcon } from '@/components/Icons';
 
@@ -54,18 +56,20 @@ const REASON_BUDGET = 24;
  * （トーストの器はパネルと下端・右端が重なって入力欄を数秒覆ううえ、
  *   パネルは aria-modal なのでトースト内のリンクにキーボードでも SR でも到達できない）。
  */
-export default function AssistantProductCard({
-  product,
-  reason,
-  onNavigate,
-}: AssistantProductCardProps) {
+/**
+ * カート投入の結果。成功・要ログイン・失敗は同時に成り立たないので 1 つの値で持つ。
+ * 独立した3つの真偽値にすると、型の上では 8 通り取れてしまい、
+ * ハンドラの先頭に「他方を潰す」リセット行を並べて手で排他を作ることになる
+ * （結果の種類を1つ足すたびに、全ハンドラのリセット行が増える）。
+ */
+type CartResult = { kind: 'added' } | { kind: 'login' } | { kind: 'error'; message: string };
+
+function AssistantProductCard({ product, reason, onNavigate }: AssistantProductCardProps) {
   const router = useRouter();
   const { user } = useAuth();
   const { count, refresh } = useCart();
   const [adding, setAdding] = useState(false);
-  const [added, setAdded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [needsLogin, setNeedsLogin] = useState(false);
+  const [result, setResult] = useState<CartResult | null>(null);
 
   const statusMeta = PRODUCT_STATUS_META[product.status];
   // 在庫切れは status ではなく stock で決まる（status は on_sale のまま）。
@@ -81,20 +85,21 @@ export default function AssistantProductCard({
     if (!user) {
       // ここで /login へ飛ばすとパネルが畳まれ、相談中の会話ごと視界から消える。
       // 遷移はユーザーが「ログイン」を押したときだけにする。
-      setNeedsLogin(true);
+      setResult({ kind: 'login' });
       return;
     }
-    setNeedsLogin(false);
-    setError(null);
     setAdding(true);
     try {
       await api.post('/cart/items', { product_id: product.id, quantity: 1 });
       await refresh();
       // 手応えは自動で消さない（PDP と同じ判断）。「入ったのか／いま何点か／
       // 次にどこへ行くか」が画面に残らないと、追加したこと自体を見失う。
-      setAdded(true);
+      setResult({ kind: 'added' });
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'カートへの追加に失敗しました');
+      setResult({
+        kind: 'error',
+        message: e instanceof ApiError ? e.message : 'カートへの追加に失敗しました',
+      });
     } finally {
       setAdding(false);
     }
@@ -110,7 +115,16 @@ export default function AssistantProductCard({
   const detailHref = `/products/${product.id}`;
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl bg-surface p-3 shadow-paper transition-shadow duration-base ease-standard hover:shadow-lift">
+    <div
+      // 計測はカードの器に1つだけ付ける（ProductCard.tsx と同じ鍵・同じ規律）。
+      // AnalyticsTracker が委譲と MutationObserver で拾うので、後からマウントされる
+      // このパネル内でも属性を置くだけで効く。付けないと AI 提案経由の表示・クリックだけが
+      // product_card の集計から欠落し、他の枠と同じ物差しで比べられなくなる。
+      data-track-click="product_card"
+      data-track-view="product_card"
+      data-track-props={JSON.stringify({ product_id: product.id, section: 'assistant' })}
+      className="flex flex-col gap-2 rounded-xl bg-surface p-3 shadow-paper transition-shadow duration-base ease-standard hover:shadow-lift"
+    >
       <div className="flex gap-3">
         <Link
           href={detailHref}
@@ -164,13 +178,7 @@ export default function AssistantProductCard({
       {/* mt-auto: カード高はグリッドのストレッチで揃うので、reason の有無で
           ボタン行の位置が上下しないよう下端に固定する。 */}
       <div className="mt-auto flex items-stretch gap-2">
-        <Link
-          href={detailHref}
-          onClick={onNavigate}
-          // 罫は brand-500。brand-200 は対 surface 1.48:1 で地との差が出ず、隣の brand 塗りの
-          // 「カートに追加」だけが押せる部品に見えていた（パネル内 chip とも濃度を揃える）。
-          className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1 rounded-full border border-brand-500 bg-surface px-3 text-body font-medium text-brand-700 transition-colors duration-fast ease-standard hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0 sm:py-2"
-        >
+        <Link href={detailHref} onClick={onNavigate} className={`${chip('action')} flex-1`}>
           商品を見る
           <ArrowRightIcon className="h-4 w-4" />
         </Link>
@@ -180,14 +188,10 @@ export default function AssistantProductCard({
             onClick={handleAddToCart}
             disabled={adding}
             aria-label={`${product.name}をカートに追加`}
-            className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-3 text-body font-medium text-white transition-colors duration-fast ease-standard hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0 sm:py-2"
+            className={`${chip('action', 'solid')} flex-1 gap-1.5`}
           >
             {adding ? (
-              <span
-                role="status"
-                aria-label="追加中"
-                className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
-              />
+              <Spinner label="追加中" />
             ) : (
               <>
                 <CartIcon className="h-4 w-4" />
@@ -210,7 +214,7 @@ export default function AssistantProductCard({
         )}
       </div>
 
-      {added && (
+      {result?.kind === 'added' && (
         <p
           role="status"
           className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-brand-700"
@@ -227,7 +231,7 @@ export default function AssistantProductCard({
         </p>
       )}
 
-      {needsLogin && (
+      {result?.kind === 'login' && (
         <p role="status" className="text-caption text-ink-muted">
           カートに入れるにはログインが必要です。
           <button
@@ -240,7 +244,21 @@ export default function AssistantProductCard({
         </p>
       )}
 
-      {error && <p role="alert" className="text-caption text-critical-700">{error}</p>}
+      {result?.kind === 'error' && (
+        <p role="alert" className="text-caption text-critical-700">
+          {result.message}
+        </p>
+      )}
     </div>
   );
 }
+
+/**
+ * memo 境界。カードを描く AssistantPanel は入力欄の値も同じ state に持つので、
+ * 相談文を1文字打つたびにメッセージ列ごと再描画される。カードは商品名の語分割
+ * （withWordBreaks = Intl.Segmenter）と reason の文丸めを毎回やり直すので、
+ * 30字打てば「30回 × 画面上の全カード」ぶんの無駄になる。
+ * props は messages state 内のオブジェクトと useCallback 済みの関数で同一性が保たれるため、
+ * 比較関数は要らない（ProductCard.tsx と同じ判断）。
+ */
+export default memo(AssistantProductCard);

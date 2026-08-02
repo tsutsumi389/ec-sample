@@ -14,9 +14,8 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from app.config import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL
 from app.models import LISTED_STATUSES, Product, ProductEmbedding
 from app.services import embedding, llm_catalog, recommendation
 
@@ -200,6 +199,9 @@ def _vector_candidates(db: Session, query_vec: list[float], limit: int) -> list[
         select(Product)
         .join(ProductEmbedding, ProductEmbedding.product_id == Product.id)
         .where(Product.status.in_(LISTED_STATUSES))
+        # カタログ行が product.category.name を読む（llm_catalog.catalog_line）。
+        # 付けないと候補のカテゴリ数ぶん遅延ロードが同期パスに乗る。
+        .options(selectinload(Product.category))
         .order_by(ProductEmbedding.embedding.cosine_distance(query_vec))
         .limit(limit)
     )
@@ -231,40 +233,35 @@ def _keyword_candidates(db: Session, keyword_text: str, limit: int) -> list[Prod
     stmt = (
         select(Product)
         .where(Product.status.in_(LISTED_STATUSES), or_(*conditions))
+        .options(selectinload(Product.category))
         .order_by(Product.id)
         .limit(limit)
     )
     return list(db.execute(stmt).scalars().all())
 
 
-def _embed_query(query_text: str) -> list[float] | None:
-    """クエリを埋め込む。失敗（Ollama 未起動/未pull 等）時は None（呼び出し側で握る）。"""
-    text = (query_text or "").strip()
-    if not text:
-        return None
-    try:
-        # embedding サービスの埋め込み処理を再利用する。
-        vectors = embedding._embed_texts([text])
-    except Exception as exc:  # noqa: BLE001 - 埋め込み失敗はキーワードのみで継続
-        logger.warning(
-            "クエリ埋め込みに失敗しました（キーワード候補で継続）: %s / "
-            "ホストの Ollama が起動しているか、対象モデルが pull 済みか確認してください",
-            exc,
-        )
-        return None
-    return vectors[0] if vectors else None
+@dataclass
+class Candidates:
+    """候補抽出の結果。フォールバックがキーワード検索を投げ直さずに済むよう分けて持つ。"""
+
+    # ベクトル近傍とキーワードをマージした候補（LLM に渡す順）。
+    merged: list[Product] = field(default_factory=list)
+    # キーワード検索だけのヒット。フォールバックの top-4 はここから採る。
+    keyword_hits: list[Product] = field(default_factory=list)
 
 
-def get_candidates(
-    db: Session, *, query_text: str, keyword_text: str
-) -> list[Product]:
+def get_candidates(db: Session, *, query_text: str, keyword_text: str) -> Candidates:
     """ハイブリッド候補抽出（ベクトル近傍 top-20 + キーワード top-10 をマージ）。
 
     ベクトルは query_text（マルチターン文脈）を埋め込んで近傍検索、キーワードは
     keyword_text（新メッセージ）で ILIKE する。重複は除去し、ベクトル候補を優先順で
     先に並べる。埋め込みが引けない環境ではキーワード候補のみになる。
     """
-    query_vec = _embed_query(query_text)
+    # 埋め込みは embedding.embed_query に任せる（クエリ側プレフィックスの付与・次元検査・
+    # 失敗時の警告ログを持つ唯一の入口。private の _embed_texts を直接叩くと、商品側の
+    # EMBED_DOC_PREFIX と非対称にするモデルカードの前提だけが静かに落ちる）。
+    stripped = (query_text or "").strip()
+    query_vec = embedding.embed_query(stripped) if stripped else None
     vector_hits = (
         _vector_candidates(db, query_vec, _VECTOR_CANDIDATE_LIMIT)
         if query_vec is not None
@@ -279,7 +276,7 @@ def get_candidates(
             continue
         seen.add(product.id)
         merged.append(product)
-    return merged
+    return Candidates(merged=merged, keyword_hits=keyword_hits)
 
 
 def _build_messages(
@@ -343,16 +340,26 @@ def _build_user_context_lines(db: Session, user_id: int) -> list[str]:
         return []
 
 
-def _fallback(db: Session, keyword_text: str) -> AssistantResult:
+def _fallback(
+    db: Session, keyword_text: str, *, known_hits: list[Product] | None = None
+) -> AssistantResult:
     """キーワード検索 top-4 + 定型文のフォールバック応答。
 
     キーワードが 1 件もヒットしない場合は人気順 top-4 に落とす（既存レコメンドの
     人気順フォールバックと同じ思想。商品が空のままだと案内として成立しないため）。
     ここは generate_reply の最終防衛線なので、検索が失敗しても例外を外に漏らさず
     （商品なしの）定型応答を返す。API が 500 を返さないことを保証する。
+
+    known_hits は候補抽出で既に引き終えたキーワードヒット。渡されたらそれを使い、
+    同じ ILIKE（最大 8 トークン × 2 列の OR ＝ 全表走査）を投げ直さない。候補抽出
+    そのものが例外で落ちた経路だけが None で来て、ここで改めて検索する。
     """
     try:
-        products = _keyword_candidates(db, keyword_text, _FALLBACK_LIMIT)
+        products = (
+            known_hits[:_FALLBACK_LIMIT]
+            if known_hits is not None
+            else _keyword_candidates(db, keyword_text, _FALLBACK_LIMIT)
+        )
         if not products:
             products = recommendation.get_popular_products(db, _FALLBACK_LIMIT)
     except Exception as exc:  # noqa: BLE001 - フォールバックも失敗したら商品なしで返す
@@ -378,40 +385,30 @@ def generate_reply(
     好みを踏まえた提案をさせる（ゲスト会話では None のままで従来どおり）。
     例外はすべて握ってフォールバックへ落とすため、この関数は常に応答を返す。
     """
-    import ollama  # 遅延 import（Ollama 未導入環境でも起動時に落とさない）
-
+    # 候補抽出まで到達していれば、フォールバックは同じ ILIKE を投げ直さずに済む。
+    # ここで落ちた（＝候補抽出自体が例外）ときだけ None のままで、_fallback が引き直す。
+    candidates: Candidates | None = None
     try:
         query_text = build_query_text(history, user_message)
         candidates = get_candidates(
             db, query_text=query_text, keyword_text=user_message
         )
-        if not candidates:
+        if not candidates.merged:
             # 候補ゼロ（埋め込みなし & キーワード不一致）。定型フォールバック。
-            return _fallback(db, user_message)
+            # キーワードヒットも空と分かっているので、そのまま渡して再検索を省く。
+            return _fallback(db, user_message, known_hits=candidates.keyword_hits)
 
         # ログインユーザーなら行動履歴をプロンプトに注入する（取得失敗時は空で継続）。
         user_context_lines = (
             _build_user_context_lines(db, user_id) if user_id is not None else None
         )
         messages, sid_to_product = _build_messages(
-            db, history, candidates, user_message, user_context_lines
+            db, history, candidates.merged, user_message, user_context_lines
         )
 
-        client = ollama.Client(host=OLLAMA_BASE_URL, timeout=_CHAT_TIMEOUT)
-        response = client.chat(
-            model=OLLAMA_CHAT_MODEL,
-            messages=messages,
-            format=_AssistantResponse.model_json_schema(),
-            options={"temperature": 0.3},
+        parsed = llm_catalog.chat_json(
+            _AssistantResponse, messages, timeout=_CHAT_TIMEOUT, temperature=0.3
         )
-        # ollama>=0.4 は typed オブジェクト / 旧版は dict。両対応で content を取る。
-        message = getattr(response, "message", None)
-        if message is None:
-            message = response["message"]
-        content = getattr(message, "content", None)
-        if content is None:
-            content = message["content"]
-        parsed = _AssistantResponse.model_validate_json(content)
 
         # ハルシネーション対策: 候補集合に存在する SID のものだけ採用（共通ロジック）。
         adopted = llm_catalog.match_products(
@@ -432,4 +429,8 @@ def generate_reply(
         # DB セッションは呼び出し側（ルーター）の所有。ここで rollback すると同一トランザクション
         # で pending の会話・ユーザーメッセージまで消えてしまうため rollback しない。
         # Ollama 例外は DB トランザクションを汚さない（ネットワーク呼び出しのため）。
-        return _fallback(db, user_message)
+        return _fallback(
+            db,
+            user_message,
+            known_hits=candidates.keyword_hits if candidates is not None else None,
+        )

@@ -15,7 +15,6 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.config import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL
 from app.models import (
     LISTED_STATUSES,
     CartItem,
@@ -45,6 +44,10 @@ _BEHAVIOR_WEIGHTS = {
 
 # LLM に渡す候補件数。reason の最大長・カタログ整形・SID 照合は llm_catalog に集約。
 _CANDIDATE_LIMIT = 20
+
+# レコメンド生成の Ollama タイムアウト（秒）。ユーザーの応答を待たせない background 生成なので
+# アシスタントのチャット（60 秒）より長く取る。
+_GENERATION_TIMEOUT = 120
 
 # プロフィールに反映する閲覧履歴の直近件数。古い閲覧まで無限に効かせず直近に絞る。
 _VIEW_LIMIT = 20
@@ -515,8 +518,6 @@ def generate_for_user(db_session_factory: sessionmaker, user_id: int) -> None:
     state を generating にし、候補取得 → Ollama chat → 検証 → UserRecommendation を
     丸ごと差し替え → state ready。例外時は state failed + 警告ログ。
     """
-    import ollama  # 遅延 import（Ollama 未導入環境でも起動時に落とさない）
-
     db = db_session_factory()
     try:
         profile = build_profile(db, user_id)
@@ -534,21 +535,9 @@ def generate_for_user(db_session_factory: sessionmaker, user_id: int) -> None:
 
         messages, sid_to_product = _build_messages(db, profile, candidates)
 
-        client = ollama.Client(host=OLLAMA_BASE_URL, timeout=120)
-        response = client.chat(
-            model=OLLAMA_CHAT_MODEL,
-            messages=messages,
-            format=_LLMRecResponse.model_json_schema(),
-            options={"temperature": 0.3},
+        parsed = llm_catalog.chat_json(
+            _LLMRecResponse, messages, timeout=_GENERATION_TIMEOUT, temperature=0.3
         )
-        # ollama>=0.4 は typed オブジェクト / 旧版は dict。両対応で content を取る。
-        message = getattr(response, "message", None)
-        if message is None:
-            message = response["message"]
-        content = getattr(message, "content", None)
-        if content is None:
-            content = message["content"]
-        parsed = _LLMRecResponse.model_validate_json(content)
 
         # ハルシネーション対策: 候補集合に存在する SID のものだけ採用（共通ロジック）。
         adopted = llm_catalog.match_products(

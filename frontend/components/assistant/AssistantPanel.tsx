@@ -16,8 +16,10 @@ import {
   PaperAirplaneIcon,
   XMarkIcon,
 } from '@/components/Icons';
-import { btn, iconBtn } from '@/lib/buttonStyles';
+import { btn, chip, iconBtn } from '@/lib/buttonStyles';
 import { trapTab } from '@/lib/focusTrap';
+import { fetchCategories } from '@/lib/categories';
+import { withWordBreaks } from '@/lib/wordBreak';
 import AssistantProductCard from '@/components/assistant/AssistantProductCard';
 
 // 会話IDの永続化キー。端末単位で会話を継続する（未ログインでも利用可）。
@@ -43,16 +45,11 @@ const SUGGESTIONS = [
   '新生活の準備におすすめ',
 ];
 
-// 人気カテゴリのショートカット。タップで「〇〇を見たい」を入力欄へ挿入する。
-const CATEGORY_SHORTCUTS = ['キッチン用品', '食器・グラス', '掃除・洗濯', '収納・整理', 'インテリア'];
+// ウェルカムに並べるカテゴリ chip の数。多すぎると chip の列が挨拶を押し下げる。
+const MAX_CATEGORY_SHORTCUTS = 5;
 
-// 丸型 chip の共通クラス。ウェルカムのサジェスト chip・カテゴリ chip と、失敗・0件で
-// 行き止まったときのアクション行を同じ造形で揃える（同じ「次の一手」なのに見えが割れると
-// 押せる部品と分からない）。
-// 罫は brand-500（対 surface 4.37:1 / 対 page 3.61:1）。brand-200 は対 surface 1.48:1 で
-// 地との差が 1.21 しかなく、押せる部品の輪郭として成立しない（WCAG 1.4.11 は 3:1 が下限）。
-const CHIP_CLASS =
-  'inline-flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-full border border-brand-500 bg-surface px-3.5 py-1.5 text-caption text-brand-700 transition-colors duration-fast ease-standard hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:min-h-0';
+// 丸型 chip の造形は lib/buttonStyles.ts が持つ（提案カードの操作行と同じ源）。
+const CHIP_CLASS = chip();
 
 // はじめての方向けの簡単な使い方ガイド。
 const USAGE_GUIDE = [
@@ -171,14 +168,16 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   // 「新しい会話」の確認ダイアログ。履歴の消去は破壊的操作なので確認を挟む（サイト内の他4箇所と同じ扱い）。
   const [resetOpen, setResetOpen] = useState(false);
-  // 継続中の会話IDを持っているか。ref だけだと再描画されないので state にも映す。
-  // 「新しい会話」ボタンの表示条件は「画面に消すものがあるか」ではなく「消せる会話があるか」。
+  // 継続中の会話ID。送信先であり、「新しい会話」ボタンの表示条件でもある。
+  // ボタンの表示条件は「画面に消すものがあるか」ではなく「消せる会話があるか」——
   // 履歴復元が 404 以外（500・通信断）で失敗すると messages は空のまま会話IDだけが残るので、
   // messages.length だけで判定するとその会話を捨てる手段が画面から消える。
-  const [hasConversation, setHasConversation] = useState(false);
-
-  // 送信時に最新の会話IDを参照するため ref で保持（stale closure 回避）。
-  const conversationIdRef = useRef<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  // ウェルカムに出すカテゴリ chip。固定文字列で持っていた頃は、シードの実カテゴリ
+  // （キッチン家電・生活家電・日用品・アウトドア・ファッション小物）と1つも一致せず、
+  // 押すと店に無い分類名で相談文が組まれてキーワード候補が必ず空振りしていた。
+  // カテゴリの唯一の取得口（進行中の Promise を共有して往復を1回に畳む）から引く。
+  const [categories, setCategories] = useState<string[]>([]);
   // 会話の世代。「新しい会話」を押すたびに増やし、飛行中の send() の結果を捨てる目印にする。
   // これが無いと、送信中にリセットしても応答が返った時点で会話IDが復活し、
   // 空のスレッドに「問いの無い回答」だけが積まれる。
@@ -191,12 +190,11 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
   // ユーザーが最下部付近を見ているか。自動スクロール要否の判定に使う。
   const atBottomRef = useRef(true);
 
-  // 会話IDの更新点をここ1箇所に集約する。ref（送信時の参照先）・localStorage（次回オープンの復元）・
-  // state（「新しい会話」ボタンの表示条件）の3つがずれると、消したはずの会話へ追記される／
+  // 会話IDの更新点をここ1箇所に集約する。state（送信先・ボタンの表示条件）と
+  // localStorage（次回オープンの復元）がずれると、消したはずの会話へ追記される／
   // 会話を捨てる手段が画面から消える、といった食い違いがそのまま表に出る。
   const applyConversationId = useCallback((id: string | null) => {
-    conversationIdRef.current = id;
-    setHasConversation(id !== null);
+    setConversationId(id);
     if (id) storeConversationId(id);
     else clearStoredConversationId();
   }, []);
@@ -217,6 +215,22 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
     el.focus();
     const end = el.value.length;
     el.setSelectionRange(end, end);
+  }, []);
+
+  // カテゴリ chip の中身を取りに行く。失敗したら chip の行ごと出さない
+  // （サジェスト chip と使い方ガイドは残るので行き止まりにはならない）。
+  useEffect(() => {
+    let cancelled = false;
+    fetchCategories()
+      .then((list) => {
+        if (!cancelled) {
+          setCategories(list.slice(0, MAX_CATEGORY_SHORTCUTS).map((c) => c.name));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // マウント（＝パネルオープン）時に履歴を復元する。
@@ -316,7 +330,9 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
       setLiveMessage('送信しました。回答を作成しています');
 
       try {
-        const res = await api.assistant.chat(conversationIdRef.current, trimmed);
+        // conversationId は state から読む。send は必ずイベントハンドラ経由で呼ばれ、
+        // その時点の描画のクロージャが渡るので、ID が古いことはない。
+        const res = await api.assistant.chat(conversationId, trimmed);
         if (sessionRef.current !== session) return;
         applyConversationId(res.conversation_id);
         // 型上は必ず配列だが、古いバックエンドでの欠損に備えて防御的に畳んでおく。
@@ -341,18 +357,15 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
         // 現在有効な別の会話IDを localStorage から消してしまう。
         if (sessionRef.current !== session) return;
         // 会話上限・API エラー時もメッセージとして表示し、throw しない。
+        const apiErr = err instanceof ApiError ? err : null;
         const message =
-          err instanceof ApiError
-            ? err.message
-            : '申し訳ありません。通信に失敗しました。しばらくしてから再度お試しください。';
+          apiErr?.message ??
+          '申し訳ありません。通信に失敗しました。しばらくしてから再度お試しください。';
         // 会話上限（400）だけは「新しい会話」への案内を出したいので種別を分ける。
-        const errorKind: 'limit' | 'other' =
-          err instanceof ApiError && err.status === 400 ? 'limit' : 'other';
+        const errorKind: 'limit' | 'other' = apiErr?.status === 400 ? 'limit' : 'other';
         // 会話が無効（404）なら会話IDを捨てる。次回送信が新規会話に落ち、
         // 無効なIDのまま永久に失敗し続けるループを断つ（履歴復元側と扱いを揃える）。
-        if (err instanceof ApiError && err.status === 404) {
-          applyConversationId(null);
-        }
+        if (apiErr?.status === 404) applyConversationId(null);
         // 失敗時はサーバー側に何も保存されていない（chat は成功時にしか commit しない）ので、
         // 楽観表示した user バブルを取り消して表示とサーバー履歴を一致させ、
         // 入力文を戻してそのまま再送できるようにする（書きかけがあれば上書きしない）。
@@ -382,7 +395,7 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
         }
       }
     },
-    [sending, applyConversationId],
+    [sending, conversationId, applyConversationId],
   );
 
   const handleSubmit = (e: FormEvent) => {
@@ -396,11 +409,6 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
   const handleSuggestion = (text: string) => {
     setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
     inputRef.current?.focus();
-  };
-
-  // カテゴリショートカット：該当カテゴリを見たい旨を入力欄へ挿入する。
-  const handleCategory = (name: string) => {
-    handleSuggestion(`${name}のおすすめを見たい`);
   };
 
   // 「新しい会話を始める」：localStorage の会話IDを破棄して画面をリセットする。
@@ -464,9 +472,9 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
   // バブルの行長は .assistant-bubble（globals.css §6）がスクロール領域の実幅から決める。
   // 表示サイズ（normal/wide/full）で分岐させないのは、同じ幅でも size が違えば行長が変わる
   // ような二重の基準を作らないため。
-  // 商品リストの列数は auto-fill がグリッド実幅から決める（列幅の下限 20rem は
-  // 「カートに追加」が1行に収まる寸法）。normal でも広ければそのぶん列が増える。
-  const productLayout = 'assistant-product-grid';
+  // 商品リストの列数は auto-fill がグリッド実幅から決める（globals.css の
+  // .assistant-product-grid。列幅の下限 20rem は「カートに追加」が1行に収まる寸法）。
+  // normal でも広ければそのぶん列が増える。
 
   // ルートの tabIndex={-1} は、本文のドラッグ選択・バブル余白やカードの空き部分のタップで
   // activeElement が body へ落ちて onKeyDown が発火しなくなる（Escape も Tab トラップも死ぬ）
@@ -503,7 +511,7 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
         {/* 捨てられる会話が無い（履歴も会話IDも無い）ときだけ出さない。復元に失敗して画面が空でも
             会話IDが残っていれば出す。送信中も無効化しない（世代ガードで整合が取れる）。
             btn('ghost','sm') は h-9 だが .hit（globals.css §5）が ±6px 広げるので実効48px。 */}
-        {(messages.length > 0 || hasConversation) && (
+        {(messages.length > 0 || conversationId !== null) && (
           <button
             type="button"
             onClick={() => setResetOpen(true)}
@@ -565,39 +573,37 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
                     {WELCOME_MESSAGE}
                   </div>
 
-                  <div className="space-y-2">
-                    {/* 小見出しは和文の太字ゴシックではなく、サイト共通の eyebrow 体系
-                        （Footer の columnHeadClass・注文履歴の ledgerHeadClass と同じ語彙）で組む。 */}
-                    <p className="text-eyebrow uppercase font-num text-ink-muted">SUGGESTED</p>
-                    <div className="flex flex-wrap gap-2">
-                      {SUGGESTIONS.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => handleSuggestion(s)}
-                          className={CHIP_CLASS}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <p className="text-eyebrow uppercase font-num text-ink-muted">CATEGORIES</p>
-                    <div className="flex flex-wrap gap-2">
-                      {CATEGORY_SHORTCUTS.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => handleCategory(c)}
-                          className={CHIP_CLASS}
-                        >
-                          {c}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  {/* 小見出しは和文の太字ゴシックではなく、サイト共通の eyebrow 体系
+                      （Footer の columnHeadClass・注文履歴の ledgerHeadClass と同じ語彙）で組む。
+                      2つの chip 群は「見出し＋粒の羅列」で造形が同じなので、器を1つにして
+                      配列と挿入文だけを差し替える（別々に書くと chip の造形を直すとき
+                      片方だけ直った状態が生まれる）。カテゴリは取得できたときだけ出す。 */}
+                  {[
+                    { label: 'SUGGESTED', items: SUGGESTIONS, toText: (s: string) => s },
+                    {
+                      label: 'CATEGORIES',
+                      items: categories,
+                      toText: (c: string) => `${c}のおすすめを見たい`,
+                    },
+                  ]
+                    .filter((group) => group.items.length > 0)
+                    .map(({ label, items, toText }) => (
+                      <div key={label} className="space-y-2">
+                        <p className="text-eyebrow uppercase font-num text-ink-muted">{label}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {items.map((item) => (
+                            <button
+                              key={item}
+                              type="button"
+                              onClick={() => handleSuggestion(toText(item))}
+                              className={CHIP_CLASS}
+                            >
+                              {withWordBreaks(item)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
 
                   {/* 地は surface。面の階層は surface > tile > page > sunken の4段しかないので、
                       surface/70 のような5段目の中間色をここだけ作らない。 */}
@@ -636,8 +642,6 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
                       isLast &&
                       msg.role === 'assistant' &&
                       (msg.isError || (msg.source === 'fallback' && msg.products.length === 0));
-                    // 再送する文言はエラーバブル自身が持つ（messages からは取り消し済みで拾えない）。
-                    const retryText = msg.retryText;
                     return msg.role === 'user' ? (
                       <li key={msg.id}>
                         {/* sr-only は position:absolute なので、直下に置いても flex の配置に響かない。 */}
@@ -665,7 +669,7 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
                         </div>
                         {msg.products.length > 0 && (
                           <div
-                            className={productLayout}
+                            className="assistant-product-grid"
                             role="group"
                             aria-label={`提案商品 ${msg.products.length}件`}
                           >
@@ -692,10 +696,11 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
                                 新しい会話を始める
                               </button>
                             )}
-                            {retryText && (
+                            {/* 再送する文言はエラーバブル自身が持つ（messages からは取り消し済みで拾えない）。 */}
+                            {msg.retryText && (
                               <button
                                 type="button"
-                                onClick={() => void send(retryText)}
+                                onClick={() => void send(msg.retryText!)}
                                 className={CHIP_CLASS}
                               >
                                 もう一度聞く
@@ -778,12 +783,10 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
             className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white hover:bg-brand-700 aria-disabled:cursor-not-allowed aria-disabled:bg-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           >
             {sending ? (
-              // 中身が空のまま新規挿入される live 領域は読まれない組み合わせが多いので通知役は持たせない
-              // （状態通知は上の status 領域へ一本化する）。地が brand-600 のまま保たれる利点もある。
-              <span
-                aria-hidden="true"
-                className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
-              />
+              // label={null} で aria-hidden にする。中身が空のまま新規挿入される live 領域は
+              // 読まれない組み合わせが多いので通知役は持たせない（状態通知は上の status 領域へ
+              // 一本化する）。軌道は currentColor なので brand 塗りの中では白になる。
+              <Spinner label={null} className="h-5 w-5" />
             ) : (
               <PaperAirplaneIcon className="h-5 w-5" />
             )}
