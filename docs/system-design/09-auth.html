@@ -60,7 +60,7 @@
       <li>認可は role 文字列で判定（user / admin）。細粒度の権限は無い</li>
       <li>リフレッシュトークンの仕組みは無い（有効期限 24h 固定）</li>
     </ul>
-    <div class="note warn"><span class="lbl">設計リスク</span><p style="margin:.3em 0 0">JWT 署名鍵 <code>SECRET_KEY</code> は環境変数から取得するが、未設定時は <code>"dev-secret-key-change-in-production"</code> というハードコードのデフォルト値にフォールバックする。本番で環境変数未設定だと既知の弱鍵で署名される。</p></div>
+    <div class="note"><span class="lbl">署名鍵</span><p style="margin:.3em 0 0">JWT 署名鍵 <code>SECRET_KEY</code> は環境変数からのみ取得し、既定値へのフォールバックは持たない。未設定・32文字未満・既知の弱い値（<code>dev-secret</code> 等の前方一致）のいずれかなら <code>app/auth.py</code> の <code>_load_secret_key()</code> が起動時に <code>RuntimeError</code> を投げて落とす（fail closed）。鍵は <code>make secret</code> がデプロイごとに <code>openssl rand -hex 32</code> で <code>.env</code> に生成し、compose がそこから読む。<code>make up</code> / <code>make up-d</code> / <code>make reset</code> は未生成時のみ自動で走る。<br>HS256 は対称鍵なので、鍵の共有は管理者トークンの発行権限の共有と同義。しかも漏洩時はパスワード変更で締め出せない——失効判定は <code>iat</code> と <code>password_changed_at</code> の比較であり <code>iat</code> は発行側が選べるため、復旧手段は鍵のローテーションだけになる。</p></div>
   </section>
 
   <nav class="pager">

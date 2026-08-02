@@ -535,9 +535,15 @@ def build_because_you_watched(ctx: HomeContext) -> list[Lane]:
     """
     if not ctx.anchor_ids:
         return []
+    # アンカーも status で絞る。ゲストの anchor_ids は `?recently_viewed_ids=` の値が
+    # そのまま入る＝任意の商品IDを外から指定できるため、絞らないと draft（未公開）や
+    # archived の商品名が見出し「「〇〇」を見たあなたに」に載って外へ出る。
+    # 近傍側（get_neighbors_of）は絞られているがアンカー自身は見られていない。
     anchors = {
         p.id: p
-        for p in ctx.db.query(Product).filter(Product.id.in_(ctx.anchor_ids)).all()
+        for p in ctx.db.query(Product)
+        .filter(Product.id.in_(ctx.anchor_ids), Product.status.in_(LISTED_STATUSES))
+        .all()
     }
     lanes: list[Lane] = []
     for pid in ctx.anchor_ids:

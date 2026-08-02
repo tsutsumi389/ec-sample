@@ -22,7 +22,10 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://ec:ecpass@db:5432/ecdb
-      SECRET_KEY: dev-secret-key-change-in-production
+      # JWT の署名鍵。compose が同ディレクトリの .env から読む（`make secret` が生成）。
+      # ここに値を書かないこと——リポジトリに入った鍵は共有された時点で管理者トークンの
+      # 偽造を許す。未設定なら backend が起動時に fail closed する（app/auth.py）。
+      SECRET_KEY: ${SECRET_KEY}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       OLLAMA_EMBED_MODEL: embeddinggemma:latest
       OLLAMA_CHAT_MODEL: gemma4:latest
