@@ -11,9 +11,35 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
+
+# HS256 は対称鍵。検証鍵と署名鍵が同一なので、鍵を知ることは「管理者トークンを発行できる」
+# ことと同義になる。既定値へのフォールバックを置くと、リポジトリを見た誰でも sub=1（シードの
+# 管理者）のトークンを偽造でき、しかもパスワード変更では締め出せない——失効判定
+# (_resolve_user_from_token) は iat と password_changed_at の比較であり、iat は発行側が
+# 選べるため。よって未設定・弱い鍵では **起動させない**（fail closed）。
+_MIN_SECRET_LENGTH = 32
+# 過去に配布された既定値と、ありがちな仮置き。前方一致で弾く。
+_WEAK_SECRET_PREFIXES = ("dev-secret", "changeme", "change-me", "secret", "test", "password")
+_SECRET_KEY_HELP = "`make secret` で .env に生成できます（起動時は make up が自動で作ります）"
+
+
+def _load_secret_key() -> str:
+    secret = os.environ.get("SECRET_KEY", "").strip()
+    if not secret:
+        raise RuntimeError(f"SECRET_KEY が未設定です。{_SECRET_KEY_HELP}")
+    if len(secret) < _MIN_SECRET_LENGTH:
+        raise RuntimeError(
+            f"SECRET_KEY が短すぎます（{len(secret)} 文字 / 最低 {_MIN_SECRET_LENGTH} 文字）。"
+            f"{_SECRET_KEY_HELP}"
+        )
+    if secret.lower().startswith(_WEAK_SECRET_PREFIXES):
+        raise RuntimeError(f"SECRET_KEY が既知の弱い値です。{_SECRET_KEY_HELP}")
+    return secret
+
+
+SECRET_KEY = _load_secret_key()
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer()
@@ -41,7 +67,14 @@ def create_access_token(user_id: int) -> str:
 
 def decode_access_token(token: str) -> dict:
     try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # create_access_token は3つとも必ず載せる。require で必須化しておくと、
+        # クレームを削ったトークンが下流の None チェック頼みにならずここで落ちる。
+        return jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"require": ["exp", "iat", "sub"]},
+        )
     except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

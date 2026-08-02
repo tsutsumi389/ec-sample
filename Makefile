@@ -2,7 +2,7 @@
 COMPOSE := docker compose
 
 .PHONY: help up up-d build down stop restart logs logs-backend logs-frontend ps \
-        backend-shell frontend-shell db-shell lint reset clean fonts \
+        backend-shell frontend-shell db-shell lint reset clean fonts secret \
         migrate migrate-new migrate-down migrate-status
 
 help: ## このヘルプを表示
@@ -18,11 +18,21 @@ fonts: frontend/app/fonts.css ## Webフォントを取得（未取得のとき�
 frontend/app/fonts.css:
 	node frontend/scripts/fetch-fonts.mjs
 
+## --- シークレット ------------------------------------------------
+# JWT の署名鍵はデプロイごとに違う乱数でなければならない。HS256（対称鍵）なので、
+# リポジトリに入った鍵は共有された時点で誰でも管理者トークンを偽造できる。
+# compose は同ディレクトリの .env を自動で読むので、無ければここで作る（.gitignore 済み）。
+secret: .env ## JWT 署名鍵を .env に生成（未生成のときだけ走る）
+
+.env:
+	@umask 077 && printf 'SECRET_KEY=%s\n' "$$(openssl rand -hex 32)" > $@
+	@echo "SECRET_KEY を $@ に生成しました（コミットしないこと）"
+
 ## --- 起動・停止 --------------------------------------------------
-up: fonts ## ビルドしてフォアグラウンドで起動（ログを表示）
+up: fonts secret ## ビルドしてフォアグラウンドで起動（ログを表示）
 	$(COMPOSE) up --build
 
-up-d: fonts ## ビルドしてバックグラウンドで起動
+up-d: fonts secret ## ビルドしてバックグラウンドで起動
 	$(COMPOSE) up --build -d
 
 build: ## イメージをビルド
@@ -82,7 +92,7 @@ lint: ## フロントエンドの Lint を実行
 	$(COMPOSE) exec frontend npm run lint
 
 ## --- クリーンアップ ----------------------------------------------
-reset: ## DB を含めて全て削除して初期状態に戻す（シードデータ再投入）
+reset: secret ## DB を含めて全て削除して初期状態に戻す（シードデータ再投入）
 	$(COMPOSE) down -v
 	$(COMPOSE) up --build -d
 
