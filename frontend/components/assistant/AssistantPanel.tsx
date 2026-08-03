@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { FormEvent, MouseEvent, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
@@ -57,6 +57,43 @@ const USAGE_GUIDE = [
   'ぴったりの商品をAIがご提案します',
   '気になった商品はそのままカートへ',
 ];
+
+/**
+ * ウェルカムの「見出し＋ chip の羅列」。サジェストとカテゴリで造形が同じなので器を1つにする
+ * （別々に書くと chip の造形を直すとき片方だけ直った状態が生まれる）。
+ * 小見出しは和文の太字ゴシックではなく、サイト共通の eyebrow 体系
+ * （Footer の columnHeadClass・注文履歴の ledgerHeadClass と同じ語彙）で組む。
+ *
+ * memo 境界でもある。ウェルカムが出ているのは「最初の相談文を打ち込んでいる最中」そのもので、
+ * 文字数カウンタがあるため1打鍵ごとに必ず再描画が走る。中身は withWordBreaks
+ * （= Intl.Segmenter の語分割）を chip の数だけ通すので、memo が無いと 30 字打つあいだに
+ * 11 語 × 30 回ぶんの語分割をやり直すことになる（AssistantProductCard と同じ判断）。
+ * items は定数か state、onPick は useCallback 済みで同一性が保たれる。
+ */
+const ChipGroup = memo(function ChipGroup({
+  label,
+  items,
+  onPick,
+}: {
+  label: string;
+  items: string[];
+  onPick: (item: string) => void;
+}) {
+  // 取得に失敗したカテゴリなど、粒が無いときは見出しごと出さない。
+  if (items.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <p className="text-eyebrow uppercase font-num text-ink-muted">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <button key={item} type="button" onClick={() => onPick(item)} className={CHIP_CLASS}>
+            {withWordBreaks(item)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+});
 
 // パネル表示サイズ。normal→wide→full の順に主要作業領域を広げる。
 type PanelSize = 'normal' | 'wide' | 'full';
@@ -257,7 +294,7 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
           applyConversationId(null);
         }
         // それ以外のエラーは黙ってウェルカム表示にフォールバック（次回送信で継続を試みる）。
-        // 会話IDは保持したままなので、hasConversation により「新しい会話」で捨てられる。
+        // 会話IDは保持したままなので、conversationId を見ている「新しい会話」で捨てられる。
       })
       .finally(() => {
         if (!cancelled) setInitializing(false);
@@ -406,10 +443,17 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
   // サジェスト chip タップ：入力欄へ**追記**してフォーカス（自動送信はしない）。
   // 上書きにすると、書きかけの相談文が chip を1つ触っただけで消える。追記なら
   // 「ギフトを探す」＋「予算5,000円で探す」のように条件を重ねられる。
-  const handleSuggestion = (text: string) => {
+  // useCallback は ChipGroup の memo 境界のため（打鍵ごとに作り直すと bail out しない）。
+  const handleSuggestion = useCallback((text: string) => {
     setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
     inputRef.current?.focus();
-  };
+  }, []);
+
+  // カテゴリ chip タップ：分類名をそのまま入れず、相談文の形にして追記する。
+  const handleCategoryPick = useCallback(
+    (name: string) => handleSuggestion(`${name}のおすすめを見たい`),
+    [handleSuggestion],
+  );
 
   // 「新しい会話を始める」：localStorage の会話IDを破棄して画面をリセットする。
   // 世代を進めることで、飛行中の send() が返ってきても会話IDを書き戻さないようにする。
@@ -472,9 +516,6 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
   // バブルの行長は .assistant-bubble（globals.css §6）がスクロール領域の実幅から決める。
   // 表示サイズ（normal/wide/full）で分岐させないのは、同じ幅でも size が違えば行長が変わる
   // ような二重の基準を作らないため。
-  // 商品リストの列数は auto-fill がグリッド実幅から決める（globals.css の
-  // .assistant-product-grid。列幅の下限 20rem は「カートに追加」が1行に収まる寸法）。
-  // normal でも広ければそのぶん列が増える。
 
   // ルートの tabIndex={-1} は、本文のドラッグ選択・バブル余白やカードの空き部分のタップで
   // activeElement が body へ落ちて onKeyDown が発火しなくなる（Escape も Tab トラップも死ぬ）
@@ -573,37 +614,9 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
                     {WELCOME_MESSAGE}
                   </div>
 
-                  {/* 小見出しは和文の太字ゴシックではなく、サイト共通の eyebrow 体系
-                      （Footer の columnHeadClass・注文履歴の ledgerHeadClass と同じ語彙）で組む。
-                      2つの chip 群は「見出し＋粒の羅列」で造形が同じなので、器を1つにして
-                      配列と挿入文だけを差し替える（別々に書くと chip の造形を直すとき
-                      片方だけ直った状態が生まれる）。カテゴリは取得できたときだけ出す。 */}
-                  {[
-                    { label: 'SUGGESTED', items: SUGGESTIONS, toText: (s: string) => s },
-                    {
-                      label: 'CATEGORIES',
-                      items: categories,
-                      toText: (c: string) => `${c}のおすすめを見たい`,
-                    },
-                  ]
-                    .filter((group) => group.items.length > 0)
-                    .map(({ label, items, toText }) => (
-                      <div key={label} className="space-y-2">
-                        <p className="text-eyebrow uppercase font-num text-ink-muted">{label}</p>
-                        <div className="flex flex-wrap gap-2">
-                          {items.map((item) => (
-                            <button
-                              key={item}
-                              type="button"
-                              onClick={() => handleSuggestion(toText(item))}
-                              className={CHIP_CLASS}
-                            >
-                              {withWordBreaks(item)}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                  <ChipGroup label="SUGGESTED" items={SUGGESTIONS} onPick={handleSuggestion} />
+                  {/* カテゴリは取得できたときだけ出る（0件なら ChipGroup が見出しごと畳む）。 */}
+                  <ChipGroup label="CATEGORIES" items={categories} onPick={handleCategoryPick} />
 
                   {/* 地は surface。面の階層は surface > tile > page > sunken の4段しかないので、
                       surface/70 のような5段目の中間色をここだけ作らない。 */}
@@ -642,6 +655,10 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
                       isLast &&
                       msg.role === 'assistant' &&
                       (msg.isError || (msg.source === 'fallback' && msg.products.length === 0));
+                    // 再送する文言はエラーバブル自身が持つ（messages からは取り消し済みで拾えない）。
+                    // ローカルに束ねるのは、プロパティの絞り込みが onClick のクロージャまで
+                    // 伝播しないため（そのまま使うと非 null 表明が要る）。
+                    const retryText = msg.retryText;
                     return msg.role === 'user' ? (
                       <li key={msg.id}>
                         {/* sr-only は position:absolute なので、直下に置いても flex の配置に響かない。 */}
@@ -668,6 +685,9 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
                           {msg.content}
                         </div>
                         {msg.products.length > 0 && (
+                          // 列数は auto-fill がグリッド実幅から決める（globals.css の
+                          // .assistant-product-grid。列幅の下限 20rem は「カートに追加」が
+                          // 1行に収まる寸法）。normal でも広ければそのぶん列が増える。
                           <div
                             className="assistant-product-grid"
                             role="group"
@@ -696,11 +716,10 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
                                 新しい会話を始める
                               </button>
                             )}
-                            {/* 再送する文言はエラーバブル自身が持つ（messages からは取り消し済みで拾えない）。 */}
-                            {msg.retryText && (
+                            {retryText && (
                               <button
                                 type="button"
-                                onClick={() => void send(msg.retryText!)}
+                                onClick={() => void send(retryText)}
                                 className={CHIP_CLASS}
                               >
                                 もう一度聞く
@@ -780,7 +799,9 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
             type="submit"
             aria-disabled={sending || !input.trim()}
             aria-label="送信"
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white hover:bg-brand-700 aria-disabled:cursor-not-allowed aria-disabled:bg-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+            // 止め方は aria-disabled（disabled 属性ではない）。無効の面は chip() の solid が
+            // 両方の止め方に効かせているので、ここは造形を選ぶだけでよい。
+            className={chip('icon', 'solid')}
           >
             {sending ? (
               // label={null} で aria-hidden にする。中身が空のまま新規挿入される live 領域は

@@ -42,6 +42,21 @@ interface AssistantProductCardProps {
 const REASON_BUDGET = 24;
 
 /**
+ * カート投入の結果。成功・要ログイン・失敗は同時に成り立たないので 1 つの値で持つ。
+ * 独立した3つの真偽値にすると、型の上では 8 通り取れてしまい、
+ * ハンドラの先頭に「他方を潰す」リセット行を並べて手で排他を作ることになる
+ * （結果の種類を1つ足すたびに、全ハンドラのリセット行が増える）。
+ */
+type CartResult = { kind: 'added' } | { kind: 'login' } | { kind: 'error'; message: string };
+
+/**
+ * 操作行の2つの粒。造形は lib/buttonStyles.ts が持つ（アシスタント内の chip と同じ源）。
+ * 記号と語の間隔だけはここで言う——chip() は gap を握らない。
+ */
+const DETAIL_LINK_CLASS = `${chip('action')} flex-1 gap-1`;
+const ADD_BUTTON_CLASS = `${chip('action', 'solid')} flex-1 gap-1.5`;
+
+/**
  * チャット内に表示する商品カード。
  * 画像（96px）・商品名（2行まで）・評価・価格・在庫状況を示し、
  * 「商品を見る」リンクと「カートに追加」ボタンを 1 行に並置して導線を明示する。
@@ -56,14 +71,6 @@ const REASON_BUDGET = 24;
  * （トーストの器はパネルと下端・右端が重なって入力欄を数秒覆ううえ、
  *   パネルは aria-modal なのでトースト内のリンクにキーボードでも SR でも到達できない）。
  */
-/**
- * カート投入の結果。成功・要ログイン・失敗は同時に成り立たないので 1 つの値で持つ。
- * 独立した3つの真偽値にすると、型の上では 8 通り取れてしまい、
- * ハンドラの先頭に「他方を潰す」リセット行を並べて手で排他を作ることになる
- * （結果の種類を1つ足すたびに、全ハンドラのリセット行が増える）。
- */
-type CartResult = { kind: 'added' } | { kind: 'login' } | { kind: 'error'; message: string };
-
 function AssistantProductCard({ product, reason, onNavigate }: AssistantProductCardProps) {
   const router = useRouter();
   const { user } = useAuth();
@@ -178,7 +185,7 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
       {/* mt-auto: カード高はグリッドのストレッチで揃うので、reason の有無で
           ボタン行の位置が上下しないよう下端に固定する。 */}
       <div className="mt-auto flex items-stretch gap-2">
-        <Link href={detailHref} onClick={onNavigate} className={`${chip('action')} flex-1`}>
+        <Link href={detailHref} onClick={onNavigate} className={DETAIL_LINK_CLASS}>
           商品を見る
           <ArrowRightIcon className="h-4 w-4" />
         </Link>
@@ -188,7 +195,7 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
             onClick={handleAddToCart}
             disabled={adding}
             aria-label={`${product.name}をカートに追加`}
-            className={`${chip('action', 'solid')} flex-1 gap-1.5`}
+            className={ADD_BUTTON_CLASS}
           >
             {adding ? (
               <Spinner label="追加中" />
