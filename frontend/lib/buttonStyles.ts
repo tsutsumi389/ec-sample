@@ -41,12 +41,19 @@ const DISABLED_FACE = 'disabled:bg-sunken disabled:text-ink-muted disabled:borde
  */
 const DISABLED_ICON = 'disabled:bg-transparent disabled:text-ink-faint';
 
+/**
+ * フォーカスの輪。btn/iconBtn/chip の全系統で同じものを使う。
+ * キーボードの現在地の目印は造形の系統によらず同じであるべきで、片方だけ色や offset が
+ * 動いても focus 中にしか出ないため目視では気づけない（だから写しを作らず定数で配る）。
+ */
+const FOCUS_RING =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
+
 const BASE =
   'inline-flex items-center justify-center gap-2 font-medium whitespace-nowrap ' +
   'transition-[background-color,box-shadow,transform,color] duration-fast ease-standard ' +
   'active:scale-[0.98] motion-reduce:active:scale-100 ' +
-  `${DISABLED_BASE} ` +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
+  `${DISABLED_BASE} ${FOCUS_RING}`;
 
 const SIZES: Record<BtnSize, string> = {
   sm: 'hit h-9 px-4 text-caption rounded-md',   // .hit で実効44px
@@ -78,7 +85,7 @@ export function iconBtn(size: BtnSize = 'md') {
 
 /**
  * 丸ピル。アシスタントのサジェスト chip・カテゴリ chip・行き止まりの次の一手と、
- * 提案カードの操作行（「商品を見る」「カートに追加」）を同じ造形で揃える
+ * 提案カードの操作行（「商品を見る」「カートに追加」）、入力欄の送信ボタンを同じ造形で揃える
  * （同じ「次の一手」なのに見えが割れると、押せる部品と分からない）。
  *
  * btn() とは別系統。あちらは rounded-md の角丸と固定高（h-9/h-11/h-13）の体系で、
@@ -91,23 +98,33 @@ export function iconBtn(size: BtnSize = 'md') {
  * 以前は同じ12トークンが AssistantPanel と AssistantProductCard に写されており、
  * 濃度を見直すときに揃って直る保証が無かった。
  *
- * size … chip: 語幅ぶんだけ取る小さな粒（wrap して並ぶ） / action: 操作行に flex-1 で並ぶ粒。
  * tone … outline: 生成りの面＋brand の罫 / solid: brand 塗り（行の中で1つだけ）。
  */
-export function chip(size: 'chip' | 'action' = 'chip', tone: 'outline' | 'solid' = 'outline') {
-  const box =
-    size === 'chip'
-      ? 'min-h-[44px] shrink-0 px-3.5 py-1.5 text-caption sm:min-h-0'
-      : 'min-h-[44px] gap-1 px-3 text-body font-medium sm:min-h-0 sm:py-2';
+export function chip(
+  size: 'chip' | 'action' | 'icon' = 'chip',
+  tone: 'outline' | 'solid' = 'outline',
+) {
+  const box = {
+    // 語幅ぶんだけ取る小さな粒（wrap して並ぶ）。
+    chip: 'min-h-[44px] shrink-0 px-3.5 py-1.5 text-caption sm:min-h-0',
+    // 操作行に flex-1 で並ぶ粒。記号と語の間隔（gap）はここで握らない——呼び出しごとに
+    // 割れる値なうえ、同一プロパティのユーティリティは連結順ではなく生成順で勝敗が決まるので、
+    // 呼び出し側の上書きが黙って効かなくなる（fieldBase が角丸を握らないのと同じ理由）。
+    action: 'min-h-[44px] px-3 text-body font-medium sm:min-h-0 sm:py-2',
+    // 記号1つの丸（送信ボタン）。寸法を固定するので min-h の段差は要らない。
+    icon: 'h-11 w-11 shrink-0',
+  }[size];
   const face =
     tone === 'outline'
       ? 'border border-brand-500 bg-surface text-brand-700 hover:bg-brand-50'
-      : 'bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-line-strong';
+      : 'bg-brand-600 text-white hover:bg-brand-700 ' +
+        // 無効の面は2通りの止め方に効かせる。disabled 属性で止めるボタン（カートに追加）と、
+        // フォーカスを残すため aria-disabled で止めるボタン（送信）が同じ見えになるように。
+        'disabled:cursor-not-allowed disabled:bg-line-strong ' +
+        'aria-disabled:cursor-not-allowed aria-disabled:bg-line-strong';
   return (
     'inline-flex items-center justify-center whitespace-nowrap rounded-full ' +
-    'transition-colors duration-fast ease-standard ' +
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ' +
-    `${face} ${box}`
+    `transition-colors duration-fast ease-standard ${FOCUS_RING} ${face} ${box}`
   );
 }
 
