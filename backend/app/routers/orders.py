@@ -76,15 +76,18 @@ def create_order(
 
         for cart_item in cart_items:
             product = products_by_id.get(cart_item.product_id)
-            if product is None or not product.is_viewable:
+            if product is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"商品が見つかりません: {cart_item.product_id}",
                 )
-            if product.status != "on_sale":
+            # 購入可否は services/cart.py の判定を通す（カート投入と決済で規則がずれると、
+            # 「カートには入るが買えない」商品が生まれる）。在庫は要求数との比較なので別に見る。
+            reason = cart_service.unavailable_reason(product)
+            if reason is not None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"この商品は現在購入できません: {product.name}",
+                    detail=f"{reason}: {product.name}",
                 )
             if product.stock < cart_item.quantity:
                 raise HTTPException(

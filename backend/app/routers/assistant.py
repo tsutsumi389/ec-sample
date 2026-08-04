@@ -23,12 +23,11 @@ from app.models import (
     Product,
     User,
 )
-from app.routers.products import _rating_map, _to_product_out
+from app.routers.products import _item_outs
 from app.schemas import (
     AssistantChatIn,
     AssistantChatOut,
     AssistantMessageOut,
-    RecommendationItemOut,
 )
 from app.services import assistant
 
@@ -36,25 +35,6 @@ router = APIRouter(prefix="/assistant", tags=["assistant"])
 
 # 1 会話あたりのメッセージ上限。超過時は 400（会話の肥大化・コンテキスト溢れ防止）。
 _MAX_MESSAGES = 50
-
-
-def _item_outs(
-    db: Session, pairs: Sequence[tuple[Product, str | None]]
-) -> list[RecommendationItemOut]:
-    """(Product, reason) の並びを RecommendationItemOut へ整形する。
-
-    評価は _rating_map で 1 クエリまとめ引き。1 件ずつ _rating_stats を呼ぶと
-    「提案4件で4クエリ」「履歴復元で商品数ぶん」の往復になる（並べる件数が
-    先に確定している場所では一括版を使う）。
-    """
-    ratings = _rating_map(db, {p.id for p, _ in pairs})
-    return [
-        RecommendationItemOut(
-            product=_to_product_out(product, *ratings.get(product.id, (None, 0))),
-            reason=reason,
-        )
-        for product, reason in pairs
-    ]
 
 
 def _listed_products_by_ids(db: Session, ids: Sequence[int]) -> dict[int, Product]:
@@ -224,7 +204,12 @@ def list_messages(
         for pid in (msg.product_ids or [])
     ]
     found = _listed_products_by_ids(db, all_ids)
-    ratings = _rating_map(db, set(found))
+    # カードは商品ごとに 1 回だけ組み、pid で引けるようにする（同じ商品が複数メッセージに
+    # 出てきても組み直さない）。評価の引き当ても _item_outs 内で 1 クエリに畳まれる。
+    card_by_id = {
+        item.product.id: item
+        for item in _item_outs(db, [(p, None) for p in found.values()])
+    }
 
     return [
         AssistantMessageOut(
@@ -233,14 +218,9 @@ def list_messages(
             source=msg.source,
             # 保存順を維持しつつ、いま公開中のものだけを並べる。
             products=[
-                RecommendationItemOut(
-                    product=_to_product_out(
-                        found[pid], *ratings.get(pid, (None, 0))
-                    ),
-                    reason=None,
-                )
+                card_by_id[pid]
                 for pid in (msg.product_ids or [])
-                if msg.role == "assistant" and pid in found
+                if msg.role == "assistant" and pid in card_by_id
             ],
             created_at=msg.created_at,
         )

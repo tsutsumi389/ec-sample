@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.auth import get_current_user, get_visitor_id
 from app.database import get_db
@@ -32,6 +32,9 @@ def _to_cart_item_out(item: CartItem) -> CartItemOut:
 def _get_cart(db: Session, user: User) -> CartOut:
     items = (
         db.query(CartItem)
+        # 明細ごとに product を遅延ロードすると、カートを返すすべての操作（追加・更新・削除・
+        # マージ・再注文）が明細数ぶん往復する。ProductOut が読む商品は先に連れてくる。
+        .options(selectinload(CartItem.product))
         .filter(CartItem.user_id == user.id)
         .order_by(CartItem.id)
         .all()
@@ -59,10 +62,11 @@ def add_cart_item(
     product = db.get(Product, payload.product_id)
     if product is None or not product.is_viewable:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    if product.status != "on_sale":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="この商品は現在購入できません"
-        )
+    # 購入可否の判定はサービス側の 1 箇所に置く（一括投入と単品投入で規則がずれると、
+    # 同じ商品がカートに入れられたり入れられなかったりする）。
+    reason = cart_service.unavailable_reason(product)
+    if reason is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
     existing = (
         db.query(CartItem)

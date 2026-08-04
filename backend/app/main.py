@@ -118,12 +118,12 @@ def _run_migrations(vector_available: bool) -> None:
     """
     cfg = _alembic_config()
     _stamp_legacy_schema(cfg)
-    if vector_available:
-        command.upgrade(cfg, "head")
-        return
     try:
         command.upgrade(cfg, "head")
     except Exception as exc:  # noqa: BLE001 - pgvector 不在でも起動は止めない
+        # pgvector があるのに失敗したのは想定外なので、握らず起動を止める。
+        if vector_available:
+            raise
         logger.warning(
             "pgvector が無いため product_embeddings を作成できませんでした"
             "（レコメンドはフォールバック動作になります）: %s",

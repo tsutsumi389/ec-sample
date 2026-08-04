@@ -1,7 +1,7 @@
 from typing import TypeVar
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.auth import get_current_admin
 from app.database import SessionLocal, get_db
@@ -172,7 +172,13 @@ def rebuild_recommendations(background_tasks: BackgroundTasks) -> dict[str, str]
 
 @router.get("/orders", response_model=list[AdminOrderOut])
 def list_all_orders(db: Session = Depends(get_db)) -> list[Order]:
-    return db.query(Order).order_by(Order.created_at.desc(), Order.id.desc()).all()
+    # AdminOrderOut は明細と注文者の双方を載せるので、遅延ロードだと注文数 × 2 クエリになる。
+    return (
+        db.query(Order)
+        .options(selectinload(Order.items), selectinload(Order.user))
+        .order_by(Order.created_at.desc(), Order.id.desc())
+        .all()
+    )
 
 
 @router.put("/orders/{order_id}/status", response_model=AdminOrderOut)
