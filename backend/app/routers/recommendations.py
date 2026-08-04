@@ -13,15 +13,9 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user_optional
 from app.database import SessionLocal, get_db
-from app.models import (
-    LISTED_STATUSES,
-    Product,
-    RecommendationState,
-    User,
-    UserRecommendation,
-)
-from app.routers.products import _rating_stats, _to_product_out
-from app.schemas import RecommendationItemOut, RecommendationListOut
+from app.models import RecommendationState, User
+from app.routers.products import _item_outs
+from app.schemas import RecommendationListOut
 from app.services import recommendation
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
@@ -30,18 +24,11 @@ router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 _GENERATING_TTL = timedelta(minutes=10)
 
 
-def _item_out(product: Product, db: Session, reason: str | None) -> RecommendationItemOut:
-    avg_rating, review_count = _rating_stats(db, product.id)
-    return RecommendationItemOut(
-        product=_to_product_out(product, avg_rating, review_count),
-        reason=reason,
-    )
-
-
 def _fallback(db: Session, limit: int, exclude_ids: set[int] | None) -> RecommendationListOut:
     products = recommendation.get_popular_products(db, limit, exclude_ids=exclude_ids)
-    items = [_item_out(p, db, None) for p in products]
-    return RecommendationListOut(source="fallback", items=items)
+    return RecommendationListOut(
+        source="fallback", items=_item_outs(db, [(p, None) for p in products])
+    )
 
 
 @router.get("/home", response_model=RecommendationListOut)
@@ -56,41 +43,31 @@ def home_recommendations(
         return _fallback(db, limit, exclude_ids=None)
 
     user_id = current_user.id
-    exclude_ids = recommendation.get_exclude_ids(db, user_id)
     profile = recommendation.build_profile(db, user_id)
-    state = db.get(RecommendationState, user_id)
 
-    # キャッシュ利用可否: state=ready かつ profile_hash が現在の行動ハッシュと一致。
-    if (
-        profile is not None
-        and state is not None
-        and state.status == "ready"
-        and state.profile_hash == profile.profile_hash
-    ):
-        rows = (
-            db.query(UserRecommendation)
-            .filter(UserRecommendation.user_id == user_id)
-            .order_by(UserRecommendation.rank, UserRecommendation.id)
-            .all()
+    # キャッシュ利用可否（鮮度判定・可視性の絞り込みはサービス側の1箇所に置く。ホームの
+    # /api/home も同じ関数を通るので、両者が別世代のキャッシュを配ることがない）。
+    rows, needs_generation = recommendation.load_ready_recommendations(db, user_id, profile)
+    if rows:
+        return RecommendationListOut(
+            source="llm",
+            items=_item_outs(db, [(row.product, row.reason) for row in rows[:limit]]),
         )
-        items: list[RecommendationItemOut] = []
-        for row in rows:
-            product = row.product
-            # 返却時にも可視性を再確認（生成後に status が変わった商品を弾く）。
-            if product is None or product.status not in LISTED_STATUSES:
-                continue
-            items.append(_item_out(product, db, row.reason))
-            if len(items) >= limit:
-                break
-        if items:
-            return RecommendationListOut(source="llm", items=items)
-        # キャッシュが全滅（全部非表示化）なら人気順に落とす。
 
     # ここから: キャッシュ無し/陳腐化。人気順フォールバックを即返し、必要なら生成起動。
     # プロフィールが作れない（行動なし/埋め込み欠損）なら生成しても失敗するだけなので起動しない。
-    if profile is not None and _should_generate(state):
-        _schedule_generation(db, background_tasks, user_id, profile.profile_hash)
+    if needs_generation and profile is not None:
+        state = db.get(RecommendationState, user_id)
+        if _should_generate(state):
+            _schedule_generation(db, background_tasks, user_id, profile.profile_hash)
 
+    # 除外集合はプロフィール構築が行動から既に畳み込んでいる（購入履歴の join とカート走査を
+    # もう一度払わない）。キャッシュヒット時に手前で組まないのも同じ理由——使わずに捨てていた。
+    exclude_ids = (
+        profile.exclude_ids
+        if profile is not None
+        else recommendation.get_exclude_ids(db, user_id)
+    )
     return _fallback(db, limit, exclude_ids=exclude_ids)
 
 

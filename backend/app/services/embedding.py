@@ -73,6 +73,34 @@ def _source_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _upsert_embedding(
+    db: Session,
+    product_id: int,
+    vector: list[float],
+    digest: str,
+    current: ProductEmbedding | None,
+) -> None:
+    """埋め込みベクトルと差分検知用の値を書き込む（新規なら追加、既存なら更新）。
+
+    ベクトル・source_hash・embed_model は必ず一緒に動く（片方だけ更新すると次回の
+    差分同期が「変わっていない」と誤判定する）ので、書き込みは 1 箇所に閉じる。
+    commit は呼び出し側が行う。
+    """
+    if current is None:
+        db.add(
+            ProductEmbedding(
+                product_id=product_id,
+                embedding=vector,
+                source_hash=digest,
+                embed_model=OLLAMA_EMBED_MODEL,
+            )
+        )
+        return
+    current.embedding = vector
+    current.source_hash = digest
+    current.embed_model = OLLAMA_EMBED_MODEL
+
+
 def _embed_texts(texts: list[str]) -> list[list[float]]:
     """Ollama で複数テキストを埋め込む。失敗時は例外を送出（呼び出し側で握る）。"""
     client = _client()
@@ -189,20 +217,7 @@ def sync_embeddings(db: Session, *, force: bool = False) -> int:
                 EMBED_DIM,
             )
             continue
-        current = existing.get(product.id)
-        if current is None:
-            db.add(
-                ProductEmbedding(
-                    product_id=product.id,
-                    embedding=vector,
-                    source_hash=digest,
-                    embed_model=OLLAMA_EMBED_MODEL,
-                )
-            )
-        else:
-            current.embedding = vector
-            current.source_hash = digest
-            current.embed_model = OLLAMA_EMBED_MODEL
+        _upsert_embedding(db, product.id, vector, digest, existing.get(product.id))
     db.commit()
 
     # 埋め込み集合が変化したのでセマンティックIDを全体再割り当てする。
@@ -242,20 +257,7 @@ def refresh_product_embedding(db: Session, product_id: int) -> None:
         logger.warning("埋め込み次元が想定外です product_id=%s", product_id)
         return
 
-    current = db.get(ProductEmbedding, product_id)
-    if current is None:
-        db.add(
-            ProductEmbedding(
-                product_id=product_id,
-                embedding=vector,
-                source_hash=digest,
-                embed_model=OLLAMA_EMBED_MODEL,
-            )
-        )
-    else:
-        current.embedding = vector
-        current.source_hash = digest
-        current.embed_model = OLLAMA_EMBED_MODEL
+    _upsert_embedding(db, product_id, vector, digest, db.get(ProductEmbedding, product_id))
     db.commit()
 
     try:

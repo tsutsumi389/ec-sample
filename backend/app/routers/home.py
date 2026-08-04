@@ -30,8 +30,8 @@ def _parse_recently_viewed_ids(raw: str | None) -> list[int]:
 
     パース不能な要素は黙って無視する（400 にしない）。この値は localStorage 由来で
     ユーザーが直せるものではないため、壊れた 1 要素でホームが 500/400 になるより
-    「その要素だけ落として表示する」ほうが正しい。重複は先勝ちで除去し、契約どおり
-    先頭 10 件までを採用する。
+    「その要素だけ落として表示する」ほうが正しい。重複は先勝ちで除去する。
+    採用件数の上限は build_context が持つので、ここでは切らない。
     """
     if not raw:
         return []
@@ -46,7 +46,7 @@ def _parse_recently_viewed_ids(raw: str | None) -> list[int]:
             continue
         if pid > 0 and pid not in ids:
             ids.append(pid)
-    return ids[:home_page._MAX_RECENTLY_VIEWED_IDS]
+    return ids
 
 
 @router.get("", response_model=HomeOut)

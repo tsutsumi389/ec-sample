@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 from pydantic import BaseModel
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from app.models import (
     LISTED_STATUSES,
@@ -225,6 +225,48 @@ def build_profile(db: Session, user_id: int) -> Profile | None:
     )
 
 
+def load_ready_recommendations(
+    db: Session, user_id: int, profile: Profile | None
+) -> tuple[list[UserRecommendation], bool]:
+    """LLM 生成キャッシュを鮮度判定つきで読む。戻り値は (rank 順の行, 再生成が必要か)。
+
+    鮮度は「state=ready かつ profile_hash が現在の行動ハッシュと一致」。ホーム
+    （services/home_page.py の build_context）と /recommendations/home の双方がこの
+    1 箇所を使う。判定を各所に書くと、片方だけ規則が変わったときに同じユーザーへ
+    別世代のキャッシュを配ることになる。RecommendationState を所有するこのモジュールが
+    鮮度の唯一の源であるべきなので、判定はここに置く。
+
+    可視性は SQL 側で絞る（生成後に非公開化された商品はここで落ちる）ので、呼び出し側が
+    status を確かめ直す必要はない。キャッシュが全滅したら再生成が必要と返す。
+    """
+    state = db.get(RecommendationState, user_id)
+    fresh = (
+        profile is not None
+        and state is not None
+        and state.status == "ready"
+        and state.profile_hash == profile.profile_hash
+    )
+    if not fresh:
+        # プロフィールが作れないなら生成しても失敗するだけなので起動しない。
+        return [], profile is not None
+
+    rows = list(
+        db.execute(
+            select(UserRecommendation)
+            .join(Product, UserRecommendation.product_id == Product.id)
+            .where(
+                UserRecommendation.user_id == user_id,
+                Product.status.in_(LISTED_STATUSES),
+            )
+            .options(selectinload(UserRecommendation.product))
+            .order_by(UserRecommendation.rank, UserRecommendation.id)
+        )
+        .scalars()
+        .all()
+    )
+    return rows, not rows
+
+
 def get_candidates(
     db: Session,
     profile_vec: np.ndarray,
@@ -254,6 +296,29 @@ def get_candidates(
     return db.execute(stmt).all()
 
 
+def purchase_count_subquery(*, since: datetime | None = None):
+    """商品ごとの購入数（cancelled 以外の注文の明細合計）のサブクエリ。
+
+    「何が売れたか」の定義をここ 1 箇所に閉じる。全期間の人気順・直近の売れ筋・商品一覧の
+    sort=recommended がすべてこれを使うので、返品や pending の扱いを変えるときも
+    直す場所は 1 つで済む（別々に組むと、片方だけ古い定義のまま並びが食い違う）。
+    since を渡すとその時刻以降の注文だけを数える。
+    """
+    conditions = [Order.status != "cancelled"]
+    if since is not None:
+        conditions.append(Order.created_at >= since)
+    return (
+        select(
+            OrderItem.product_id.label("product_id"),
+            func.coalesce(func.sum(OrderItem.quantity), 0).label("purchased"),
+        )
+        .join(Order, OrderItem.order_id == Order.id)
+        .where(*conditions)
+        .group_by(OrderItem.product_id)
+        .subquery()
+    )
+
+
 def get_popular_products(
     db: Session, limit: int, exclude_ids: set[int] | None = None
 ) -> list[Product]:
@@ -263,16 +328,7 @@ def get_popular_products(
     購入数 desc → 平均評価 desc → Product.created_at desc。
     LISTED_STATUSES のみ。exclude_ids は購入済み + カート内を想定。
     """
-    purchase_subq = (
-        select(
-            OrderItem.product_id.label("product_id"),
-            func.coalesce(func.sum(OrderItem.quantity), 0).label("purchased"),
-        )
-        .join(Order, OrderItem.order_id == Order.id)
-        .where(Order.status != "cancelled")
-        .group_by(OrderItem.product_id)
-        .subquery()
-    )
+    purchase_subq = purchase_count_subquery()
     rating_subq = (
         select(
             Review.product_id.label("product_id"),
@@ -322,16 +378,7 @@ def get_recent_popular_products(
     ただの新着一覧になってしまうため、inner join で購入実績のあるものだけに絞る）。
     """
     since = datetime.now(timezone.utc) - timedelta(days=window_days)
-    purchase_subq = (
-        select(
-            OrderItem.product_id.label("product_id"),
-            func.coalesce(func.sum(OrderItem.quantity), 0).label("purchased"),
-        )
-        .join(Order, OrderItem.order_id == Order.id)
-        .where(Order.status != "cancelled", Order.created_at >= since)
-        .group_by(OrderItem.product_id)
-        .subquery()
-    )
+    purchase_subq = purchase_count_subquery(since=since)
 
     stmt = (
         select(Product)

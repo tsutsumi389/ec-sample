@@ -68,17 +68,36 @@ def _validate_variants(variants: list[ExperimentVariantIn]) -> None:
         )
 
 
+def _variant_rows(variants: list[ExperimentVariantIn]) -> list[ExperimentVariant]:
+    """入力の variant 定義を行に変換する（作成と更新で共有する）。
+
+    2 箇所に書くと、variant に項目を足したとき「作成では設定できるが編集では黙って落ちる」
+    という差が生まれる。
+    """
+    return [
+        ExperimentVariant(
+            key=v.key,
+            name=v.name,
+            weight=v.weight,
+            is_control=v.is_control,
+            config=v.config,
+        )
+        for v in variants
+    ]
+
+
 @router.get("/event-names", response_model=list[str])
 def list_event_names(db: Session = Depends(get_db)) -> list[str]:
     """記録済みのイベント名一覧。指標やファネルを選ぶ際の候補に使う。"""
+    total = func.count(AnalyticsEvent.id)
     rows = (
-        db.query(AnalyticsEvent.name, func.count(AnalyticsEvent.id).label("total"))
+        db.query(AnalyticsEvent.name)
         .group_by(AnalyticsEvent.name)
-        .order_by(func.count(AnalyticsEvent.id).desc())
+        .order_by(total.desc())
         .limit(100)
         .all()
     )
-    return [name for name, _ in rows]
+    return [name for (name,) in rows]
 
 
 @router.get("", response_model=list[ExperimentOut])
@@ -111,16 +130,7 @@ def create_experiment(
         status="draft",
         traffic_allocation=payload.traffic_allocation,
         primary_metric=payload.primary_metric,
-        variants=[
-            ExperimentVariant(
-                key=v.key,
-                name=v.name,
-                weight=v.weight,
-                is_control=v.is_control,
-                config=v.config,
-            )
-            for v in payload.variants
-        ],
+        variants=_variant_rows(payload.variants),
     )
     db.add(experiment)
     db.commit()
@@ -162,16 +172,7 @@ def update_experiment(
                 detail="Variants can only be edited while the experiment is a draft",
             )
         _validate_variants(payload.variants)
-        experiment.variants = [
-            ExperimentVariant(
-                key=v.key,
-                name=v.name,
-                weight=v.weight,
-                is_control=v.is_control,
-                config=v.config,
-            )
-            for v in payload.variants
-        ]
+        experiment.variants = _variant_rows(payload.variants)
 
     if payload.name is not None:
         experiment.name = payload.name

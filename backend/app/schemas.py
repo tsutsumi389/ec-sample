@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models import EXPERIMENT_STATUSES, PRODUCT_STATUSES
+
 
 # ---------- Auth / User ----------
 
@@ -75,9 +77,10 @@ class CategoryUpdate(BaseModel):
 
 # ---------- Product ----------
 
-ProductStatus = Literal[
-    "draft", "coming_soon", "on_sale", "suspended", "discontinued", "archived"
-]
+# 状態機械の定義は models.py が持つ（各状態の意味もそちらにコメントで書いてある）。
+# ここで文字列を並べ直すと「models に状態を足したのに API が 422 で弾く」という
+# 手で同期し続ける関係になるので、そのまま導出する。
+ProductStatus = Literal[*PRODUCT_STATUSES]
 
 
 class ProductImageOut(BaseModel):
@@ -517,8 +520,8 @@ class AssistantMessageOut(BaseModel):
 
 # ---------- A/Bテスト（実験）と行動イベントログ ----------
 
-# 実験の状態。models.EXPERIMENT_STATUSES と一致させること。
-ExperimentStatus = Literal["draft", "running", "paused", "completed"]
+# 実験の状態。ProductStatus と同じく models.py の定義から導出する。
+ExperimentStatus = Literal[*EXPERIMENT_STATUSES]
 
 
 class ExperimentAssignmentOut(BaseModel):

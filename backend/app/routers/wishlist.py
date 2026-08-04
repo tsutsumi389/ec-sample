@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.auth import get_current_user
 from app.database import get_db
@@ -16,6 +16,8 @@ def list_wishlist(
 ) -> list[WishlistItemOut]:
     items = (
         db.query(WishlistItem)
+        # 商品を遅延ロードすると件数ぶん往復する（ProductOut がすべての行で商品を読む）。
+        .options(selectinload(WishlistItem.product))
         .filter(WishlistItem.user_id == current_user.id)
         .order_by(WishlistItem.created_at.desc(), WishlistItem.id.desc())
         .all()

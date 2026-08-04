@@ -100,14 +100,15 @@ class Product(Base):
     reviews: Mapped[list["Review"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )
+    # 画像・仕様はどちらも一覧・レコメンド・カートの ProductOut に載る（= 1ページで
+    # 最大12商品ぶん引かれる）ため selectin で1クエリにまとめる。素の lazy select だと
+    # ProductOut のシリアライズが商品数ぶん往復する（ホーム1枚で80クエリ超）。
     images: Mapped[list["ProductImage"]] = relationship(
         back_populates="product",
         cascade="all, delete-orphan",
         order_by="ProductImage.sort_order, ProductImage.id",
+        lazy="selectin",
     )
-    # 仕様は一覧・レコメンド・カートの ProductOut にも載る（= 1ページで最大12商品ぶん
-    # 引かれる）ため selectin で1クエリにまとめる。images が素の lazy select なのは
-    # 単に古いからで、揃えるならこちらが正しい。
     specs: Mapped[list["ProductSpec"]] = relationship(
         back_populates="product",
         cascade="all, delete-orphan",

@@ -34,7 +34,6 @@ from app.models import (
     Product,
     ProductEmbedding,
     ProductView,
-    RecommendationState,
     UserRecommendation,
 )
 from app.services import recommendation
@@ -230,38 +229,6 @@ def _guest_profile(db: Session, viewed_ids: list[int]) -> Profile | None:
     )
 
 
-def _load_llm_cache(
-    db: Session, user_id: int, profile: Profile | None
-) -> tuple[list[UserRecommendation], bool]:
-    """LLM 生成キャッシュを鮮度判定つきで読む。
-
-    判定条件は recommendations.py の /recommendations/home と同一（state=ready かつ
-    profile_hash が現在の行動ハッシュと一致）。戻り値は (rank 順の行, 再生成が必要か)。
-    キャッシュが使えるなら再生成は不要、使えないなら（プロフィールがある場合に限り）必要。
-    """
-    state = db.get(RecommendationState, user_id)
-    fresh = (
-        profile is not None
-        and state is not None
-        and state.status == "ready"
-        and state.profile_hash == profile.profile_hash
-    )
-    if not fresh:
-        # プロフィールが作れないなら生成しても失敗するだけなので起動しない。
-        return [], profile is not None
-
-    rows = (
-        db.query(UserRecommendation)
-        .filter(UserRecommendation.user_id == user_id)
-        .order_by(UserRecommendation.rank, UserRecommendation.id)
-        .all()
-    )
-    # 生成後に status が変わった商品を弾く（可視性の唯一の源は Product.status）。
-    rows = [r for r in rows if r.product is not None and r.product.status in LISTED_STATUSES]
-    # キャッシュが全滅（全部非表示化）したら再生成させる。
-    return rows, not rows
-
-
 def _login_anchor_ids(db: Session, user_id: int) -> list[int]:
     """ログインユーザーの byw アンカー候補を新しい順で返す。
 
@@ -337,41 +304,49 @@ def build_context(
 
     if user_id is None:
         profile = _safe(db, "guest_profile", lambda: _guest_profile(db, viewed))
-        return HomeContext(
-            db=db,
-            user_id=None,
-            profile=profile,
-            exclude_ids=set(),
-            recently_viewed_ids=viewed,
-            anchor_ids=viewed[:_MAX_ANCHORS],
-            category_weights=(
-                _safe(db, "guest_categories", lambda: _category_weights(db, profile.behaviors))
-                or {}
-                if profile is not None
-                else {}
-            ),
+        exclude_ids: set[int] = set()
+        llm_rows: list[UserRecommendation] = []
+        needs_generation = False
+        # ゲストは閲覧履歴がそのままアンカー。ログイン時は product_views が正になるので
+        # クエリ由来の ID 列は使わない。
+        recently_viewed, anchor_ids = viewed, viewed[:_MAX_ANCHORS]
+        weights_label = "guest_categories"
+    else:
+        profile = _safe(db, "profile", lambda: recommendation.build_profile(db, user_id))
+        # 除外集合（購入済み + カート内）はプロフィール構築が既に行動から畳み込んでいる。
+        # get_exclude_ids を呼び直すと同じ購入履歴の join とカート走査をもう一度払う。
+        exclude_ids = (
+            profile.exclude_ids
+            if profile is not None
+            else _safe(db, "exclude_ids", lambda: recommendation.get_exclude_ids(db, user_id))
+            or set()
+        )
+        llm_rows, needs_generation = _safe(
+            db,
+            "llm_cache",
+            lambda: recommendation.load_ready_recommendations(db, user_id, profile),
+        ) or ([], False)
+        recently_viewed, anchor_ids = [], _safe(
+            db, "anchors", lambda: _login_anchor_ids(db, user_id)
+        ) or []
+        weights_label = "categories"
+
+    category_weights: dict[int, float] = {}
+    if profile is not None:
+        category_weights = (
+            _safe(db, weights_label, lambda: _category_weights(db, profile.behaviors)) or {}
         )
 
-    profile = _safe(db, "profile", lambda: recommendation.build_profile(db, user_id))
-    exclude_ids = _safe(db, "exclude_ids", lambda: recommendation.get_exclude_ids(db, user_id)) or set()
-    llm_rows, needs_generation = _safe(
-        db, "llm_cache", lambda: _load_llm_cache(db, user_id, profile)
-    ) or ([], False)
     return HomeContext(
         db=db,
         user_id=user_id,
         profile=profile,
         exclude_ids=exclude_ids,
-        # ログイン時は product_views が正となるので、クエリ由来の ID 列は使わない。
-        recently_viewed_ids=[],
+        recently_viewed_ids=recently_viewed,
         llm_rows=llm_rows,
         needs_generation=needs_generation,
-        anchor_ids=_safe(db, "anchors", lambda: _login_anchor_ids(db, user_id)) or [],
-        category_weights=(
-            _safe(db, "categories", lambda: _category_weights(db, profile.behaviors)) or {}
-            if profile is not None
-            else {}
-        ),
+        anchor_ids=anchor_ids,
+        category_weights=category_weights,
     )
 
 
@@ -739,9 +714,30 @@ def _dist_similarity(a: dict[int, float], b: dict[int, float]) -> float:
     return dot / (na * nb)
 
 
-def _relevance(
-    lane: Lane, profile_vec: np.ndarray | None, embeddings: dict[int, np.ndarray]
-) -> float:
+def _cosine_map(
+    profile_vec: np.ndarray | None, embeddings: dict[int, np.ndarray]
+) -> dict[int, float]:
+    """商品ID → プロフィールとのコサイン類似度。候補が出そろった時点で 1 回だけ作る。
+
+    同じ商品が複数の候補レーンに現れ、貪欲法は 1 本選ぶたびに残り全候補を再スコアするので、
+    _relevance の中で毎回内積を取ると同じ (profile, product) の組を十数回計算し直すことに
+    なる。商品数ぶんの内積で済ませて以後は辞書引きにする。
+    """
+    if profile_vec is None or not embeddings:
+        return {}
+    norm_p = float(np.linalg.norm(profile_vec))
+    if norm_p == 0.0:
+        return {}
+    sims: dict[int, float] = {}
+    for pid, vec in embeddings.items():
+        norm_v = float(np.linalg.norm(vec))
+        if norm_v == 0.0:
+            continue
+        sims[pid] = float(np.dot(profile_vec, vec)) / (norm_p * norm_v)
+    return sims
+
+
+def _relevance(lane: Lane, cosines: dict[int, float]) -> float:
     """レーンとユーザーの適合度を [0,1] で返す。
 
     レーン内商品の埋め込みとプロフィールベクトルのコサイン類似度の平均を (1+cos)/2 で
@@ -749,20 +745,7 @@ def _relevance(
     平均を取るのは「レーンとしての適合度」を見たいため（先頭 1 件だけ近い棚より、
     全体が近い棚のほうがスクロールされる）。
     """
-    if profile_vec is None or not embeddings:
-        return _NEUTRAL_RELEVANCE
-    norm_p = float(np.linalg.norm(profile_vec))
-    if norm_p == 0.0:
-        return _NEUTRAL_RELEVANCE
-    sims: list[float] = []
-    for product, _reason in lane.items:
-        vec = embeddings.get(product.id)
-        if vec is None:
-            continue
-        norm_v = float(np.linalg.norm(vec))
-        if norm_v == 0.0:
-            continue
-        sims.append(float(np.dot(profile_vec, vec)) / (norm_p * norm_v))
+    sims = [cosines[p.id] for p, _reason in lane.items if p.id in cosines]
     if not sims:
         return _NEUTRAL_RELEVANCE
     return (1.0 + sum(sims) / len(sims)) / 2.0
@@ -778,7 +761,7 @@ def _concentration(dist: dict[int, float]) -> float:
     return sum(p * p for p in dist.values())
 
 
-def _novelty(lane: Lane, page: list[Lane]) -> float:
+def _novelty(lane: Lane, page_dists: list[dict[int, float]]) -> float:
     """すでに選んだレーン群に対する新規性（0.35〜1.0）。
 
     既出レーンとカテゴリ分布が近いほど減点する。これが無いと「わずかに違う自分の興味」
@@ -795,36 +778,35 @@ def _novelty(lane: Lane, page: list[Lane]) -> float:
     「多くのカテゴリを含む」ことと「このレーンと同じ興味の焼き直し」は別物であり、
     罰したいのは後者だけ。集中度を掛けることで、興味が特定カテゴリに寄ったレーンが
     既出レーンと丸かぶりのときにだけ減点が効くようにしている。
+
+    page_dists は選定済みレーンの分布（確定済みなので呼び出し側で 1 本につき 1 回だけ
+    作って持ち回る）。ここで毎回作り直すと、候補数 × 選定数ぶん同じ分布を数え直す。
     """
-    if not page:
+    if not page_dists:
         return 1.0
     dist = _category_distribution(lane)
     if not dist:
         return 1.0
-    worst = max(
-        (_dist_similarity(dist, _category_distribution(chosen)) for chosen in page),
-        default=0.0,
-    )
+    worst = max((_dist_similarity(dist, chosen) for chosen in page_dists), default=0.0)
     penalty = _NOVELTY_STRENGTH * worst * _concentration(dist)
     return max(_NOVELTY_FLOOR, 1.0 - penalty)
 
 
 def _score(
     lane: Lane,
-    page: list[Lane],
-    profile_vec: np.ndarray | None,
-    embeddings: dict[int, np.ndarray],
+    page_dists: list[dict[int, float]],
+    cosines: dict[int, float],
 ) -> float:
     """stage-wise のスコア関数。
 
     relevance（ユーザーとの適合） × prior（レーン種別の事前重み） × novelty（既出との差異）。
     加算ではなく乗算にしているのは、どれか 1 つが致命的に低いレーンを他の要素で救済させない
     ため（関連度ゼロの棚を prior で押し込む、既出と丸かぶりの棚を関連度で押し込む、が起きない）。
-    novelty は page に依存するので、この関数は「レーン単体の価値」ではなく
+    novelty は既出レーンに依存するので、この関数は「レーン単体の価値」ではなく
     「この位置にこのレーンを置く価値」を返す。ゆえに 1 本選ぶたびに再計算が要る。
     """
     prior = _LANE_PRIORS.get(lane.kind, 1.0)
-    return _relevance(lane, profile_vec, embeddings) * prior * _novelty(lane, page)
+    return _relevance(lane, cosines) * prior * _novelty(lane, page_dists)
 
 
 def _load_embeddings(db: Session, lanes: list[Lane]) -> dict[int, np.ndarray]:
@@ -878,8 +860,12 @@ def build_page(ctx: HomeContext, max_lanes: int) -> tuple[list[Lane], str]:
 
     embeddings = _safe(ctx.db, "embeddings", lambda: _load_embeddings(ctx.db, candidates)) or {}
     profile_vec = ctx.profile.profile_vec if ctx.profile is not None else None
+    cosines = _cosine_map(profile_vec, embeddings)
 
     page: list[Lane] = []
+    # 選定済みレーンのカテゴリ分布。novelty が毎イテレーション参照するが、選ばれた時点で
+    # items は確定するので数え直す必要が無い。page と対で伸ばす。
+    page_dists: list[dict[int, float]] = []
     seen: set[int] = set()
 
     while len(page) < max_lanes and candidates:
@@ -897,7 +883,7 @@ def build_page(ctx: HomeContext, max_lanes: int) -> tuple[list[Lane], str]:
             survivors.append(lane)
             # 工程3: 再スコアリング。novelty が page に依存するため、直前に選ばれた
             # レーンを踏まえて毎イテレーション全候補を計算し直す。
-            score = _score(lane, page, profile_vec, embeddings)
+            score = _score(lane, page_dists, cosines)
             if score > best_score:
                 best, best_score = lane, score
 
@@ -907,6 +893,7 @@ def build_page(ctx: HomeContext, max_lanes: int) -> tuple[list[Lane], str]:
 
         best.items = best.items[: best.max_items]
         page.append(best)
+        page_dists.append(_category_distribution(best))
         seen |= {p.id for p, _ in best.items}
         candidates = [lane for lane in candidates if lane is not best]
 
