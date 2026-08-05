@@ -14,13 +14,12 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user_optional
 from app.database import get_db
 from app.models import User
-from app.routers.products import _rating_map, _to_product_out
 # 生成起動は /api/recommendations/home と同じ多重起動防止（advisory ロック + state 判定）に
 # 乗せる必要があるため、既存実装を再利用する。ここで別実装すると同一ユーザーに対して
 # 二重に LLM 生成が走り得る。
 from app.routers.recommendations import _schedule_generation
-from app.schemas import HomeOut, HomeSectionOut, RecommendationItemOut
-from app.services import home_page
+from app.schemas import HomeOut, HomeSectionOut
+from app.services import home_page, product_view
 
 router = APIRouter(prefix="/home", tags=["home"])
 
@@ -65,14 +64,14 @@ def get_home(
 
     # LLM キャッシュが陳腐化していれば再生成を起動する（/api/recommendations/home と同流儀。
     # レスポンスはブロックせず、今回は人気順などのフォールバックレーンで組む）。
-    if user_id is not None and ctx.needs_generation and ctx.profile is not None:
+    if ctx.needs_generation:
         _schedule_generation(db, background_tasks, user_id, ctx.profile.profile_hash)
 
     lanes, source = home_page.build_page(ctx, max_lanes)
 
-    # レーティングはページ確定後に、載る商品ぶんだけまとめて引く。
-    all_ids = {p.id for lane in lanes for p, _ in lane.items}
-    ratings = _rating_map(db, all_ids)
+    # レーティングはページ確定後に、レーンを跨いで載る商品ぶんだけまとめて引く
+    # （レーンごとに product_view.to_item_outs を呼ぶとレーン本数ぶん往復する）。
+    ratings = product_view.rating_map(db, {p.id for lane in lanes for p, _ in lane.items})
 
     sections = [
         HomeSectionOut(
@@ -81,10 +80,7 @@ def get_home(
             subtitle=None,  # Phase 1 では常に None（契約）。
             layout=lane.layout,
             items=[
-                RecommendationItemOut(
-                    product=_to_product_out(product, *ratings.get(product.id, (None, 0))),
-                    reason=reason,
-                )
+                product_view.to_item_out(product, reason, ratings)
                 for product, reason in lane.items
             ],
         )

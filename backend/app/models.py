@@ -135,9 +135,18 @@ class Product(Base):
         return self.status in VIEWABLE_STATUSES
 
     @property
+    def is_on_sale(self) -> bool:
+        """販売中か（在庫は見ない）。「売り物として出しているか」だけを判定する。
+
+        在庫込みの購入可否は purchasable。買えない理由を「販売していない」と「在庫が無い」に
+        書き分ける必要がある場所（カートの見送り理由など）がこちらを使う。
+        """
+        return self.status == "on_sale"
+
+    @property
     def purchasable(self) -> bool:
         """購入可能か。販売中(on_sale)かつ在庫ありのときだけ True。"""
-        return self.status == "on_sale" and self.stock > 0
+        return self.is_on_sale and self.stock > 0
 
 
 class ProductImage(Base):
