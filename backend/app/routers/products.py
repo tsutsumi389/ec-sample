@@ -1,7 +1,6 @@
-from collections.abc import Sequence
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import Integer, case, func, literal, or_, select
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -25,98 +24,14 @@ from app.models import (
 from app.schemas import (
     ProductListOut,
     ProductOut,
-    RecommendationItemOut,
     ReviewCreate,
     ReviewOut,
     SuggestOut,
     SuggestProductOut,
 )
-from app.services import embedding, recommendation
+from app.services import embedding, product_view, recommendation
 
 router = APIRouter(prefix="/products", tags=["products"])
-
-
-def _to_product_out(
-    product: Product, avg_rating: float | None = None, review_count: int = 0
-) -> ProductOut:
-    out = ProductOut.model_validate(product)
-    return out.model_copy(update={"avg_rating": avg_rating, "review_count": review_count})
-
-
-def _rating_stats(db: Session, product_id: int) -> tuple[float | None, int]:
-    avg_rating, review_count = db.execute(
-        select(func.avg(Review.rating), func.count(Review.id)).where(
-            Review.product_id == product_id
-        )
-    ).one()
-    return (float(avg_rating) if avg_rating is not None else None, review_count or 0)
-
-
-def _rating_map(db: Session, product_ids: set[int]) -> dict[int, tuple[float | None, int]]:
-    """商品IDごとの (平均評価, レビュー数) を 1 クエリでまとめて引く。
-
-    上の _rating_stats は 1 商品 1 クエリなので、複数商品を並べる画面（ホームのレーン・
-    アシスタントの提案カード・会話履歴の復元）では商品数ぶん往復してしまう。
-    集合を先に確定できる場所ではこちらを使うこと。
-    """
-    if not product_ids:
-        return {}
-    rows = db.execute(
-        select(Review.product_id, func.avg(Review.rating), func.count(Review.id))
-        .where(Review.product_id.in_(product_ids))
-        .group_by(Review.product_id)
-    ).all()
-    return {
-        pid: (float(avg) if avg is not None else None, count or 0)
-        for pid, avg, count in rows
-    }
-
-
-def _to_product_outs(db: Session, products: Sequence[Product]) -> list[ProductOut]:
-    """商品の並びを ProductOut の並びへ整形する（評価は 1 クエリまとめ引き）。"""
-    ratings = _rating_map(db, {p.id for p in products})
-    return [_to_product_out(p, *ratings.get(p.id, (None, 0))) for p in products]
-
-
-def _item_outs(
-    db: Session, pairs: Sequence[tuple[Product, str | None]]
-) -> list[RecommendationItemOut]:
-    """(Product, reason) の並びを RecommendationItemOut へ整形する。
-
-    レコメンド・ホーム・アシスタントが返すカードは同じ形なので、組み立てはここ 1 箇所に置く。
-    評価は _rating_map で 1 クエリまとめ引き（1 件ずつ _rating_stats を呼ぶと
-    「おすすめ50件で50クエリ」の往復になる。並べる件数が先に確定している場所では一括版を使う）。
-    """
-    ratings = _rating_map(db, {p.id for p, _ in pairs})
-    return [
-        RecommendationItemOut(
-            product=_to_product_out(product, *ratings.get(product.id, (None, 0))),
-            reason=reason,
-        )
-        for product, reason in pairs
-    ]
-
-
-def _same_category_products(db: Session, product: Product, limit: int) -> list[Product]:
-    """同じカテゴリの他商品を id 順で返す（自分自身除外・LISTED のみ）。
-
-    /related と /{id}/recommendations の埋め込み欠損時フォールバックが共有する。
-    LISTED_STATUSES の絞りを経路ごとに書くと、片方だけ落としたときに未公開商品が
-    関連商品として漏れる。
-    """
-    if product.category_id is None:
-        return []
-    return (
-        db.query(Product)
-        .filter(
-            Product.category_id == product.category_id,
-            Product.id != product.id,
-            Product.status.in_(LISTED_STATUSES),
-        )
-        .order_by(Product.id)
-        .limit(limit)
-        .all()
-    )
 
 
 @router.get("", response_model=ProductListOut)
@@ -138,10 +53,10 @@ def list_products(
     # Ollama 停止等で埋め込めない場合は query_vec が None になり、従来の ILIKE のみに
     # フォールバックして検索を止めない。
     query_vec = embedding.embed_query(search) if search else None
-    # 意味的候補を実際に使ったかどうか。並び順（関連度順にするか）はこのフラグで判定する。
-    # query_vec があっても最近傍が絶対上限より遠ければ候補ゼロ扱いになるため、
-    # query_vec の有無だけでは判定できない。
-    semantic_ids: list[int] | None = None
+    # 意味的候補の商品ID（距離の近い順）。空なら意味的候補は使わなかったということで、
+    # 絞り込みにも並び順にも効かせない。query_vec があっても最近傍が絶対上限より遠ければ
+    # 空のままになるため、query_vec の有無だけでは判定できない。
+    semantic_ids: list[int] = []
     if search:
         if query_vec is not None:
             semantic_distance = ProductEmbedding.embedding.cosine_distance(query_vec)
@@ -243,15 +158,20 @@ def list_products(
     elif semantic_ids:
         # sort 未指定 かつ 意味的候補を実際に使ったときだけ「関連度順」で並べる。
         # 名前に一致した商品を意味的ヒットより先に見せたいので、まず名前一致(0)を優先し、
-        # 次に埋め込みのコサイン距離が近い順（欠損は最後）、最後に id で安定化する。
-        # sort が明示された場合はセマンティックはフィルタとしてだけ効かせ、この join は
-        # 追加しない（recommended 分岐の outerjoin と二重にならないよう None のときだけ結合）。
+        # 次に意味的な近さの順、最後に id で安定化する。
+        # 近さは semantic_ids の並び（= 上のスキャンで距離昇順に確定済み）をそのまま使い、
+        # ORDER BY で距離を計算し直さない。ここで cosine_distance を書くと、候補を 1 回の
+        # スキャンで確定させた意味が消え、しかも OFFSET/LIMIT の前に評価されるので
+        # 「返す 12 件」ではなくヒット全件ぶんの 768 次元計算をもう一度払うことになる。
+        # 名前だけで一致して意味的候補に入らなかった商品は位置が NULL になり、
+        # 名前一致グループの末尾に回る。
         relevance_rank = case((Product.name.ilike(f"%{search}%"), 0), else_=1)
-        stmt = stmt.outerjoin(
-            ProductEmbedding, ProductEmbedding.product_id == Product.id
-        ).order_by(
+        semantic_rank = func.array_position(
+            literal(semantic_ids, ARRAY(Integer)), Product.id
+        )
+        stmt = stmt.order_by(
             relevance_rank.asc(),
-            ProductEmbedding.embedding.cosine_distance(query_vec).nullslast(),
+            semantic_rank.asc().nullslast(),
             Product.id,
         )
     else:
@@ -261,7 +181,7 @@ def list_products(
     rows = db.execute(stmt).all()
 
     items = [
-        _to_product_out(
+        product_view.to_product_out(
             product,
             float(avg_rating) if avg_rating is not None else None,
             review_count or 0,
@@ -340,8 +260,8 @@ def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductOut:
     if product is None or not product.is_viewable:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    avg_rating, review_count = _rating_stats(db, product_id)
-    return _to_product_out(product, avg_rating, review_count)
+    avg_rating, review_count = product_view.rating_stats(db, product_id)
+    return product_view.to_product_out(product, avg_rating, review_count)
 
 
 @router.post("/{product_id}/view", status_code=status.HTTP_204_NO_CONTENT)
@@ -386,7 +306,9 @@ def list_related_products(product_id: int, db: Session = Depends(get_db)) -> lis
     if product is None or not product.is_viewable:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    return _to_product_outs(db, _same_category_products(db, product, 4))
+    return product_view.to_product_outs(
+        db, recommendation.same_category_products(db, product, 4)
+    )
 
 
 @router.get("/{product_id}/recommendations", response_model=list[ProductOut])
@@ -406,10 +328,12 @@ def list_product_recommendations(
 
     neighbors = recommendation.get_neighbors_of(db, product_id, limit)
     if neighbors:
-        return _to_product_outs(db, neighbors)
+        return product_view.to_product_outs(db, neighbors)
 
     # 埋め込みが無い（または近傍ゼロ）→ /related と同じ同カテゴリフォールバック。
-    return _to_product_outs(db, _same_category_products(db, product, limit))
+    return product_view.to_product_outs(
+        db, recommendation.same_category_products(db, product, limit)
+    )
 
 
 @router.get("/{product_id}/reviews", response_model=list[ReviewOut])

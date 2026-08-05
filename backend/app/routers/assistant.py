@@ -12,7 +12,7 @@ from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.auth import get_current_user_optional
 from app.database import get_db
@@ -23,13 +23,12 @@ from app.models import (
     Product,
     User,
 )
-from app.routers.products import _item_outs
 from app.schemas import (
     AssistantChatIn,
     AssistantChatOut,
     AssistantMessageOut,
 )
-from app.services import assistant
+from app.services import assistant, product_view
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
@@ -42,15 +41,14 @@ def _listed_products_by_ids(db: Session, ids: Sequence[int]) -> dict[int, Produc
 
     status はクエリに添える（CLAUDE.md の規律。Python 側で弾く形にすると、
     次にこのループへ手を入れた人が絞りを落としても誰も気づけない）。
-    画像は ProductOut が読むので selectinload で連れてくる。
     """
     if not ids:
         return {}
     products = (
         db.execute(
-            select(Product)
-            .where(Product.id.in_(set(ids)), Product.status.in_(LISTED_STATUSES))
-            .options(selectinload(Product.images))
+            select(Product).where(
+                Product.id.in_(set(ids)), Product.status.in_(LISTED_STATUSES)
+            )
         )
         .scalars()
         .all()
@@ -167,7 +165,7 @@ def chat(
         conversation_id=conv.id,
         source=result.source,
         reply=result.reply,
-        products=_item_outs(db, result.products),
+        products=product_view.to_item_outs(db, result.products),
     )
 
 
@@ -205,10 +203,10 @@ def list_messages(
     ]
     found = _listed_products_by_ids(db, all_ids)
     # カードは商品ごとに 1 回だけ組み、pid で引けるようにする（同じ商品が複数メッセージに
-    # 出てきても組み直さない）。評価の引き当ても _item_outs 内で 1 クエリに畳まれる。
+    # 出てきても組み直さない）。評価の引き当ても to_item_outs 内で 1 クエリに畳まれる。
     card_by_id = {
         item.product.id: item
-        for item in _item_outs(db, [(p, None) for p in found.values()])
+        for item in product_view.to_item_outs(db, [(p, None) for p in found.values()])
     }
 
     return [

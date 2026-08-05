@@ -74,10 +74,14 @@ def add_cart_item(
         .first()
     )
 
-    new_quantity = payload.quantity + (existing.quantity if existing else 0)
-    if new_quantity > product.stock:
+    # 「あと何点入れられるか」の算術も一括投入と同じ 1 箇所に置く（単品投入だけ別式に
+    # すると、在庫の押さえ方を変えたときに片方が取り残される）。単品投入は一括投入と違い
+    # 部分的な追加をせず、要求数を満たせなければ 400 を返す。
+    in_cart = existing.quantity if existing else 0
+    if cart_service.addable_quantity(payload.quantity, product.stock, in_cart) < payload.quantity:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="在庫が不足しています")
 
+    new_quantity = payload.quantity + in_cart
     if existing:
         existing.quantity = new_quantity
     else:
@@ -119,7 +123,8 @@ def update_cart_item(
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart item not found")
 
-    if payload.quantity > item.product.stock:
+    # 数量の置き換えなので、既存のカート数は capacity に含めない（0 を渡す）。
+    if cart_service.addable_quantity(payload.quantity, item.product.stock, 0) < payload.quantity:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="在庫が不足しています")
 
     item.quantity = payload.quantity

@@ -14,9 +14,8 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user_optional
 from app.database import SessionLocal, get_db
 from app.models import RecommendationState, User
-from app.routers.products import _item_outs
 from app.schemas import RecommendationListOut
-from app.services import recommendation
+from app.services import product_view, recommendation
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
@@ -27,7 +26,7 @@ _GENERATING_TTL = timedelta(minutes=10)
 def _fallback(db: Session, limit: int, exclude_ids: set[int] | None) -> RecommendationListOut:
     products = recommendation.get_popular_products(db, limit, exclude_ids=exclude_ids)
     return RecommendationListOut(
-        source="fallback", items=_item_outs(db, [(p, None) for p in products])
+        source="fallback", items=product_view.to_item_outs(db, [(p, None) for p in products])
     )
 
 
@@ -47,28 +46,25 @@ def home_recommendations(
 
     # キャッシュ利用可否（鮮度判定・可視性の絞り込みはサービス側の1箇所に置く。ホームの
     # /api/home も同じ関数を通るので、両者が別世代のキャッシュを配ることがない）。
-    rows, needs_generation = recommendation.load_ready_recommendations(db, user_id, profile)
+    rows = recommendation.load_ready_recommendations(db, user_id, profile)
     if rows:
         return RecommendationListOut(
             source="llm",
-            items=_item_outs(db, [(row.product, row.reason) for row in rows[:limit]]),
+            items=product_view.to_item_outs(
+                db, [(row.product, row.reason) for row in rows[:limit]]
+            ),
         )
 
     # ここから: キャッシュ無し/陳腐化。人気順フォールバックを即返し、必要なら生成起動。
     # プロフィールが作れない（行動なし/埋め込み欠損）なら生成しても失敗するだけなので起動しない。
-    if needs_generation and profile is not None:
-        state = db.get(RecommendationState, user_id)
-        if _should_generate(state):
-            _schedule_generation(db, background_tasks, user_id, profile.profile_hash)
+    # 多重起動と失敗クールダウンの判定は _schedule_generation が advisory ロックの下で
+    # 行うので、ここで先に state を読んで判定し直さない（ロック外で読んだ値は権威が無い）。
+    if profile is not None:
+        _schedule_generation(db, background_tasks, user_id, profile.profile_hash)
 
-    # 除外集合はプロフィール構築が行動から既に畳み込んでいる（購入履歴の join とカート走査を
-    # もう一度払わない）。キャッシュヒット時に手前で組まないのも同じ理由——使わずに捨てていた。
-    exclude_ids = (
-        profile.exclude_ids
-        if profile is not None
-        else recommendation.get_exclude_ids(db, user_id)
+    return _fallback(
+        db, limit, exclude_ids=recommendation.exclude_ids_for(db, user_id, profile)
     )
-    return _fallback(db, limit, exclude_ids=exclude_ids)
 
 
 def _schedule_generation(

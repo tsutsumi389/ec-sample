@@ -172,12 +172,21 @@ class HomeContext:
     recently_viewed_ids: list[int]
     # LLM キャッシュ（state=ready かつ profile_hash 一致のときだけ中身が入る）。
     llm_rows: list[UserRecommendation] = field(default_factory=list)
-    # キャッシュが陳腐化していて再生成を起動すべきか（router が BackgroundTasks で起動）。
-    needs_generation: bool = False
     # byw のアンカー商品（直近閲覧・購入。新しい順、最大 _MAX_ANCHORS 件）。
     anchor_ids: list[int] = field(default_factory=list)
     # カテゴリID → ユーザーの関心の強さ（行動重みの合計）。降順に使う。
     category_weights: dict[int, float] = field(default_factory=dict)
+
+    @property
+    def needs_generation(self) -> bool:
+        """LLM 生成を起動すべきか（router が BackgroundTasks で起動する）。
+
+        保存せず毎回導出する。「キャッシュが空 かつ プロフィールが作れている ログイン
+        ユーザー」という規則を状態として持つと、フィールドを立てる側と読む側で条件が
+        二重になり、片方だけ変わったときにずれる。ゲストは LLM 生成の対象外
+        （llm_rows は常に空だが profile は擬似プロフィールで埋まり得る）。
+        """
+        return self.user_id is not None and self.profile is not None and not self.llm_rows
 
 
 # ビルダーの型: 文脈を受け取り候補レーンを 0 本以上返す純粋な関数。
@@ -306,35 +315,36 @@ def build_context(
         profile = _safe(db, "guest_profile", lambda: _guest_profile(db, viewed))
         exclude_ids: set[int] = set()
         llm_rows: list[UserRecommendation] = []
-        needs_generation = False
         # ゲストは閲覧履歴がそのままアンカー。ログイン時は product_views が正になるので
         # クエリ由来の ID 列は使わない。
         recently_viewed, anchor_ids = viewed, viewed[:_MAX_ANCHORS]
-        weights_label = "guest_categories"
     else:
         profile = _safe(db, "profile", lambda: recommendation.build_profile(db, user_id))
-        # 除外集合（購入済み + カート内）はプロフィール構築が既に行動から畳み込んでいる。
-        # get_exclude_ids を呼び直すと同じ購入履歴の join とカート走査をもう一度払う。
         exclude_ids = (
-            profile.exclude_ids
-            if profile is not None
-            else _safe(db, "exclude_ids", lambda: recommendation.get_exclude_ids(db, user_id))
+            _safe(
+                db,
+                "exclude_ids",
+                lambda: recommendation.exclude_ids_for(db, user_id, profile),
+            )
             or set()
         )
-        llm_rows, needs_generation = _safe(
-            db,
-            "llm_cache",
-            lambda: recommendation.load_ready_recommendations(db, user_id, profile),
-        ) or ([], False)
-        recently_viewed, anchor_ids = [], _safe(
-            db, "anchors", lambda: _login_anchor_ids(db, user_id)
-        ) or []
-        weights_label = "categories"
+        llm_rows = (
+            _safe(
+                db,
+                "llm_cache",
+                lambda: recommendation.load_ready_recommendations(db, user_id, profile),
+            )
+            or []
+        )
+        recently_viewed = []
+        anchor_ids = _safe(db, "anchors", lambda: _login_anchor_ids(db, user_id)) or []
 
     category_weights: dict[int, float] = {}
     if profile is not None:
+        # ラベルはログでゲスト/ログインを見分けるためだけのもの（_safe の警告に出る）。
+        label = "guest_categories" if user_id is None else "categories"
         category_weights = (
-            _safe(db, weights_label, lambda: _category_weights(db, profile.behaviors)) or {}
+            _safe(db, label, lambda: _category_weights(db, profile.behaviors)) or {}
         )
 
     return HomeContext(
@@ -344,7 +354,6 @@ def build_context(
         exclude_ids=exclude_ids,
         recently_viewed_ids=recently_viewed,
         llm_rows=llm_rows,
-        needs_generation=needs_generation,
         anchor_ids=anchor_ids,
         category_weights=category_weights,
     )

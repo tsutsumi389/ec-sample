@@ -46,12 +46,16 @@ def shortage_reason(added: int, requested: int) -> str | None:
 def unavailable_reason(product: Product | None) -> str | None:
     """その商品をいまカートに入れられない理由。入れられる場合は None。
 
-    購入可否は status が唯一の源（models.py の is_viewable / status）。ここで個別の
-    真偽フラグを見ないこと。
+    可否そのものは models.py の is_viewable / is_on_sale が唯一の源で、ここが持つのは
+    文言だけ。status を直接比較し直さないこと——販売可能な状態を 1 つ増やしたときに、
+    商品ページの購入ボタン（ProductOut.purchasable）とカートの判定がずれる。
+
+    状態は在庫より先に見る。販売停止かつ在庫切れのときに「在庫切れ」と言うと、在庫を
+    足せば買えるように読めてしまうため。
     """
     if product is None or not product.is_viewable:
         return "お取り扱いが終了しました"
-    if product.status != "on_sale":
+    if not product.is_on_sale:
         return "現在購入できません"
     if product.stock <= 0:
         return "在庫切れです"

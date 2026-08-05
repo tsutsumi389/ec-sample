@@ -161,6 +161,28 @@ def collect_behaviors(db: Session, user_id: int) -> list[tuple[str, int, float]]
     return behaviors
 
 
+def same_category_products(db: Session, product: Product, limit: int) -> list[Product]:
+    """同じカテゴリの他商品を id 順で返す（自分自身除外・LISTED のみ）。
+
+    埋め込みが引けないときの「関連商品」フォールバック。get_neighbors_of と対で 1 つの
+    方針を成すので、近傍検索と同じモジュールに置く。LISTED_STATUSES の絞りを経路ごとに
+    書くと、片方だけ落としたときに未公開商品が関連商品として漏れる。
+    """
+    if product.category_id is None:
+        return []
+    return (
+        db.query(Product)
+        .filter(
+            Product.category_id == product.category_id,
+            Product.id != product.id,
+            Product.status.in_(LISTED_STATUSES),
+        )
+        .order_by(Product.id)
+        .limit(limit)
+        .all()
+    )
+
+
 def get_exclude_ids(db: Session, user_id: int) -> set[int]:
     """人気順フォールバックで除外する商品（購入済み + カート内）。お気に入りは除外しない。"""
     purchased = (
@@ -172,6 +194,18 @@ def get_exclude_ids(db: Session, user_id: int) -> set[int]:
     )
     cart = db.query(CartItem.product_id).filter(CartItem.user_id == user_id).all()
     return {pid for (pid,) in purchased} | {pid for (pid,) in cart}
+
+
+def exclude_ids_for(db: Session, user_id: int, profile: Profile | None) -> set[int]:
+    """このユーザーの除外集合（購入済み + カート内）。
+
+    プロフィールが作れていれば build_profile が行動から既に畳み込んでいるのでそれを使い、
+    作れなかったときだけ DB を引き直す。この選択をホームとレコメンドの双方に書くと、
+    「畳み込み済みの値」と「引き直した値」の定義がずれたときに片方だけ古くなる。
+    """
+    if profile is not None:
+        return profile.exclude_ids
+    return get_exclude_ids(db, user_id)
 
 
 def build_profile(db: Session, user_id: int) -> Profile | None:
@@ -227,8 +261,8 @@ def build_profile(db: Session, user_id: int) -> Profile | None:
 
 def load_ready_recommendations(
     db: Session, user_id: int, profile: Profile | None
-) -> tuple[list[UserRecommendation], bool]:
-    """LLM 生成キャッシュを鮮度判定つきで読む。戻り値は (rank 順の行, 再生成が必要か)。
+) -> list[UserRecommendation]:
+    """LLM 生成キャッシュを鮮度判定つきで読む。戻り値は rank 順の行（陳腐化なら空）。
 
     鮮度は「state=ready かつ profile_hash が現在の行動ハッシュと一致」。ホーム
     （services/home_page.py の build_context）と /recommendations/home の双方がこの
@@ -237,7 +271,9 @@ def load_ready_recommendations(
     鮮度の唯一の源であるべきなので、判定はここに置く。
 
     可視性は SQL 側で絞る（生成後に非公開化された商品はここで落ちる）ので、呼び出し側が
-    status を確かめ直す必要はない。キャッシュが全滅したら再生成が必要と返す。
+    status を確かめ直す必要はない。「再生成すべきか」は空リストと profile の有無から
+    呼び出し側が決める（プロフィールが作れないなら生成しても失敗するだけなので起動しない）
+    ——別の戻り値にすると同じ規則が呼び出し側の条件と二重に書かれる。
     """
     state = db.get(RecommendationState, user_id)
     fresh = (
@@ -247,10 +283,9 @@ def load_ready_recommendations(
         and state.profile_hash == profile.profile_hash
     )
     if not fresh:
-        # プロフィールが作れないなら生成しても失敗するだけなので起動しない。
-        return [], profile is not None
+        return []
 
-    rows = list(
+    return list(
         db.execute(
             select(UserRecommendation)
             .join(Product, UserRecommendation.product_id == Product.id)
@@ -264,7 +299,6 @@ def load_ready_recommendations(
         .scalars()
         .all()
     )
-    return rows, not rows
 
 
 def get_candidates(
@@ -498,9 +532,14 @@ def history_prompt_lines(
         .filter(ProductEmbedding.product_id.in_(history_ids))
         .all()
     }
+    # カタログ行が product.category.name を読む（llm_catalog.catalog_line）ため、
+    # カテゴリも連れてくる。素の遅延ロードだと履歴に出るカテゴリ数ぶん往復する。
     history_products = {
         p.id: p
-        for p in db.query(Product).filter(Product.id.in_(history_ids)).all()
+        for p in db.query(Product)
+        .options(selectinload(Product.category))
+        .filter(Product.id.in_(history_ids))
+        .all()
     }
 
     lines: list[str] = []
