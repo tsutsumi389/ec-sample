@@ -46,7 +46,7 @@ const DISABLED_ICON = 'disabled:bg-transparent disabled:text-ink-faint';
  * キーボードの現在地の目印は造形の系統によらず同じであるべきで、片方だけ色や offset が
  * 動いても focus 中にしか出ないため目視では気づけない（だから写しを作らず定数で配る）。
  */
-const FOCUS_RING =
+export const FOCUS_RING =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
 
 const BASE =
@@ -125,6 +125,84 @@ export function chip(
   return (
     'inline-flex items-center justify-center whitespace-nowrap rounded-full ' +
     `transition-colors duration-fast ease-standard ${FOCUS_RING} ${face} ${box}`
+  );
+}
+
+/**
+ * ヘッダーの常設ナビの丸ピル。
+ *
+ * btn() は rounded-md の文字ボタン、chip() は「次の一手」の粒で、どちらも
+ * 『h-16 の行に収まる丸ピル・アイコン単独にもラベル付きにもなる・現在地を持つ』
+ * という寸法と状態集合を持たない。chip() が btn() と別系統なのと同じ理由でここに
+ * 1本置き、BASE は継がず FOCUS_RING だけを共有する。
+ *
+ * tone は造形ではなく**役割**で、これがそのまま導線の階層になる:
+ *   quiet   面を持たない記号の導線（商品一覧・カート・注文履歴・お気に入り・アカウント・管理画面）
+ *   plain   面も罫も持たない文字だけの副の手続き（ログイン）
+ *   cta     brand の罫を持つ主CTA（会員登録）。hover で塗りへ反転する
+ *
+ * ⚠ cta に brand 塗り（bg-brand-600）を当てないこと。このファイル冒頭の規律どおり
+ *   brand 塗りは各ページの最重要CTA専用で、ヘッダーは全ページ共通の器のため、
+ *   PDP の「カートに追加」等と同一画面に塗りが2つ立つ。罫（brand-500 対 surface 4.37:1）
+ *   ＋号数を1段上げる＋shadow-paper で1段上を作り、押した感触は hover の反転が返す。
+ * ⚠ quiet に**常設の**面を塗らないこと。塗るとカートの数取りバッジの ring-2 ring-surface
+ *   （地色で籠の線を punch out する輪）が地と食い違い、意味のない縁になる。
+ *   hover / 現在地の一瞬だけは許容している（ポインタを乗せている間しか出ないので、
+ *   輪の食い違いに気づく前に離れる）。常時その面に居る状態を作らないこと。
+ * ⚠ label:'xl'（アイコンのみに畳む形）に plain / cta を渡さないこと。
+ */
+export type NavTone = 'quiet' | 'plain' | 'cta';
+
+/**
+ * 現在地の印。ピルの**外**＝ヘッダーの地（surface）の上に 3px の罫を出す。
+ * 幾何: ピル h-11(44px) は行 h-16(64px) の中で上下 10px 余るので、-bottom-2.5(=10px)
+ * で罫の下端が行の下端に乗り、border-b の直上に貼りつくタブ状の印になる。
+ * position:absolute なのでレイアウトに寄与せず h-16 も --header-h も動かない。
+ * 罫は常に surface の上に出るので tone を問わず brand-600 対 surface 6.12:1 で読める
+ * （以前の bg-brand-50 は対 surface 1.07:1 で、現在地の合図として成立していなかった）。
+ * ⚠ <header> の箱に overflow-hidden を足さないこと（この 3px が裁ち落とされ、
+ *   現在地が無言で消える）。
+ * ⚠ relative はピル自身に付く。カートバッジの包含ブロックはより内側の
+ *   cartIconWithBadge() の span なので影響しない。
+ */
+export const NAV_ACTIVE_BAR =
+  "relative after:pointer-events-none after:absolute after:inset-x-2 after:-bottom-2.5 " +
+  "after:h-[3px] after:rounded-t-full after:bg-brand-600 after:content-['']";
+
+export function navPill(
+  tone: NavTone = 'quiet',
+  opts: { active?: boolean; label?: 'always' | 'xl' } = {},
+) {
+  const { active = false, label = 'xl' } = opts;
+  // 同一プロパティ（px-* / text-* / font-*）を base と face の両方から出さない。
+  // ユーティリティは連結順ではなく生成順で勝敗が決まるため、二重に出すと
+  // 「書いたほうが効いている」という思い込みだけが残る（btn('ghost') に足された
+  // font-normal が font-medium に負けていたのがその実例）。号数は box が、
+  // ウェイトは face が、それぞれ排他的に持つ。
+  const box =
+    label === 'always'
+      ? tone === 'cta'
+        ? 'h-11 px-4 text-body'
+        : 'h-11 px-3 text-caption'
+      : 'h-11 w-11 px-0 text-caption xl:w-auto xl:px-3';
+  // active にも hover を持たせる。btn/iconBtn/chip は例外なくポインタに反応するので、
+  // 現在地のときだけ無反応だと「この項目はもう押せない」に読める（実際は押せる）。
+  const face = {
+    quiet: active
+      ? 'bg-transparent font-semibold text-brand-700 hover:bg-sunken'
+      : 'bg-transparent font-medium text-ink-soft hover:bg-sunken hover:text-ink',
+    plain: active
+      ? 'bg-transparent font-semibold text-brand-700 hover:bg-sunken'
+      : 'bg-transparent font-medium text-ink-muted hover:bg-sunken hover:text-ink-soft',
+    cta: active
+      ? 'border border-brand-600 bg-surface font-semibold text-brand-700 shadow-paper hover:bg-brand-50'
+      : 'border border-brand-500 bg-surface font-medium text-brand-700 shadow-paper ' +
+        'hover:border-brand-600 hover:bg-brand-600 hover:text-white hover:shadow-lift',
+  }[tone];
+  return (
+    'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full ' +
+    'transition-[background-color,border-color,box-shadow,color] duration-fast ease-standard ' +
+    `${FOCUS_RING} ${box} ${face} ${active ? NAV_ACTIVE_BAR : ''}`
   );
 }
 
