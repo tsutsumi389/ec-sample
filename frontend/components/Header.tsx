@@ -5,8 +5,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
-import { btn, iconButton } from '@/lib/buttonStyles';
+import { btn, iconButton, navPill, NAV_ACTIVE_BAR, FOCUS_RING } from '@/lib/buttonStyles';
 import { useFocusTrap } from '@/lib/focusTrap';
+import { withRedirect } from '@/lib/redirect';
 import SearchBox from '@/components/SearchBox';
 import {
   SearchIcon,
@@ -36,6 +37,21 @@ export default function Header() {
   const menuBtnRef = useRef<HTMLButtonElement>(null);
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
+
+  // ログイン・会員登録へ送るときに現在地を引き継ぐ（CLAUDE.md の規律。
+  // 「カートに入れた → ログイン → トップに着く」経路を作らないため）。
+  // ただし /login・/register 自身に居るときは付けない——自分自身へ戻すループになり、
+  // かつログイン画面から会員登録へ渡り歩くたびにクエリが自分のパスで上書きされて、
+  // 本来の戻り先（カート等）を失う。
+  //
+  // 既知の欠け: pathname だけなのでクエリは落ちる（/products?search=… から入ると
+  // 検索語・絞り込み・並び順が戻り先に残らない）。同じ画面の WishlistButton は
+  // pathname+search を渡しており、そこだけ挙動が割れている。
+  // 揃えるには useSearchParams が要るが、Header は layout でレンダリングされるため
+  // Suspense 境界なしでは next build が落ちる（SearchBox が境界を持つのと同じ理由）。
+  // 直すときは境界を1つ足して backTo をその中で組むこと。
+  const backTo =
+    pathname && !pathname.startsWith('/login') && !pathname.startsWith('/register') ? pathname : '/';
 
   // カート数の増加時に一瞬バッジを弾ませる。
   const [bump, setBump] = useState(false);
@@ -92,28 +108,6 @@ export default function Header() {
     router.push('/');
   };
 
-  // ナビのピル。高さ 44px（h-11）でタップ領域を確保する。
-  //
-  // 1024〜1279px は「アイコンのみ」（w-11 の正方形＝44px 角）、1280px 以上は
-  // 「アイコン＋ラベル」に開く。ラベル込みのフルナビは実測で約810px 必要で、
-  // 1024px の版面（実効 960px）ではロゴ＋検索欄と食い合って版面を溢れる。
-  // 一方でアイコンのみなら 5項目 236px で収まるので、ドロワーへ全退避させずに済む。
-  // ラベルは <span className="nav-label"> 側が xl で現れる（下の navLabel）。
-  //
-  // wide=true は「アイコンでは意味が立たない項目」（ログイン／会員登録）用。
-  // 人型と矢印が並ぶだけの2つ組は判じ物になるので、この2項目だけは常にラベルを出す。
-  // 未ログイン時はナビが少なく幅に余裕がある（1024px で検索欄 639px を確保）。
-  const pillClass = (href: string, wide = false) =>
-    `inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
-      wide
-        ? 'w-auto justify-start px-3'
-        : 'w-11 justify-center px-0 xl:w-auto xl:justify-start xl:px-3'
-    } ${
-      isActive(href)
-        ? 'bg-brand-50 font-semibold text-brand-700'
-        : 'text-ink-soft hover:bg-brand-50 hover:text-brand-700'
-    }`;
-
   /** ナビのラベル。xl 未満はアイコンのみになるので隠す（読み上げは aria-label が担う）。 */
   const navLabel = (text: string) => <span className="hidden xl:inline">{text}</span>;
 
@@ -137,10 +131,12 @@ export default function Header() {
   // アイコン＋バッジの1組。ラベル付きのピルでは、バッジがアイコン箱の外へ
   // 8px（＋ring 2px）はみ出すぶんが gap-1.5 を食い潰して「カ」に 1.5px まで迫るので、
   // 数がある時だけ右マージンで補正し、他のナビ項目の光学アキ（8.5〜10.5px）に揃える。
+  // 補正は xl 限定にしない——ナビの「カート」は lg からラベル付きになったため、
+  // xl 限定のままだと 1024〜1279px でだけバッジが文字に噛む。
   // コンポーネントではなく素の関数にする（毎レンダーで再マウントされると
   // バッジの animate-bump が最初から再生されてしまうため）。
   const cartIconWithBadge = (labelled = false) => (
-    <span className={`relative inline-flex ${labelled && count > 0 ? 'xl:mr-3' : ''}`}>
+    <span className={`relative inline-flex ${labelled && count > 0 ? 'mr-3' : ''}`}>
       <CartIcon className="h-5 w-5" />
       {cartBadge}
     </span>
@@ -148,43 +144,67 @@ export default function Header() {
 
   const cartLabel = count > 0 ? `カート（${count}点）` : 'カート';
 
+  // 現在地は面ではなく左の見出し罫で出す。bg-brand-50 は対 surface 1.07:1 しかなく、
+  // 「選ばれている行」の合図として成立していなかった（罫は brand-600 対 surface 6.12:1）。
+  // 面は hover と共通の sunken にして、hover と現在地が font-weight でしか
+  // 区別できない状態を解く。focus の輪は写しを作らず FOCUS_RING を配る。
   const drawerLinkClass = (href: string) =>
-    `flex min-h-[2.75rem] items-center gap-3 rounded-md px-3 py-2.5 text-body transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
-      isActive(href) ? 'bg-brand-50 font-semibold text-brand-700' : 'text-ink-soft hover:bg-brand-50'
+    `relative flex min-h-[2.75rem] items-center gap-3 rounded-md px-3 py-2.5 text-body transition-colors duration-fast ease-standard ${FOCUS_RING} ${
+      isActive(href)
+        ? "bg-sunken font-semibold text-brand-700 before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-brand-600 before:content-['']"
+        : 'text-ink-soft hover:bg-sunken'
     }`;
 
   /**
    * ドロワーの項目。ログイン状態での出し分けはここ（配列を組む側）に寄せ、
    * 描画側は行の造形を1つだけ持つ。
    * 一覧・検索は /products に独立した。ホーム自体へはロゴから戻れる。
+   *
+   * match は href と別に持つ。href は withRedirect() で `?redirect=` が付くことがあり、
+   * isActive() は完全一致・前方一致で見るのでクエリ付きの href では現在地を取り違える。
+   *
+   * 会員登録はこの配列に入れない。ドロワー下端の CTA へ格上げしたのと、
+   * ログイン・会員登録・アカウントの3つが同じ UserIcon で並ぶ三つ巴を断つため。
    */
-  const drawerItems: { href: string; icon: (p: { className?: string }) => JSX.Element; label: string }[] = [
-    { href: '/products', icon: BoxIcon, label: '商品一覧' },
-    { href: '/cart', icon: CartIcon, label: cartLabel },
+  const drawerItems: {
+    href: string;
+    match: string;
+    icon: (p: { className?: string }) => JSX.Element;
+    label: string;
+  }[] = [
+    { href: '/products', match: '/products', icon: BoxIcon, label: '商品一覧' },
+    { href: '/cart', match: '/cart', icon: CartIcon, label: cartLabel },
     ...(!loading && user
       ? [
-          { href: '/orders', icon: PackageIcon, label: '注文履歴' },
-          { href: '/wishlist', icon: HeartIcon, label: 'お気に入り' },
-          { href: '/account', icon: UserIcon, label: 'アカウント' },
+          { href: '/orders', match: '/orders', icon: PackageIcon, label: '注文履歴' },
+          { href: '/wishlist', match: '/wishlist', icon: HeartIcon, label: 'お気に入り' },
+          { href: '/account', match: '/account', icon: UserIcon, label: 'アカウント' },
           ...(user.role === 'admin'
-            ? [{ href: '/admin', icon: ClipboardListIcon, label: '管理画面' }]
+            ? [{ href: '/admin', match: '/admin', icon: ClipboardListIcon, label: '管理画面' }]
             : []),
         ]
       : []),
     ...(!loading && !user
       ? [
-          { href: '/login', icon: UserIcon, label: 'ログイン' },
-          { href: '/register', icon: UserIcon, label: '会員登録' },
+          {
+            href: withRedirect('/login', backTo),
+            match: '/login',
+            icon: UserIcon,
+            label: 'ログイン',
+          },
         ]
       : []),
   ];
 
   return (
     // ドロワーは <header> の外（body 直下）に置く。
-    // header は backdrop-blur を持つため position:fixed の包含ブロックになり、
-    // 中に入れると fixed inset-0 が「ヘッダーの箱」に対して解決されてしまう
+    // header に backdrop-filter / transform / will-change のどれかが付くと
+    // position:fixed の包含ブロックになり、中に入れた fixed inset-0 が
+    // 「ヘッダーの箱」に対して解決されてしまう
     // （＝高さ64pxの潰れたドロワーになり、閉状態のパネルが版面の右外に居座って
     //   モバイル全ページに約290pxの横スクロールを作っていた）。
+    // いま header は不透明な面になり backdrop-blur を持たないが、この配置は
+    // **blur を戻したときへの保険**なので崩さないこと（外へ出したまま気づけない）。
     <>
       {/* 本文へスキップ。キーボードで最初に当たる要素にする（全ページでヘッダーの
           ナビ7項目を通過させないため）。着地点 <main id="main" tabindex="-1"> は
@@ -198,15 +218,33 @@ export default function Header() {
 
       {/* 行の高さは h-16（= globals.css の --header-h: 4rem）に固定する。
           フィルタ帯などの sticky が top-[var(--header-h)] でこの値を参照するため、
-          padding で高さを作らず必ず h-16 のままにすること。 */}
-      <header className="sticky top-0 z-30 border-b border-line bg-surface/92 backdrop-blur">
+          padding で高さを作らず必ず h-16 のままにすること。
+
+          面は不透明の bg-surface で固定する。bg-surface/92 は Tailwind の既定 opacity
+          スケール（5の倍数のみ）に無く任意値記法でもないため CSS が生成されず、
+          ヘッダーは面をまったく持っていなかった（computed = rgba(0,0,0,0)）。
+          スクロール 0 では body の bg-page が透けて「それらしく」見えるだけで、
+          下を深緑帯（bg-invert: 表紙・レコメンド・奥付）が通った瞬間に
+          ロゴ（対 invert 1.95:1）もナビ（同 1.31:1）も読めなくなっていた。
+          半端な不透明度がどうしても要るときは、既定スケール（5の倍数）の値を使うか、
+          スラッシュのあとを角括弧で囲む任意値記法で書き、**生成CSSに実在するか**を必ず見る。
+          クラス名らしき綴りはこのコメント本文からも拾われて CSS になるので、
+          「生成されているから正しい」は根拠にならない（ここに実例を書き残せないのはそのため）。
+
+          罫は line-strong。line は対 sunken 1.04:1 で、/products の PageMasthead
+          （bg-sunken）に接すると段差ごと消える。
+
+          backdrop-blur は外した（不透明の面の背後をぼかしても出力は変わらない）。
+          ただしドロワーはこれまで通り <header> の外に置くこと——将来 blur を戻したとき、
+          包含ブロックの事故（モバイル全ページに約290pxの横スクロール）が無言で再発する。 */}
+      <header className="sticky top-0 z-30 border-b border-line-strong bg-surface">
         <div className="wrap-wide">
           <div className="flex h-16 min-w-0 items-center gap-3">
             {/* ロゴ（誌名。明朝＝ブランド表記のフェイス） */}
             {/* py-2 は見た目の余白ではなくタップ域（文字丈 28px → 44px）。行は h-16 のまま。 */}
             <Link
               href="/"
-              className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded py-2 font-mincho text-xl font-bold tracking-[0.06em] text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+              className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded py-2 font-mincho text-xl font-bold tracking-[0.06em] text-brand-700 ${FOCUS_RING}`}
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="shrink-0">
                 <path
@@ -224,12 +262,15 @@ export default function Header() {
                 ヘッダーは幅に応じて4段構えにする:
                   〜639px     ロゴ＋アイコン4つ（検索・お気に入り・カート・メニュー）
                   640〜1023px ロゴ＋常設の検索欄＋アイコン3つ（お気に入り・カート・メニュー）
-                  1024〜1279px ロゴ＋常設の検索欄＋アイコンのみの主要ナビ＋メニュー
+                  1024〜1279px ロゴ＋常設の検索欄＋主要ナビ（商品一覧・カート・認証の導線は
+                              ラベル付き／会員の記号群はアイコンのみ）＋メニュー
                   1280px〜    ロゴ＋常設の検索欄＋ラベル付きフルナビ（ドロワー無し）
-                フルナビ（ログイン時7項目・whitespace-nowrap）は実測で約810px 必要なため、
-                sm(640) や lg(1024) で「ラベル付きのまま」出すと flex-1 の検索欄が
-                28px まで潰れて版面を溢れる。そこでラベルだけを落とし、44px 角の
-                アイコンピル（5項目で 236px）にして 1024px から主要導線を版面に出す。
+                「約810px 必要だから lg では全部畳む」という以前の断は、実測すると
+                admin（nav 849.7px）のときだけ正しかった。1024px の余裕は未ログインで
+                388px・一般会員で349pxあり、ラベル付き4項目（412.7px）でも 172px 残る。
+                そこで畳むのは「語が無くても図案で分かる会員の記号群」だけに絞り、
+                商品一覧・カート・ログイン・会員登録は lg からラベルを出す（籠と箱と
+                荷箱が無地で4つ並ぶ判じ物を、少なくとも前2つについては解く）。
                 768px では検索欄が 200px まで痩せる（実測）ので、そこは畳んだままにする。 */}
             {/* SearchBox は useSearchParams を使うため Suspense 境界が必要
                 （Header は layout でレンダリングされ、無いと next build が落ちる）。
@@ -242,39 +283,48 @@ export default function Header() {
               />
             </Suspense>
 
-            {/* 主要ナビ（md 以上）。md〜lg はアイコンのみ、xl でラベルが開く。 */}
+            {/* 主要ナビ（lg 以上）。導線の階層は面ではなく tone で表す:
+                記号だけの quiet ／ 文字だけの plain（ログイン）／ brand の罫を持つ cta（会員登録）。
+                号数は navPill が持つ（以前ここに素の text-sm を当てていたが、この体系の
+                和文スケールは caption 13px と body 15px で、14px は定義に存在しない）。 */}
             <nav
               aria-label="主要ナビゲーション"
-              className="ml-auto hidden min-w-0 shrink-0 items-center gap-1 whitespace-nowrap text-sm lg:flex"
+              className="ml-auto hidden min-w-0 shrink-0 items-center gap-1.5 whitespace-nowrap lg:flex"
             >
               {/* 一覧・検索が /products に独立したため、常設の入口をナビに置く。
-                  前方一致の isActive により /products/[id]（商品詳細）閲覧中もアクティブ扱いになる。 */}
+                  前方一致の isActive により /products/[id]（商品詳細）閲覧中もアクティブ扱いになる。
+                  可視ラベルを常時出すので aria-label と title は付けない（読み上げが二重になる）。 */}
               <Link
                 href="/products"
-                className={pillClass('/products')}
+                className={navPill('quiet', { active: isActive('/products'), label: 'always' })}
                 aria-current={isActive('/products') ? 'page' : undefined}
-                aria-label="商品一覧"
-                title="商品一覧"
               >
                 <BoxIcon className="h-5 w-5 shrink-0" />
-                {navLabel('商品一覧')}
+                商品一覧
               </Link>
+              {/* aria-label はここだけ残す。点数を運ぶのはこの属性で、バッジ側は aria-hidden。 */}
               <Link
                 href="/cart"
-                className={pillClass('/cart')}
+                className={navPill('quiet', { active: isActive('/cart'), label: 'always' })}
                 aria-current={isActive('/cart') ? 'page' : undefined}
                 aria-label={cartLabel}
-                title={cartLabel}
               >
                 {cartIconWithBadge(true)}
-                {navLabel('カート')}
+                カート
               </Link>
 
               {!loading && user && (
                 <>
+                  {/* 語を持つ導線（商品一覧・カート）と、lg では記号だけになる会員の群との
+                      切れ目。xl ではラベルが開いて群の区別が語で付くうえ、admin@1280 の
+                      余裕は 35.7px しかないので、この罫は lg 帯にだけ出す（9px）。 */}
+                  <span
+                    aria-hidden="true"
+                    className="mx-1 hidden h-5 w-px shrink-0 bg-line-strong lg:block xl:hidden"
+                  />
                   <Link
                     href="/orders"
-                    className={pillClass('/orders')}
+                    className={navPill('quiet', { active: isActive('/orders'), label: 'xl' })}
                     aria-current={isActive('/orders') ? 'page' : undefined}
                     aria-label="注文履歴"
                     title="注文履歴"
@@ -284,7 +334,7 @@ export default function Header() {
                   </Link>
                   <Link
                     href="/wishlist"
-                    className={pillClass('/wishlist')}
+                    className={navPill('quiet', { active: isActive('/wishlist'), label: 'xl' })}
                     aria-current={isActive('/wishlist') ? 'page' : undefined}
                     aria-label="お気に入り"
                     title="お気に入り"
@@ -294,7 +344,7 @@ export default function Header() {
                   </Link>
                   <Link
                     href="/account"
-                    className={pillClass('/account')}
+                    className={navPill('quiet', { active: isActive('/account'), label: 'xl' })}
                     aria-current={isActive('/account') ? 'page' : undefined}
                     aria-label="アカウント"
                     title="アカウント"
@@ -305,7 +355,10 @@ export default function Header() {
                   {user.role === 'admin' && (
                     <Link
                       href="/admin"
-                      className={pillClass('/admin')}
+                      className={navPill('quiet', {
+                        active: !!pathname?.startsWith('/admin'),
+                        label: 'xl',
+                      })}
                       aria-current={pathname?.startsWith('/admin') ? 'page' : undefined}
                       aria-label="管理画面"
                       title="管理画面"
@@ -330,27 +383,59 @@ export default function Header() {
                   <button
                     type="button"
                     onClick={handleLogout}
-                    /* ナビ項目（14px/400/ink-soft）より一段落として、
-                       会員ブロックが導線の列に混ざらないようにする。 */
-                    className={`${btn('ghost', 'sm')} ml-1 hidden font-normal text-ink-muted xl:inline-flex`}
+                    /* 一段落とすのは**造形**で行う（h-9・角丸 md ＝ 丸ピンのナビ h-11・
+                       rounded-full と別の系統）。色とウェイトは呼び出し側から下げられない——
+                       btn() の内側の text-ink-soft / font-medium が生成順で必ず後勝ちするため、
+                       ここに text-ink-muted や font-normal を連結しても1px も変わらない
+                       （実際に font-normal がそうやって効かないまま残っていた）。
+                       色で落としたくなったら buttonStyles.ts 側に variant を足すこと。 */
+                    className={`${btn('ghost', 'sm')} ml-1 hidden xl:inline-flex`}
                   >
                     ログアウト
                   </button>
                 </>
               )}
 
+              {/* 認証が解けるまでの席取り。ログイン・会員登録は lg から出るので、
+                  席も lg から取る（nav 自体が lg:flex なのでそれ未満では親ごと消える）。
+                  xl 限定にすると 1024〜1279px でだけ席が空かず、解けた瞬間に
+                  flex-1 の検索欄が約186px 縮んで見える。
+                  なお「認証への入口が画面上に1つも無い」のは xl だけの話（圧縮群もドロワーも
+                  xl:hidden のため）で、その穴自体はここでは塞がらない。ここが受け持つのは
+                  横方向の跳ねだけ。
+                  呼吸は animate-breathe（animate-pulse はこの体系の duration/easing の
+                  どちらにも属さないため使わない）。 */}
+              {loading && (
+                <span
+                  aria-hidden="true"
+                  className="ml-1 hidden h-11 w-[11.5rem] shrink-0 animate-breathe rounded-full bg-sunken lg:block"
+                />
+              )}
+
+              {/* 認証の2つは記号を持たせない。ログインの UserIcon はログイン後の
+                  「アカウント」と同じ人型で、会員登録の → はこのファイル内で
+                  「ログアウト」にも当たっていた（同じ字面が正反対を指していた）。
+                  階層は記号ではなく面で割る: ログイン＝面も罫も無い文字だけ、
+                  会員登録＝brand の罫（塗りはページ側の最重要CTA専用なので使わない）。 */}
               {!loading && !user && (
                 <>
-                  <Link href="/login" className={pillClass('/login', true)}>
-                    <UserIcon className="h-5 w-5 shrink-0" />
+                  <Link
+                    href={withRedirect('/login', backTo)}
+                    className={navPill('plain', { active: isActive('/login'), label: 'always' })}
+                    aria-current={isActive('/login') ? 'page' : undefined}
+                  >
                     ログイン
                   </Link>
+                  {/* lg でも常設する。以前は xl 限定で、同じ帯にログインだけが残り
+                      「獲得の導線だけが畳まれる」逆転が起きていた（幅は足りている）。 */}
                   <Link
-                    href="/register"
-                    /* 会員登録は xl でだけ出す。lg 未満のドロワーにも同項目がある。 */
-                    className={`${pillClass('/register', true)} hidden xl:inline-flex`}
+                    href={withRedirect('/register', backTo)}
+                    className={`${navPill('cta', {
+                      active: isActive('/register'),
+                      label: 'always',
+                    })} ml-1`}
+                    aria-current={isActive('/register') ? 'page' : undefined}
                   >
-                    <ArrowRightIcon className="h-5 w-5 shrink-0" />
                     会員登録
                   </Link>
                 </>
@@ -377,8 +462,16 @@ export default function Header() {
                   href="/wishlist"
                   aria-label="お気に入り"
                   aria-current={isActive('/wishlist') ? 'page' : undefined}
+                  /* 現在地は面ではなく 3px の罫で出す（NAV_ACTIVE_BAR）。丸に面を塗ると、
+                     カートバッジの ring-2 ring-surface（地色で籠の線を punch out する輪）が
+                     地と食い違って意味のない縁になる。
+                     色は変えられない——iconBtn() の内側の text-ink-soft が生成順で必ず勝つので、
+                     ここに text-brand-700 を連結しても効かない（書くと「効いている」という
+                     思い込みだけが残る）。合図は罫が単独で担う。
+                     罫の幾何は「ヘッダーの最下段が h-16 の行であること」が前提なので、
+                     検索欄を展開している間（h-16 の下にもう一段積まれる）は出さない。 */
                   className={`${iconButton} lg:hidden ${
-                    isActive('/wishlist') ? 'bg-brand-50 text-brand-700' : ''
+                    isActive('/wishlist') && !searchOpen ? NAV_ACTIVE_BAR : ''
                   }`}
                 >
                   <HeartIcon className="h-5 w-5" />
@@ -389,7 +482,7 @@ export default function Header() {
                 aria-label={cartLabel}
                 aria-current={isActive('/cart') ? 'page' : undefined}
                 className={`${iconButton} lg:hidden ${
-                  isActive('/cart') ? 'bg-brand-50 text-brand-700' : ''
+                  isActive('/cart') && !searchOpen ? NAV_ACTIVE_BAR : ''
                 }`}
               >
                 {cartIconWithBadge()}
@@ -484,21 +577,52 @@ export default function Header() {
                 以前は同じ3つ組（アイコン＋ラベル＋シェブロン）が8回写されていて、
                 シェブロンの色や間隔を変えるのに8箇所を直す必要があった。
                 ログイン状態での出し分けは配列を組む側に寄せる。 */}
-            {drawerItems.map(({ href, icon: Icon, label }) => (
-              <Link key={href} href={href} className={drawerLinkClass(href)}>
-                <Icon className="h-5 w-5 text-ink-faint" />
+            {/* key は match。label はカートの点数を含む可変値（「カート（2点）」）なので、
+                key にすると点数が変わるたびに行が再マウントされ、その行にフォーカスが
+                あったとき body へ落ちて useFocusTrap の循環から抜ける
+                （ゲストカートを持ったままドロワーの「ログイン」へ進み、直後の
+                 POST /cart/merge で count が変わる経路で実際に起きる）。 */}
+            {drawerItems.map(({ href, match, icon: Icon, label }) => (
+              <Link
+                key={match}
+                href={href}
+                className={drawerLinkClass(match)}
+                aria-current={isActive(match) ? 'page' : undefined}
+              >
+                {/* ink-faint は対 sunken 2.49:1 で、現在地・hover の面（bg-sunken）に
+                    乗った瞬間に UI の 3:1 を割る（tailwind.config.ts が名指しで禁じる用法）。
+                    ink-muted なら対 surface 7.03:1 / 対 sunken 4.72:1 で両面とも合格する。 */}
+                <Icon className="h-5 w-5 text-ink-muted" />
                 <span className="flex-1">{label}</span>
                 <ChevronRightIcon className="h-4 w-4 text-line-strong" />
               </Link>
             ))}
           </nav>
 
+          {/* 会員登録はドロワーの行ではなくフッタの CTA として持つ。
+              ここは塗ってよい——ドロワーは aria-modal で背後が膜の下におり、
+              「同一画面に brand 塗りが2つ立つ」というヘッダー側の制約が働かない。
+              この面での最重要アクションなので btn('primary') をそのまま使う。 */}
+          {!loading && !user && (
+            <div className="border-t border-line p-3">
+              <Link
+                href={withRedirect('/register', backTo)}
+                className={`${btn('primary', 'md')} w-full`}
+                /* 判定は href ではなく定数で行う。href には ?redirect= が付くことがあり、
+                   isActive() は完全一致・前方一致で見るので取り違える。 */
+                aria-current={isActive('/register') ? 'page' : undefined}
+              >
+                会員登録
+              </Link>
+            </div>
+          )}
+
           {!loading && user && (
             <div className="border-t border-line p-2">
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex min-h-[2.75rem] w-full items-center gap-3 rounded-md px-3 py-2.5 text-body text-ink-soft transition-colors duration-fast hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className={`flex min-h-[2.75rem] w-full items-center gap-3 rounded-md px-3 py-2.5 text-body text-ink-soft transition-colors duration-fast hover:bg-sunken ${FOCUS_RING}`}
               >
                 <ArrowRightIcon className="h-5 w-5 text-ink-faint" />
                 <span>ログアウト</span>
