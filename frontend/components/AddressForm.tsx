@@ -1,9 +1,10 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useState, type ReactNode } from 'react';
 import type { Address } from '@/lib/types';
-import { btn } from '@/lib/buttonStyles';
-import { SELECT_CHEVRON } from '@/lib/selectChevron';
+import { FOCUS_RING, btn } from '@/lib/buttonStyles';
+import { SELECT_CHEVRON, SELECT_CHEVRON_CLASS } from '@/lib/selectChevron';
+import RequiredMark from '@/components/RequiredMark';
 
 export interface AddressFormValues {
   recipient_name: string;
@@ -55,6 +56,38 @@ interface ZipCloudResult {
   address1?: string;
   address2?: string;
   address3?: string;
+}
+
+/**
+ * 「ラベル ＋ 必須マーク ＋ 入力欄 ＋ エラー行」の1組。
+ * 同じ19行が5つの項目で写されていたので、器だけをここに閉じる（入力欄そのものは
+ * type / inputMode / placeholder が項目ごとに違うので children で受ける）。
+ */
+function Field({
+  name,
+  label,
+  error,
+  children,
+}: {
+  name: keyof AddressFormValues;
+  label: string;
+  error?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <label htmlFor={name} className="mb-1 block text-caption font-medium text-ink-soft">
+        {label}
+        <RequiredMark />
+      </label>
+      {children}
+      {error && (
+        <p role="alert" className="mt-1 text-caption text-critical-700">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default function AddressForm({ initialValues, onSubmit, onCancel, submitLabel }: AddressFormProps) {
@@ -147,12 +180,7 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4 rounded-xl bg-surface p-6 shadow-paper">
-      <div>
-        <label htmlFor="recipient_name" className="mb-1 block text-caption font-medium text-ink-soft">
-          お届け先氏名
-          <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
-          <span className="sr-only">（必須）</span>
-        </label>
+      <Field name="recipient_name" label="お届け先氏名" error={fieldErrors.recipient_name}>
         <input
           id="recipient_name"
           type="text"
@@ -161,19 +189,9 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
           onChange={(e) => setField('recipient_name', e.target.value)}
           className={inputClass(Boolean(fieldErrors.recipient_name))}
         />
-        {fieldErrors.recipient_name && (
-          <p role="alert" className="mt-1 text-caption text-critical-700">
-            {fieldErrors.recipient_name}
-          </p>
-        )}
-      </div>
+      </Field>
 
-      <div>
-        <label htmlFor="postal_code" className="mb-1 block text-caption font-medium text-ink-soft">
-          郵便番号
-          <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
-          <span className="sr-only">（必須）</span>
-        </label>
+      <Field name="postal_code" label="郵便番号" error={fieldErrors.postal_code}>
         <input
           id="postal_code"
           type="text"
@@ -188,27 +206,17 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
         <p id="postal_code-hint" className="mt-1 text-caption text-ink-muted">
           7桁を入力すると住所を自動で補完します。
         </p>
-        {fieldErrors.postal_code && (
-          <p role="alert" className="mt-1 text-caption text-critical-700">
-            {fieldErrors.postal_code}
-          </p>
-        )}
-      </div>
+      </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="prefecture" className="mb-1 block text-caption font-medium text-ink-soft">
-            都道府県
-            <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
-            <span className="sr-only">（必須）</span>
-          </label>
+        <Field name="prefecture" label="都道府県" error={fieldErrors.prefecture}>
           <select
             id="prefecture"
             aria-invalid={Boolean(fieldErrors.prefecture)}
             value={values.prefecture}
             onChange={(e) => setField('prefecture', e.target.value)}
             style={{ backgroundImage: `url("${SELECT_CHEVRON}")` }}
-            className={`appearance-none bg-surface bg-[length:1rem_1rem] bg-[right_0.625rem_center] bg-no-repeat pr-9 ${inputClass(
+            className={`${SELECT_CHEVRON_CLASS} bg-surface ${inputClass(
               Boolean(fieldErrors.prefecture)
             )}`}
           >
@@ -219,18 +227,8 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
               </option>
             ))}
           </select>
-          {fieldErrors.prefecture && (
-            <p role="alert" className="mt-1 text-caption text-critical-700">
-              {fieldErrors.prefecture}
-            </p>
-          )}
-        </div>
-        <div>
-          <label htmlFor="city" className="mb-1 block text-caption font-medium text-ink-soft">
-            市区町村
-            <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
-            <span className="sr-only">（必須）</span>
-          </label>
+        </Field>
+        <Field name="city" label="市区町村" error={fieldErrors.city}>
           <input
             id="city"
             type="text"
@@ -239,20 +237,10 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
             onChange={(e) => setField('city', e.target.value)}
             className={inputClass(Boolean(fieldErrors.city))}
           />
-          {fieldErrors.city && (
-            <p role="alert" className="mt-1 text-caption text-critical-700">
-              {fieldErrors.city}
-            </p>
-          )}
-        </div>
+        </Field>
       </div>
 
-      <div>
-        <label htmlFor="address_line" className="mb-1 block text-caption font-medium text-ink-soft">
-          番地・建物名
-          <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
-          <span className="sr-only">（必須）</span>
-        </label>
+      <Field name="address_line" label="番地・建物名" error={fieldErrors.address_line}>
         <input
           id="address_line"
           type="text"
@@ -261,19 +249,9 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
           onChange={(e) => setField('address_line', e.target.value)}
           className={inputClass(Boolean(fieldErrors.address_line))}
         />
-        {fieldErrors.address_line && (
-          <p role="alert" className="mt-1 text-caption text-critical-700">
-            {fieldErrors.address_line}
-          </p>
-        )}
-      </div>
+      </Field>
 
-      <div>
-        <label htmlFor="phone" className="mb-1 block text-caption font-medium text-ink-soft">
-          電話番号
-          <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
-          <span className="sr-only">（必須）</span>
-        </label>
+      <Field name="phone" label="電話番号" error={fieldErrors.phone}>
         <input
           id="phone"
           type="tel"
@@ -283,19 +261,14 @@ export default function AddressForm({ initialValues, onSubmit, onCancel, submitL
           onChange={(e) => setField('phone', e.target.value)}
           className={inputClass(Boolean(fieldErrors.phone))}
         />
-        {fieldErrors.phone && (
-          <p role="alert" className="mt-1 text-caption text-critical-700">
-            {fieldErrors.phone}
-          </p>
-        )}
-      </div>
+      </Field>
 
       <label className="flex items-center gap-2 text-body text-ink-soft">
         <input
           type="checkbox"
           checked={values.is_default}
           onChange={(e) => setField('is_default', e.target.checked)}
-          className="rounded border-line-input accent-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+          className={`rounded border-line-input accent-brand-600 ${FOCUS_RING}`}
         />
         既定のお届け先にする
       </label>

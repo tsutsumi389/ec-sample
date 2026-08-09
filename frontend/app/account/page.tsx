@@ -14,6 +14,7 @@ import { btn } from '@/lib/buttonStyles';
 import { ClipboardListIcon, HeartIcon, PackageIcon, ArrowRightIcon } from '@/components/Icons';
 import { withRedirect } from '@/lib/redirect';
 import { inputClass, labelClass } from '@/lib/formStyles';
+import RequiredMark from '@/components/RequiredMark';
 
 /** 名前の先頭1文字をアバターのイニシャルにする（無ければ「H」）。 */
 function initialOf(name: string): string {
@@ -214,8 +215,7 @@ export default function AccountPage() {
               <div>
                 <label htmlFor="name" className={labelClass}>
                   お名前
-                  <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
-                  <span className="sr-only">（必須）</span>
+                  <RequiredMark />
                 </label>
                 <input
                   id="name"
@@ -249,8 +249,7 @@ export default function AccountPage() {
               <div>
                 <label htmlFor="current_password" className={labelClass}>
                   現在のパスワード
-                  <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
-                  <span className="sr-only">（必須）</span>
+                  <RequiredMark />
                 </label>
                 <input
                   id="current_password"
@@ -267,8 +266,7 @@ export default function AccountPage() {
               <div>
                 <label htmlFor="new_password" className={labelClass}>
                   新しいパスワード
-                  <span className="ml-0.5 text-critical-600" aria-hidden="true">*</span>
-                  <span className="sr-only">（必須）</span>
+                  <RequiredMark />
                 </label>
                 <input
                   id="new_password"

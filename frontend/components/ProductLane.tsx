@@ -16,6 +16,48 @@ import { truncateAtSentence } from '@/lib/wordBreak';
  */
 export type ProductLaneVariant = 'lane' | 'ranked' | 'quiet';
 
+/**
+ * variant ごとの造形。帯の地・カード幅・端の減衰幅を1つの表で持つ。
+ *
+ * 3本の三項連鎖に散らしていた頃は、variant を1つ足すのに3箇所を直す必要があった。
+ * カード幅は **HomeSections の LaneSkeleton も同じ表を引く**——別々に持つと、
+ * 片方だけ直したときに読み込み完了の瞬間にレーンが跳ねる（lib/gridStyles.ts が
+ * 規律として書いている問題の再発）。
+ *
+ * 端の処理は「地の色のグラデーションをカードの上に重ねる」のをやめ、スクロール領域
+ * そのものを mask で抜く。旧実装は深緑帯でカード面に暗い膜が掛かり紙が濁っていた。
+ * 幅は CSS 変数 --lane-fade でビューポート別に持つ（inline style ではメディアクエリが書けない）。
+ *   ・明るい帯（lane / quiet）は広げる。抜いた先の地色（page / sunken）がカードの
+ *     surface と近く、旧 2rem では減衰が読めず「画面端で生に切れている」ように見えた。
+ *   ・ranked（深緑帯）は 768px で狭める。カード幅が 36% しかない帯で 4rem 取ると
+ *     3枚目の商品名・価格がマスクの途中で飲まれる。lg でだけ 5rem に開く。
+ *
+ * カード幅はモバイルで約1.6枚、デスクトップで 4〜5枚が見える値。「次がある」ことが
+ * 常に見えるよう、割り切れない幅をあえて選んでいる。lg の下限は「12文字の商品名が
+ * text-h3 で1行に入る内寸 218px」から逆算（これより詰めると全カードで語中改行が出る）。
+ * quiet は一回り大きくして、直前のレーンと判型が変わったことを分かるようにする。
+ */
+export const LANE_STYLES: Record<
+  ProductLaneVariant,
+  { band: string; item: string; fade: string }
+> = {
+  lane: {
+    band: 'band',
+    item: 'w-[60%] sm:w-[38%] md:w-[30%] lg:w-[21%]',
+    fade: '[--lane-fade:2.5rem] md:[--lane-fade:3.5rem] lg:[--lane-fade:4rem]',
+  },
+  quiet: {
+    band: 'band-lg border-y border-line bg-sunken',
+    item: 'w-[74%] sm:w-[46%] md:w-[34%] lg:w-[23%]',
+    fade: '[--lane-fade:2.5rem] md:[--lane-fade:3.5rem] lg:[--lane-fade:4rem]',
+  },
+  ranked: {
+    band: 'on-dark band-lg bg-invert text-on-dark',
+    item: 'w-[72%] sm:w-[48%] md:w-[36%] lg:w-[27%]',
+    fade: '[--lane-fade:3rem] lg:[--lane-fade:5rem]',
+  },
+};
+
 interface ProductLaneProps {
   title: string;
   subtitle?: string | null;
@@ -127,33 +169,8 @@ export default function ProductLane({
   if (items.length === 0) return null;
 
   const ranked = variant === 'ranked';
-  const quiet = variant === 'quiet';
+  const { band: bandClass, item: itemWidth, fade: laneFade } = LANE_STYLES[variant];
 
-  // 帯の地。ranked は深緑フルブリード、quiet は沈んだ地＋上下ヘアライン、既定は生成りのまま。
-  const bandClass = ranked
-    ? 'on-dark band-lg bg-invert text-on-dark'
-    : quiet
-      ? 'band-lg border-y border-line bg-sunken'
-      : 'band';
-
-  // 端の処理は「地の色のグラデーションをカードの上に重ねる」のをやめ、
-  // スクロール領域そのものを mask で抜く。
-  //   旧: bg-gradient-to-l from-invert（深緑）を生成りのカードの上に敷いていたため、
-  //       ranked 帯ではカード面に暗い膜が掛かり、紙が濁って見えていた（A2 の指摘）。
-  //   新: カード側を透明に落として帯の地色が透ける＝「帯の地でカードを裁ち落とす」。
-  //       重ねる面が無いので、どの帯の地色でも濁りが出ない。
-  //
-  // 幅は CSS 変数 --lane-fade でビューポート別に持つ（inline style ではメディアクエリが書けない）。
-  //   ・明るい帯（lane / quiet）は **広げる**。抜いた先の地色（page / sunken）がカードの
-  //     surface と近いため、旧 2rem では減衰が読めず「画面端で生に切れている」ようにしか
-  //     見えなかった（実測: 右端 60px の減衰が RGB 4 段階しかなかった）。
-  //     r3 で surface:page を 1.09 → 1.21 に開いたのと合わせて 4rem まで広げる。
-  //   ・ranked（深緑帯）は逆に **768px で狭める**。カード幅が 36% しかない帯で 4rem 取ると
-  //     3枚目の商品名・価格がマスクの途中で飲まれていた。lg でだけ 5rem に開き、
-  //     順位番号の柱（lg:w-16）が「字の破片」として残らないようにする。
-  const laneFade = ranked
-    ? '[--lane-fade:3rem] lg:[--lane-fade:5rem]'
-    : '[--lane-fade:2.5rem] md:[--lane-fade:3.5rem] lg:[--lane-fade:4rem]';
   const maskStops = [
     canScrollLeft ? 'transparent 0, #000 var(--lane-fade)' : '#000 0',
     canScrollRight ? '#000 calc(100% - var(--lane-fade)), transparent 100%' : '#000 100%',
@@ -165,17 +182,6 @@ export default function ProductLane({
           WebkitMaskImage: `linear-gradient(to right, ${maskStops})`,
         }
       : undefined;
-
-  // カード幅: モバイルで約1.6枚、デスクトップで 4〜5枚が見える。
-  // 「次がある」ことが常に見えるよう、割り切れない幅をあえて選んでいる。
-  // lg の下限は「12文字の商品名（マイクロファイバータオル等）が text-h3 で1行に入る
-  // 内寸 218px」から逆算している。これより詰めると全カードで語中改行が出る。
-  // quiet は一回り大きくして、直前のレーンと判型が変わったことを分かるようにする。
-  const itemWidth = ranked
-    ? 'w-[72%] sm:w-[48%] md:w-[36%] lg:w-[27%]'
-    : quiet
-      ? 'w-[74%] sm:w-[46%] md:w-[34%] lg:w-[23%]'
-      : 'w-[60%] sm:w-[38%] md:w-[30%] lg:w-[21%]';
 
   // 深緑帯の上でも同じ造形の生成りの丸ボタンを使う。操作系は面が変わっても不変にする。
   // hover 背景は iconBtn 側の hover:bg-sunken をそのまま活かす（上書きすると衝突する）。
@@ -230,12 +236,7 @@ export default function ProductLane({
             aria-label={`${title}の商品一覧（横にスクロールできます）`}
             // 右端に余白を足し、最後のカードも先頭まで送れるようにする（FAB との被りも避ける）。
             // .stagger（globals.css §3b）で直下の子の animation-delay を 45ms ずつ増やす。
-            // 遅れは 8 枚で頭打ちになるので、右端のカードがいつまでも出ない状態にはならない。
-            // ⚠ 子は `animate-rise` を素で書くこと。`motion-safe:animate-rise` は
-            //   生成 CSS の中で .stagger より後ろに出力され、animation ショートハンドが
-            //   animation-delay を 0s に戻してしまう（実測。段差がまったく付かなくなる）。
-            //   prefers-reduced-motion は globals.css §5 の一括ガードが !important で潰すので、
-            //   motion-safe を書かなくてもモーション設定は尊重される。
+            // 刻み・8枚での頭打ち・低モーション時の扱いは向こうの頭注にある。
             className={`stagger flex snap-x snap-mandatory items-stretch gap-4 overflow-x-auto pb-2 [--stagger-step:45ms] [scrollbar-width:thin] md:pr-16 md:[scroll-padding-right:4rem] ${laneFade}`}
             // 端のフェードは mask。スクロールしても mask はこの箱の border-box に固定されるので、
             // 「版面の端でカードが裁ち落とされる」見え方が保たれる。

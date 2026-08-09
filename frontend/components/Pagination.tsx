@@ -1,6 +1,6 @@
 'use client';
 
-import { btn } from '@/lib/buttonStyles';
+import { FOCUS_RING, btn } from '@/lib/buttonStyles';
 
 interface PaginationProps {
   page: number;
@@ -50,7 +50,7 @@ function buildPageItems(page: number, totalPages: number): PageItem[] {
 const pageCell =
   'inline-flex h-11 min-w-[2.75rem] items-center justify-center rounded-md border px-2 text-body tnum ' +
   'transition-[background-color,color,border-color] duration-fast ease-standard ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
+  FOCUS_RING;
 
 export default function Pagination({ page, totalPages, onChange }: PaginationProps) {
   if (totalPages <= 1) return null;

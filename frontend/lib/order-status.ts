@@ -57,3 +57,10 @@ export const ORDER_TIMELINE_STEPS: OrderTimelineStep[] = [
 export function orderTimelineIndex(status: OrderStatus): number {
   return ORDER_TIMELINE_STEPS.findIndex((step) => step.status === status);
 }
+
+/**
+ * 利用者がキャンセルできる状態。
+ * 一覧と詳細で別々に持つと「一覧では消せるが詳細では消せない注文」が作れてしまうため、
+ * 業務ルールとしてここ1箇所に置く。
+ */
+export const CANCELLABLE_STATUSES: OrderStatus[] = ['pending', 'paid'];

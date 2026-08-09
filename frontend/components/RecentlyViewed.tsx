@@ -84,13 +84,12 @@ export default function RecentlyViewed({ excludeId }: { excludeId?: number }) {
           </p>
         }
       />
-      <ul className={`mt-6 grid items-stretch ${recommendGrid}`}>
-        {products.map((product, i) => (
-          <li
-            key={product.id}
-            className="h-full motion-safe:animate-rise"
-            style={{ animationDelay: `${Math.min(i, 7) * 45}ms` }}
-          >
+      {/* 段階的な出現は globals.css §3b の .stagger が引き受ける（遅延の刻みも
+          8枚での頭打ちも向こうが持つ）。ここで animationDelay をインラインで組むと、
+          --stagger-step の既定や上限を変えてもこのレーンだけ追随しない。 */}
+      <ul className={`stagger mt-6 grid items-stretch [--stagger-step:45ms] ${recommendGrid}`}>
+        {products.map((product) => (
+          <li key={product.id} className="h-full animate-rise">
             <ProductCard product={product} trackSection="recently_viewed" />
           </li>
         ))}

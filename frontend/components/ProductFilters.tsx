@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { api, ApiError } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import type { Category } from '@/lib/types';
 import { Skeleton } from '@/components/Skeleton';
 import { CloseIcon, MenuIcon } from '@/components/Icons';
-import { btn, iconBtn } from '@/lib/buttonStyles';
+import { FOCUS_RING, btn, iconBtn } from '@/lib/buttonStyles';
 import { useFocusTrap } from '@/lib/focusTrap';
-import { SELECT_CHEVRON } from '@/lib/selectChevron';
+import { SELECT_CHEVRON, SELECT_CHEVRON_CLASS } from '@/lib/selectChevron';
 import { fetchCategories } from '@/lib/categories';
 
 export type ProductSort = 'recommended' | 'newest' | 'price_asc' | 'price_desc' | 'rating';
@@ -41,7 +41,7 @@ interface ProductFiltersProps {
 // カテゴリチップ。高さ 44px のピルに揃え、select・input と同じ行の高さで並ぶようにする。
 // whitespace-nowrap は必須: h-11 固定なので折り返すとピルの上下から文字がはみ出す。
 const chipBase =
-  'inline-flex h-11 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-body font-medium transition-[background-color,color] duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
+  `inline-flex h-11 shrink-0 items-center whitespace-nowrap rounded-full px-3.5 text-body font-medium transition-[background-color,color] duration-fast ease-standard ${FOCUS_RING}`;
 
 // 入力系（select / input）の共通造形。高さ 44px・生成り紙の面・入力用ボーダー。
 // 角丸と左右 padding は呼び出し側で指定する（同一プロパティのユーティリティは
@@ -147,13 +147,8 @@ function FilterBody({
             onChange={(e) => handleSortChange(e.target.value)}
             // 角丸はツールバー1行の中で1種類に統一する（入力・適用ボタンと同じ rounded-md）。
             // ピルはカテゴリチップ＝選択肢だけが持つ形として残す。
-            className={`${fieldBase} appearance-none rounded-md pl-3.5 pr-9`}
-            style={{
-              backgroundImage: `url("${SELECT_CHEVRON}")`,
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 0.625rem center',
-              backgroundSize: '1rem',
-            }}
+            className={`${fieldBase} ${SELECT_CHEVRON_CLASS} rounded-md pl-3.5`}
+            style={{ backgroundImage: `url("${SELECT_CHEVRON}")` }}
           >
             {sortOptions.map((option) => (
               <option key={option.value} value={option.value}>

@@ -3,8 +3,6 @@ import { BroomMotif } from '@/components/BrandMotifs';
 import { btn } from '@/lib/buttonStyles';
 
 interface ErrorNoticeProps {
-  /** 差し替えたい図版。省略時はブランドの線画（箒）が入る。 */
-  icon?: ReactNode;
   /** 見出し。省略時は「読み込めませんでした」。 */
   title?: string;
   /** API から返った文言など、状況の説明。 */
@@ -32,7 +30,6 @@ interface ErrorNoticeProps {
  *   （読み込み失敗の画面で利用者にできることが無いと、行き止まりになる）
  */
 export default function ErrorNotice({
-  icon,
   title = '読み込めませんでした',
   description,
   onRetry,
@@ -47,7 +44,7 @@ export default function ErrorNotice({
     >
       {/* 図版の丈は EmptyState と同じ h-20。空とエラーで図版の大きさが変わらない。 */}
       <div className="text-line-strong [&>svg]:h-20 [&>svg]:w-auto" aria-hidden="true">
-        {icon ?? <BroomMotif className="h-20" />}
+        <BroomMotif className="h-20" />
       </div>
       {/* 棚。BrandMotifs は viewBox 120 の y=108 が接地線なので、h-20（80px）では
           図版の下端から 8px 上（= -mt-2）に引くと線画がちょうど罫の上に立つ。 */}

@@ -1,10 +1,11 @@
 'use client';
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { api, ApiError } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import type { Category, Product, ProductSpec, ProductStatus } from '@/lib/types';
-import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
-import { useFocusTrap } from '@/lib/focusTrap';
+import RequiredMark from '@/components/RequiredMark';
+import AdminModal, { AdminModalActions } from '@/components/admin/AdminModal';
+import { adminHintClass, adminInputClass, adminLabelClass } from '@/lib/formStyles';
 import { ADMIN_SELECTABLE_STATUSES, PRODUCT_STATUS_META } from '@/lib/productStatus';
 import { fetchCategories } from '@/lib/categories';
 
@@ -69,7 +70,6 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
-  const dialogRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -79,8 +79,6 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
         if (!(e instanceof ApiError)) throw e;
       });
   }, []);
-
-  useFocusTrap(dialogRef, { onEscape: onClose, initialFocus: nameInputRef });
 
   /** 仕様の1行を書き換える。行の追加・削除は下の2つのハンドラが受け持つ。 */
   const updateSpec = (index: number, patch: Partial<ProductSpec>) =>
@@ -118,21 +116,20 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-invert/50 flex items-center justify-center z-50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="product-form-title"
-      ref={dialogRef}
+    <AdminModal
+      titleId="product-form-title"
+      title={product ? '商品を編集' : '商品を新規作成'}
+      onClose={onClose}
+      initialFocus={nameInputRef}
+      /* この画面だけ店頭と同じ brand トークンの面で組まれている（管理画面の他の
+         モーダルは gray 系）。既存の見えを変えないため、面は呼び出し側から渡す。 */
+      panelClassName="rounded-2xl bg-surface shadow-float"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-surface p-6 shadow-float max-h-[90vh] overflow-y-auto">
-        <h2 id="product-form-title" className="text-lg font-bold mb-4">{product ? '商品を編集' : '商品を新規作成'}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="name" className={adminLabelClass}>
               商品名
-              <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
-              <span className="sr-only">（必須）</span>
+              <RequiredMark />
             </label>
             <input
               id="name"
@@ -141,14 +138,14 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
               ref={nameInputRef}
               value={values.name}
               onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+              className={adminInputClass}
             />
           </div>
 
           <div>
-            <label htmlFor="sku" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="sku" className={adminLabelClass}>
               商品コード（SKU）
-              <span className="ml-1 text-xs font-normal text-gray-600">（任意）</span>
+              <span className={adminHintClass}>（任意）</span>
             </label>
             <input
               id="sku"
@@ -157,28 +154,28 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
               onChange={(e) =>
                 setValues((v) => ({ ...v, sku: e.target.value ? e.target.value : null }))
               }
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+              className={adminInputClass}
             />
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="description" className={adminLabelClass}>
               説明
-              <span className="ml-1 text-xs font-normal text-gray-600">（任意）</span>
+              <span className={adminHintClass}>（任意）</span>
             </label>
             <textarea
               id="description"
               rows={3}
               value={values.description}
               onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+              className={adminInputClass}
             />
           </div>
 
           <div>
-            <label htmlFor="category_id" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="category_id" className={adminLabelClass}>
               カテゴリ
-              <span className="ml-1 text-xs font-normal text-gray-600">（任意）</span>
+              <span className={adminHintClass}>（任意）</span>
             </label>
             <select
               id="category_id"
@@ -189,7 +186,7 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
                   category_id: e.target.value ? Number(e.target.value) : null,
                 }))
               }
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+              className={adminInputClass}
             >
               <option value="">未分類</option>
               {categories.map((category) => (
@@ -202,10 +199,9 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="price" className={adminLabelClass}>
                 価格（円）
-                <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
-                <span className="sr-only">（必須）</span>
+                <RequiredMark />
               </label>
               <input
                 id="price"
@@ -214,14 +210,13 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
                 min={0}
                 value={values.price}
                 onChange={(e) => setValues((v) => ({ ...v, price: Number(e.target.value) }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+                className={adminInputClass}
               />
             </div>
             <div>
-              <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="stock" className={adminLabelClass}>
                 在庫数
-                <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
-                <span className="sr-only">（必須）</span>
+                <RequiredMark />
               </label>
               <input
                 id="stock"
@@ -230,15 +225,15 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
                 min={0}
                 value={values.stock}
                 onChange={(e) => setValues((v) => ({ ...v, stock: Number(e.target.value) }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+                className={adminInputClass}
               />
             </div>
           </div>
 
           <div>
-            <label htmlFor="sale_price" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="sale_price" className={adminLabelClass}>
               セール価格（円）
-              <span className="ml-1 text-xs font-normal text-gray-600">（任意・定価より安い額）</span>
+              <span className={adminHintClass}>（任意・定価より安い額）</span>
             </label>
             <input
               id="sale_price"
@@ -251,15 +246,14 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
                   sale_price: e.target.value === '' ? null : Number(e.target.value),
                 }))
               }
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+              className={adminInputClass}
             />
           </div>
 
           <div>
-            <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="status" className={adminLabelClass}>
               販売状態
-              <span className="text-red-600 ml-0.5" aria-hidden="true">*</span>
-              <span className="sr-only">（必須）</span>
+              <RequiredMark />
             </label>
             <select
               id="status"
@@ -267,7 +261,7 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
               onChange={(e) =>
                 setValues((v) => ({ ...v, status: e.target.value as ProductStatus }))
               }
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+              className={adminInputClass}
             >
               {ADMIN_SELECTABLE_STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -278,23 +272,23 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
           </div>
 
           <div>
-            <label htmlFor="image_url" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="image_url" className={adminLabelClass}>
               メイン画像URL
-              <span className="ml-1 text-xs font-normal text-gray-600">（任意）</span>
+              <span className={adminHintClass}>（任意）</span>
             </label>
             <input
               id="image_url"
               type="text"
               value={values.image_url}
               onChange={(e) => setValues((v) => ({ ...v, image_url: e.target.value }))}
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+              className={adminInputClass}
             />
           </div>
 
           <div>
-            <label htmlFor="image_urls" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="image_urls" className={adminLabelClass}>
               追加画像URL（ギャラリー）
-              <span className="ml-1 text-xs font-normal text-gray-600">（任意・1行に1URL）</span>
+              <span className={adminHintClass}>（任意・1行に1URL）</span>
             </label>
             <textarea
               id="image_urls"
@@ -303,7 +297,7 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
               onChange={(e) =>
                 setValues((v) => ({ ...v, image_urls: e.target.value.split('\n') }))
               }
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+              className={adminInputClass}
             />
           </div>
 
@@ -311,9 +305,9 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
               検索の埋め込み原文にも入る。在庫・価格はここに書かないこと（状態であって
               仕様ではなく、商品ページで在庫の数字が二度出る）。 */}
           <div>
-            <span className="block text-sm font-medium text-gray-700 mb-2">
+            <span className={adminLabelClass}>
               仕様
-              <span className="ml-1 text-xs font-normal text-gray-600">
+              <span className={adminHintClass}>
                 （任意・サイズや素材など。在庫や価格は入れない）
               </span>
             </span>
@@ -364,16 +358,8 @@ export default function ProductFormModal({ product, onClose, onSubmit }: Product
             </p>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className={btnSecondary}>
-              キャンセル
-            </button>
-            <button type="submit" disabled={submitting} className={btnPrimary}>
-              {submitting ? '保存中...' : '保存する'}
-            </button>
-          </div>
+          <AdminModalActions onCancel={onClose} submitting={submitting} />
         </form>
-      </div>
-    </div>
+    </AdminModal>
   );
 }

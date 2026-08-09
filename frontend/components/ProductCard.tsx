@@ -9,6 +9,7 @@ import WishlistButton from '@/components/WishlistButton';
 import { onImageError } from '@/lib/productImage';
 import { isLowStock, isSoldOut, PRODUCT_STATUS_META, SOLD_OUT_BADGE } from '@/lib/productStatus';
 import { withWordBreaks } from '@/lib/wordBreak';
+import { productCardTracking } from '@/lib/analytics';
 
 function ProductCard({
   product,
@@ -54,12 +55,11 @@ function ProductCard({
     // 深度の規律: カードは「影だけ」で立たせる（ボーダーは付けない）。
     <div
       data-card="product"
-      // 計測はカードの器に 1 つだけ付ける。AnalyticsTracker が委譲で拾うので、この 2 行で
+      // 計測はカードの器に 1 つだけ付ける。AnalyticsTracker が委譲で拾うので、この 1 行で
       // 一覧・検索結果・レコメンド・ホームのレーン・お気に入りまで全部の枠が同じ鍵で測れる
       // （どのカードが見られて、どれが押されたか）。個々の呼び出し側に計測を書かせない。
-      data-track-click="product_card"
-      data-track-view="product_card"
-      data-track-props={JSON.stringify({ product_id: product.id, section: trackSection ?? null })}
+      // 属性の綴りと props の形は lib/analytics.ts が持つ（tracker と同じ層）。
+      {...productCardTracking(product.id, trackSection)}
       className={`group relative flex h-full flex-col overflow-hidden rounded-xl bg-surface shadow-paper transition-[transform,box-shadow] duration-base ease-standard hover:-translate-y-1 hover:shadow-lift motion-reduce:hover:translate-y-0 ${
         tone === 'onDark' ? 'ring-1 ring-white/10' : ''
       }`}

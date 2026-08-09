@@ -153,10 +153,7 @@ export default function ProductRecommendations({
           subtitle="いっしょに使うと、日々がすこし楽になる道具。"
           tone="onDark"
         />
-        {/* 出現の段は親の .stagger が配る（子ごとの inline style を持たない）。
-            `motion-safe:` は付けない: media variant の `animation:` ショートハンドが
-            生成 CSS の最後に出て .stagger の animation-delay を巻き戻すため。
-            低モーション環境は globals.css §5 の全称ガードが止める。 */}
+        {/* 出現の段は親の .stagger（globals.css §3b）が配る。子ごとの inline style は持たない。 */}
         <ul className={`stagger mt-6 grid items-stretch ${goesWellGrid}`}>
           {visible.map((product) => (
             <li key={product.id} className="h-full min-w-0 animate-rise">

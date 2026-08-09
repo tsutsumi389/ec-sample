@@ -8,16 +8,17 @@ import type { Product } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
 import { onImageError } from '@/lib/productImage';
-import { withRedirect } from '@/lib/redirect';
-import { isLowStock, isSoldOut, PRODUCT_STATUS_META, SOLD_OUT_BADGE } from '@/lib/productStatus';
+import { loginHref } from '@/lib/redirect';
+import { isLowStock, unavailableBadge } from '@/lib/productStatus';
 import { truncateAtSentence, withWordBreaks } from '@/lib/wordBreak';
-import { chip } from '@/lib/buttonStyles';
+import { FOCUS_RING, chip } from '@/lib/buttonStyles';
 import Badge from '@/components/Badge';
 import ProductPrice from '@/components/ProductPrice';
 import RatingStars from '@/components/RatingStars';
 import Spinner from '@/components/Spinner';
 import StockLabel from '@/components/StockLabel';
 import { ArrowRightIcon, CartIcon, CheckCircleIcon } from '@/components/Icons';
+import { productCardTracking } from '@/lib/analytics';
 
 interface AssistantProductCardProps {
   product: Product;
@@ -78,12 +79,11 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
   const [adding, setAdding] = useState(false);
   const [result, setResult] = useState<CartResult | null>(null);
 
-  const statusMeta = PRODUCT_STATUS_META[product.status];
-  // 在庫切れは status ではなく stock で決まる（status は on_sale のまま）。
-  const soldOut = isSoldOut(product);
   // 在庫は「急ぐ理由がある」ときだけ知らせる。通常在庫の「在庫 78 点」は
   // ProductCard.tsx:39 と同じ規律でカードに出さない。
   const lowStock = isLowStock(product);
+  // 買えないときの札（在庫切れ／近日発売／販売停止中…）。文言も色も1箇所から採る。
+  const unavailable = unavailableBadge(product);
 
   // カート追加。API 呼び出しとカート再取得の手順は商品詳細ページ
   // （app/products/[id]/page.tsx の handleAddToCart）と揃える。ただし未ログイン時の遷移と
@@ -112,11 +112,11 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
     }
   };
 
-  // 戻り先を redirect に持たせる（app/cart/page.tsx と同じ形）。usePathname/useSearchParams は
+  // 戻り先の組み立ては lib/redirect.ts の loginHref() が持つ。usePathname/useSearchParams は
   // layout 常駐の AssistantWidget 配下に Suspense 境界の要件を持ち込むので、クリック時に window から読む。
   const handleLogin = () => {
     onNavigate?.();
-    router.push(withRedirect('/login', window.location.pathname + window.location.search));
+    router.push(loginHref());
   };
 
   const detailHref = `/products/${product.id}`;
@@ -127,9 +127,7 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
       // AnalyticsTracker が委譲と MutationObserver で拾うので、後からマウントされる
       // このパネル内でも属性を置くだけで効く。付けないと AI 提案経由の表示・クリックだけが
       // product_card の集計から欠落し、他の枠と同じ物差しで比べられなくなる。
-      data-track-click="product_card"
-      data-track-view="product_card"
-      data-track-props={JSON.stringify({ product_id: product.id, section: 'assistant' })}
+      {...productCardTracking(product.id, 'assistant')}
       className="flex flex-col gap-2 rounded-xl bg-surface p-3 shadow-paper transition-shadow duration-base ease-standard hover:shadow-lift"
     >
       <div className="flex gap-3">
@@ -137,7 +135,7 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
           href={detailHref}
           onClick={onNavigate}
           aria-label={`${product.name}の詳細を見る`}
-          className="group relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-tile focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+          className={`group relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-tile ${FOCUS_RING}`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -152,7 +150,7 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
             <Link
               href={detailHref}
               onClick={onNavigate}
-              className="rounded hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+              className={`rounded hover:text-brand-700 ${FOCUS_RING}`}
             >
               {/* 語中改行（「ワイヤレスイヤホ／ン」）を止める。可変長の和文は必ずこれを通す。
                   列幅の下限は 20rem（globals.css の .assistant-product-grid）なので、この器は
@@ -207,16 +205,15 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
             )}
           </button>
         ) : (
-          // 買えない理由は status が唯一の源。在庫切れ（on_sale + stock 0）だけ status に
-          // 現れないので SOLD_OUT_BADGE から採る。色は表の variant をそのまま Badge へ渡す
+          // 買えない理由（文言と色）は lib/productStatus.ts の unavailableBadge が唯一の源。
+          // 在庫切れ（on_sale + stock 0）だけ status に現れないので、その分岐も向こうが持つ。
+          // 色は表の variant をそのまま Badge へ渡す
           // （近日発売＝brand / 販売停止中＝accent / 販売終了・在庫切れ＝neutral）。
           // 灰色のベタ札で受けていた頃は、どの状態も同じ死札になって次の期待が持てず、
           // ProductCard・関連商品・商品ページと同じ status がここだけ別の見えになっていた。
           // flex-1 は付けない：札は語の幅だけ取り、余りは「商品を見る」に渡す。
           <span className="inline-flex shrink-0 items-center">
-            <Badge variant={soldOut ? SOLD_OUT_BADGE.variant : statusMeta.variant}>
-              {soldOut ? SOLD_OUT_BADGE.label : (statusMeta.storefrontLabel ?? '購入できません')}
-            </Badge>
+            <Badge variant={unavailable.variant}>{unavailable.label}</Badge>
           </span>
         )}
       </div>

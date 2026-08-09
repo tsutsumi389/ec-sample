@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { api } from '@/lib/api';
 import type { Category } from '@/lib/types';
 import SectionHead from '@/components/SectionHead';
+import { PULSE } from '@/components/Skeleton';
 import { MOTIFS } from '@/components/BrandMotifs';
 // カテゴリ名 → 線画の対応表は扉（PageMasthead）と共有する。
 // 同じカテゴリはホームの札でもカテゴリページの扉でも同じ図案になる＝線画が目次として働く。
@@ -79,18 +79,13 @@ export default function CategoryTiles({ order }: { order: number }) {
         {/* 768px は3列。5列のままだと札の内寸が 96px しかなく、text-h3 の
             「ファッション小物」が語中で折れて「ファッショ／ン小物」になっていた
             （3列なら内寸 約200px で全カテゴリ名が1行に収まる）。
-            .stagger で左から順に置かれていく（globals.css §3b）。
-            子は `animate-rise` を素で書く（motion-safe: を付けると生成 CSS の順で
-            animation ショートハンドが delay を 0s に戻し、段差が消える。
-            reduced-motion は globals.css §5 の一括ガードが受け持つ）。 */}
+            .stagger で左から順に置かれていく（globals.css §3b）。 */}
         <ul className="stagger grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-5">
           {loading
             ? Array.from({ length: SKELETON_TILES }).map((_, i) => (
                 <li key={i} aria-hidden="true" className={i === 4 ? 'max-md:col-span-2' : ''}>
-                  {/* animate-breathe はこの体系の keyframes（tailwind.config.ts）。
-                      Tailwind 既定の animate-pulse は 2s / cubic-bezier(.4,0,.6,1) と、
-                      duration・easing のどちらのトークンにも属さない唯一のモーションだった。 */}
-                  <div className="h-[11.5rem] animate-breathe rounded-xl bg-sunken motion-reduce:animate-none md:h-[13rem]" />
+                  {/* 明滅のトークンは Skeleton.tsx の PULSE（根拠もそちらに一本化してある）。 */}
+                  <div className={`h-[11.5rem] rounded-xl bg-sunken md:h-[13rem] ${PULSE}`} />
                 </li>
               ))
             : categories.map((category, i) => {

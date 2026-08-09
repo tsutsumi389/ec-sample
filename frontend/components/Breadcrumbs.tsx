@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { FOCUS_RING } from '@/lib/buttonStyles';
 
 export interface BreadcrumbItem {
   label: string;
@@ -42,7 +43,7 @@ export default function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
                    gap-x-1 + 区切り 14px + gap-x-1 = 実効 14px あるので重ならない。 */
                 <Link
                   href={item.href}
-                  className="hit -mx-1 block max-w-[12rem] truncate rounded px-1 py-1.5 text-ink-muted transition-colors duration-fast ease-standard hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  className={`hit -mx-1 block max-w-[12rem] truncate rounded px-1 py-1.5 text-ink-muted transition-colors duration-fast ease-standard hover:text-brand-700 ${FOCUS_RING}`}
                 >
                   {item.label}
                 </Link>

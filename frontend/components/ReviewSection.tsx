@@ -9,6 +9,8 @@ import RatingStars from '@/components/RatingStars';
 import SectionHead from '@/components/SectionHead';
 import { Skeleton } from '@/components/Skeleton';
 import { btn } from '@/lib/buttonStyles';
+import { formatDateTime } from '@/lib/formatDate';
+import CountLabel from '@/components/CountLabel';
 
 interface ReviewSectionProps {
   productId: number;
@@ -103,9 +105,7 @@ export default function ReviewSection({ productId, avgRating, reviewCount }: Rev
         eyebrow="REVIEWS"
         right={
           reviewCount > 0 ? (
-            <p className="text-body text-ink-muted">
-              全 <span className="text-num-lg tnum text-ink">{reviewCount}</span> 件
-            </p>
+            <CountLabel value={reviewCount} />
           ) : undefined
         }
       />
@@ -217,7 +217,7 @@ export default function ReviewSection({ productId, avgRating, reviewCount }: Rev
                   <RatingStars value={review.rating} size="sm" showValue={false} />
                   <span className="text-body font-medium text-ink">{review.user_name}</span>
                   <span className="text-caption tnum text-ink-muted">
-                    {new Date(review.created_at).toLocaleString('ja-JP')}
+                    {formatDateTime(review.created_at)}
                   </span>
                 </div>
                 {review.comment && (

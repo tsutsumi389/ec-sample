@@ -8,15 +8,21 @@ import { ORDER_STATUS_BADGE, ORDER_STATUS_LABELS } from '@/lib/order-status';
 import Spinner from '@/components/Spinner';
 import Badge from '@/components/Badge';
 import Price from '@/components/Price';
-import ScrollableTable from '@/components/ScrollableTable';
+import AdminList, {
+  AdminError,
+  AdminListHeader,
+  adminRowClass,
+} from '@/components/admin/AdminList';
 import { BoxIcon, CartIcon, ClipboardListIcon, UsersIcon } from '@/components/Icons';
+import { formatDateTime } from '@/lib/formatDate';
 
 export default function AdminDashboardPage() {
   const [productCount, setProductCount] = useState<number | null>(null);
   const [userCount, setUserCount] = useState<number | null>(null);
   const [categoryCount, setCategoryCount] = useState<number | null>(null);
   const [couponCount, setCouponCount] = useState<number | null>(null);
-  const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [orderCount, setOrderCount] = useState(0);
+  const [recentOrders, setRecentOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -30,7 +36,14 @@ export default function AdminDashboardPage() {
     ])
       .then(([products, allOrders, users, categories, coupons]) => {
         setProductCount(products.length);
-        setOrders(allOrders);
+        // この画面が注文から使うのは「件数」と「直近5件」だけ。全件を state に残すと、
+        // カタログと注文台帳をまるごと画面が開いている間ずっと抱えることになる。
+        setOrderCount(allOrders.length);
+        setRecentOrders(
+          [...allOrders]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, 5)
+        );
         setUserCount(users.length);
         setCategoryCount(categories.length);
         setCouponCount(coupons.length);
@@ -39,13 +52,9 @@ export default function AdminDashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const recentOrders = [...orders]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 5);
-
   const cards = [
     { label: '商品数', value: productCount, Icon: BoxIcon, href: '/admin/products' },
-    { label: '注文数', value: orders.length, Icon: CartIcon, href: '/admin/orders' },
+    { label: '注文数', value: orderCount, Icon: CartIcon, href: '/admin/orders' },
     { label: 'ユーザー数', value: userCount, Icon: UsersIcon, href: '/admin/users' },
     { label: 'カテゴリ数', value: categoryCount, Icon: ClipboardListIcon, href: '/admin/categories' },
     { label: 'クーポン数', value: couponCount, Icon: ClipboardListIcon, href: '/admin/coupons' },
@@ -53,7 +62,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">ダッシュボード</h1>
+      <AdminListHeader title="ダッシュボード" />
 
       {loading && (
         <p className="text-gray-600 flex items-center">
@@ -61,11 +70,7 @@ export default function AdminDashboardPage() {
           読み込み中...
         </p>
       )}
-      {error && (
-        <p role="alert" className="text-red-600">
-          {error}
-        </p>
-      )}
+      <AdminError message={error} />
 
       {!loading && !error && (
         <>
@@ -95,46 +100,40 @@ export default function AdminDashboardPage() {
               </Link>
             </div>
 
-            {recentOrders.length === 0 ? (
-              <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-600">
-                注文はまだありません。
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                <ScrollableTable>
-                  <table className="min-w-[640px] w-full text-sm">
-                    <thead className="bg-gray-50 text-left text-gray-600">
-                      <tr>
-                        <th className="px-4 py-3 whitespace-nowrap">注文番号</th>
-                        <th className="px-4 py-3 whitespace-nowrap">注文者</th>
-                        <th className="px-4 py-3 whitespace-nowrap text-right">合計金額</th>
-                        <th className="px-4 py-3 whitespace-nowrap">注文日</th>
-                        <th className="px-4 py-3 whitespace-nowrap">ステータス</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {recentOrders.map((order) => (
-                        <tr key={order.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 font-medium whitespace-nowrap">#{order.id}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{order.user.name}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-right">
-                            <Price value={order.total_amount} size="sm" strong />
-                          </td>
-                          <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                            {new Date(order.created_at).toLocaleString('ja-JP')}
-                          </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            <Badge {...ORDER_STATUS_BADGE[order.status]}>
-                              {ORDER_STATUS_LABELS[order.status]}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </ScrollableTable>
-              </div>
-            )}
+            <AdminList
+              loading={false}
+              error=""
+              isEmpty={recentOrders.length === 0}
+              emptyText="注文はまだありません。"
+              minWidth={640}
+              head={
+                <tr>
+                  <th className="px-4 py-3 whitespace-nowrap">注文番号</th>
+                  <th className="px-4 py-3 whitespace-nowrap">注文者</th>
+                  <th className="px-4 py-3 whitespace-nowrap text-right">合計金額</th>
+                  <th className="px-4 py-3 whitespace-nowrap">注文日</th>
+                  <th className="px-4 py-3 whitespace-nowrap">ステータス</th>
+                </tr>
+              }
+            >
+              {recentOrders.map((order) => (
+                <tr key={order.id} className={adminRowClass}>
+                  <td className="px-4 py-3 font-medium whitespace-nowrap">#{order.id}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{order.user.name}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-right">
+                    <Price value={order.total_amount} size="sm" strong />
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                    {formatDateTime(order.created_at)}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <Badge {...ORDER_STATUS_BADGE[order.status]}>
+                      {ORDER_STATUS_LABELS[order.status]}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </AdminList>
           </div>
         </>
       )}

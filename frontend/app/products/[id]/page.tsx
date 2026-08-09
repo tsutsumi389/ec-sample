@@ -36,7 +36,7 @@ import SectionHead from '@/components/SectionHead';
 import { Skeleton } from '@/components/Skeleton';
 import { btn, iconBtn } from '@/lib/buttonStyles';
 import { recordRecentlyViewed } from '@/lib/recentlyViewed';
-import { isSoldOut, LOW_STOCK_THRESHOLD, PRODUCT_STATUS_META } from '@/lib/productStatus';
+import { isLowStock, isSoldOut, PRODUCT_STATUS_META } from '@/lib/productStatus';
 import { EVENT_ADD_TO_CART, EVENT_VIEW_ITEM, track } from '@/lib/analytics';
 import { addToGuestCart } from '@/lib/guestCart';
 import { fetchCategories } from '@/lib/categories';
@@ -271,8 +271,12 @@ export default function ProductDetailPage() {
   }
 
   const statusMeta = PRODUCT_STATUS_META[product.status];
-  const isOnSale = product.status === 'on_sale';
   const soldOut = isSoldOut(product);
+  // 購入パネル（数量・カートに追加・追従バー）を開くか。判定は purchasable（サーバーが
+  // status と在庫から導いた唯一の値）に寄せる。在庫切れは「販売中だが今は買えない」なので
+  // パネルは開いたまま、ボタン側が「在庫切れ」で塞ぐ。
+  // ここだけ `status === 'on_sale'` を見ていたため、カード・アシスタントと判定軸が割れていた。
+  const showPurchasePanel = product.purchasable || soldOut;
   const maxQty = Math.max(1, Math.min(product.stock, 10));
   const decQty = () => setQuantity((q) => Math.max(1, q - 1));
   const incQty = () => setQuantity((q) => Math.min(maxQty, q + 1));
@@ -282,12 +286,6 @@ export default function ProductDetailPage() {
   // 買えないとき・売り切れのときの逃げ先。カテゴリが分かっていれば同じ棚へ、
   // 分からなければ商品一覧へ送る（行き止まりを作らない）。
   const shelfHref = product.category_id ? `/categories/${product.category_id}` : '/products';
-  // on_sale 以外は購入不可。状態ごとに理由を提示する。
-  const purchaseNotice: Record<string, string> = {
-    coming_soon: 'この商品は近日発売予定です。公開までもうしばらくお待ちください。',
-    suspended: 'この商品は現在販売を停止しています。再開までお待ちください。',
-    discontinued: 'この商品は販売を終了しました。',
-  };
 
   // 実験が指定した並び順。未指定・壊れた設定のときは既定の並びに戻す。
   const configuredSections = sectionOrderExperiment.config?.sections;
@@ -433,7 +431,9 @@ export default function ProductDetailPage() {
               <RatingStars value={product.avg_rating} count={product.review_count} size="sm" />
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <ProductPrice product={product} size="3xl" showBadge />
-                {isOnSale && product.stock <= LOW_STOCK_THRESHOLD && <StockLabel stock={product.stock} />}
+                {/* 札を出す条件は共有の述語で持つ（閾値だけを共有しても、条件の組み方が
+                    カード側とここで割れる）。在庫切れは下の購入パネルが受ける。 */}
+                {isLowStock(product) && <StockLabel stock={product.stock} />}
                 {statusMeta.storefrontLabel && (
                   <Badge variant={statusMeta.variant}>{statusMeta.storefrontLabel}</Badge>
                 )}
@@ -448,9 +448,9 @@ export default function ProductDetailPage() {
                 </p>
               </div>
 
-              {/* グループ3: 購入パネル（on_sale のみ。その他は理由を表示）。
+              {/* グループ3: 購入パネル（買える状態と在庫切れのみ。その他は理由を表示）。
                   境界は捨て、影＋上辺のアクセント罫だけで浮かせる（§5-4 手段③）。 */}
-              {isOnSale ? (
+              {showPurchasePanel ? (
                 <div className="mt-10 rounded-xl border-t-2 border-t-brand-600 bg-surface p-5 shadow-paper md:p-6">
                   <div role="group" aria-label="数量">
                     <span className="block text-caption font-medium text-ink-muted">数量</span>
@@ -553,7 +553,7 @@ export default function ProductDetailPage() {
               ) : (
                 <div className="mt-10 rounded-xl bg-sunken p-5 md:p-6">
                   <p className="text-body text-ink-soft">
-                    {purchaseNotice[product.status] ?? 'この商品は現在購入いただけません。'}
+                    {statusMeta.purchaseNotice ?? 'この商品は現在購入いただけません。'}
                   </p>
                   {/* 買えない状態でも次の行き先を必ず持たせる。 */}
                   <Link href={shelfHref} className={`${btn('secondary', 'md')} mt-4`}>
@@ -643,9 +643,10 @@ export default function ProductDetailPage() {
           バーを消すのも lg から。768px は単カラムなのにバーが無く、
           購入導線が本文の中に埋もれていた。
           セーフエリア（ホームバー）ぶんの余白を padding に足している。
-          z-30 はヘッダーと同値。ヘッダーのモバイルメニュー（z-40）が開いたときは
-          その下に潜り、アシスタント FAB（z-50）・トースト（z-[60]）より下になる。 */}
-      {isOnSale && (
+          z-30 はヘッダーと同値。階梯は Header.tsx の頭注が唯一の記述:
+          購入バー(z-30) < 検索サジェスト(z-40) < FAB・各モーダル(z-50) < ドロワー(z-[55])
+          < トースト(z-[60]) < スキップリンク(z-[70])。 */}
+      {showPurchasePanel && (
         <div
           role="region"
           aria-label="購入操作"

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import type { ProductQuestion } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
@@ -13,6 +14,8 @@ import { PlantMotif } from '@/components/BrandMotifs';
 import { Skeleton } from '@/components/Skeleton';
 import TypingDots from '@/components/TypingDots';
 import { btn } from '@/lib/buttonStyles';
+import { formatDateTime } from '@/lib/formatDate';
+import { backTarget, withRedirect } from '@/lib/redirect';
 
 interface ProductQAProps {
   productId: number;
@@ -28,6 +31,7 @@ interface ProductQAProps {
 export default function ProductQA({ productId }: ProductQAProps) {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const pathname = usePathname();
 
   const [questions, setQuestions] = useState<ProductQuestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,7 +157,12 @@ export default function ProductQA({ productId }: ProductQAProps) {
               <div className="rounded-xl border border-line bg-surface p-5 md:p-6">
                 <p className="text-body text-ink-soft">
                   質問するには
-                  <Link href="/login" className="mx-1 font-medium text-brand-700 hover:underline">
+                  {/* 戻り先を必ず引き継ぐ。付けないとログイン後にトップへ着き、
+                      何を訊こうとしていたのか分からなくなる（CLAUDE.md の規律）。 */}
+                  <Link
+                    href={withRedirect('/login', backTarget(pathname))}
+                    className="mx-1 font-medium text-brand-700 hover:underline"
+                  >
                     ログイン
                   </Link>
                   してください。
@@ -218,7 +227,7 @@ export default function ProductQA({ productId }: ProductQAProps) {
                           {qa.question}
                         </p>
                         <p className="mt-0.5 text-caption text-ink-muted">
-                          {qa.asker_name}・{new Date(qa.created_at).toLocaleString('ja-JP')}
+                          {qa.asker_name}・{formatDateTime(qa.created_at)}
                         </p>
                       </div>
                     </div>

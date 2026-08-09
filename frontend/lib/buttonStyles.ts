@@ -78,6 +78,19 @@ export function btn(variant: BtnVariant = 'primary', size: BtnSize = 'md') {
   return `${BASE} ${DISABLED_FACE} ${SIZES[size]} ${VARIANTS[variant]}`;
 }
 
+/**
+ * 弁柄の輪郭ボタン（注文キャンセル）。btn('danger') の塗りが強すぎる、
+ * 「押せるが勧めない」操作用。
+ *
+ * ⚠ VARIANTS には入れられない。フォーカスの輪を critical に振っており、BASE が持つ
+ *   FOCUS_RING（brand）と同じ詰め所で競合するため（後勝ちは CSS の並び順次第で保証されない）。
+ *   注文一覧と注文詳細の2箇所が同じ造形を写していたので、定数としてここに置く。
+ */
+export const btnDangerOutline =
+  'inline-flex h-11 items-center gap-2 rounded-md border border-critical-300 px-4 text-body ' +
+  'font-medium text-critical-600 transition-colors duration-fast hover:bg-critical-50 ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-critical-600 focus-visible:ring-offset-2';
+
 export function iconBtn(size: BtnSize = 'md') {
   const box = { sm: 'hit h-9 w-9', md: 'h-11 w-11', lg: 'h-13 w-13' }[size];
   return `${BASE} ${DISABLED_ICON} ${box} rounded-full text-ink-soft hover:bg-sunken`;
@@ -169,6 +182,12 @@ export const NAV_ACTIVE_BAR =
   "relative after:pointer-events-none after:absolute after:inset-x-2 after:-bottom-2.5 " +
   "after:h-[3px] after:rounded-t-full after:bg-brand-600 after:content-['']";
 
+/**
+ * 現在地のピルの面。quiet と plain は**非** active のときだけ濃度が違い、active では同じ。
+ * 「現在地の色」は1つであるべきなので、写しではなく定数で配る（FOCUS_RING と同じ理由）。
+ */
+const NAV_ACTIVE_FACE = 'bg-transparent font-semibold text-brand-700 hover:bg-sunken';
+
 export function navPill(
   tone: NavTone = 'quiet',
   opts: { active?: boolean; label?: 'always' | 'xl' } = {},
@@ -189,10 +208,10 @@ export function navPill(
   // 現在地のときだけ無反応だと「この項目はもう押せない」に読める（実際は押せる）。
   const face = {
     quiet: active
-      ? 'bg-transparent font-semibold text-brand-700 hover:bg-sunken'
+      ? NAV_ACTIVE_FACE
       : 'bg-transparent font-medium text-ink-soft hover:bg-sunken hover:text-ink',
     plain: active
-      ? 'bg-transparent font-semibold text-brand-700 hover:bg-sunken'
+      ? NAV_ACTIVE_FACE
       : 'bg-transparent font-medium text-ink-muted hover:bg-sunken hover:text-ink-soft',
     cta: active
       ? 'border border-brand-600 bg-surface font-semibold text-brand-700 shadow-paper hover:bg-brand-50'

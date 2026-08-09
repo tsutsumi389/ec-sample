@@ -11,6 +11,7 @@ import {
   formatPercent,
   formatSignedPercent,
 } from '@/lib/experimentStatus';
+import { formatDateTime } from '@/lib/formatDate';
 import ScrollableTable from '@/components/ScrollableTable';
 import Spinner from '@/components/Spinner';
 import Badge from '@/components/Badge';
@@ -45,18 +46,12 @@ const FUNNEL_LABELS: Record<string, string> = {
   [EVENT_SEARCH_NO_RESULT]: '検索0件',
 };
 
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('ja-JP');
-}
-
 export default function AdminExperimentResultPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
 
   const [result, setResult] = useState<ExperimentResult | null>(null);
   const [eventNames, setEventNames] = useState<string[]>([]);
-  const [metric, setMetric] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -67,10 +62,7 @@ export default function AdminExperimentResultPage() {
       const query = targetMetric ? `?metric=${encodeURIComponent(targetMetric)}` : '';
       api
         .get<ExperimentResult>(`/admin/experiments/${id}/results${query}`)
-        .then((data) => {
-          setResult(data);
-          setMetric(data.metric);
-        })
+        .then(setResult)
         .catch(() => setError('結果の取得に失敗しました'))
         .finally(() => setLoading(false));
     },
@@ -111,7 +103,8 @@ export default function AdminExperimentResultPage() {
     );
   }
 
-  const { experiment, srm } = result;
+  // 選択中の指標はレスポンスが唯一の源（state に写すと「同じはず」の不変条件を読む側が追う）。
+  const { experiment, srm, metric } = result;
   const statusMeta = EXPERIMENT_STATUS_META[experiment.status];
   // 指標の候補。記録済みのイベント名に、この実験の主要指標を必ず含める。
   const metricOptions = Array.from(new Set([experiment.primary_metric, ...eventNames]));
@@ -141,11 +134,11 @@ export default function AdminExperimentResultPage() {
       <dl className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
         <div>
           <dt className="text-gray-600">開始</dt>
-          <dd className="mt-0.5 text-gray-900">{formatDate(experiment.started_at)}</dd>
+          <dd className="mt-0.5 text-gray-900">{formatDateTime(experiment.started_at)}</dd>
         </div>
         <div>
           <dt className="text-gray-600">終了</dt>
-          <dd className="mt-0.5 text-gray-900">{formatDate(experiment.ended_at)}</dd>
+          <dd className="mt-0.5 text-gray-900">{formatDateTime(experiment.ended_at)}</dd>
         </div>
         <div>
           <dt className="text-gray-600">対象</dt>
