@@ -1,5 +1,5 @@
 import Badge from '@/components/Badge';
-import { LOW_STOCK_THRESHOLD } from '@/lib/productStatus';
+import { LOW_STOCK_THRESHOLD, SOLD_OUT_BADGE } from '@/lib/productStatus';
 
 interface StockLabelProps {
   /** 在庫数 */
@@ -21,9 +21,11 @@ interface StockLabelProps {
  */
 export default function StockLabel({ stock, elevated = false, className = '' }: StockLabelProps) {
   if (stock <= 0) {
+    // 文言と色は SOLD_OUT_BADGE から採る。productStatus.ts が「在庫切れの札の源はここ1箇所」と
+    // 宣言しているのに、ここだけ同じ値を書き直していた（片方だけ濃度を変えると割れる）。
     return (
-      <Badge variant="neutral" elevated={elevated} className={className}>
-        在庫切れ
+      <Badge variant={SOLD_OUT_BADGE.variant} elevated={elevated} className={className}>
+        {SOLD_OUT_BADGE.label}
       </Badge>
     );
   }

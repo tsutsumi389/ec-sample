@@ -19,6 +19,14 @@ interface CartContextValue {
   count: number;
   /** カートを取り直して count を更新する。カート操作後に呼ぶ。 */
   refresh: () => Promise<void>;
+  /**
+   * 既に取得済みのカートから数量合計を流し込む。
+   *
+   * カート画面は明細のために `GET /cart` を自分で叩いており、その同じレスポンスから
+   * バッジの数も出る。`refresh()` を併せて呼ぶと同じ口を2回叩くことになるので、
+   * 手元に答えがある呼び出し側はこちらを使う（数量変更・削除のたびに往復が2倍になっていた）。
+   */
+  applyCount: (count: number) => void;
 }
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
@@ -57,10 +65,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   }, [refresh]);
 
+  const applyCount = useCallback((next: number) => setCount(next), []);
+
   // value を固定する。インラインのオブジェクトリテラルだと、provider が再レンダーする
   // たびに同一性が変わり、useCart() の消費者（一覧なら ProductCard 12枚ぶん）が
   // count も refresh も変わっていないのに全員再レンダーする。
-  const value = useMemo(() => ({ count, refresh }), [count, refresh]);
+  const value = useMemo(
+    () => ({ count, refresh, applyCount }),
+    [count, refresh, applyCount]
+  );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

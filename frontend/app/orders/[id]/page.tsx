@@ -12,6 +12,7 @@ import {
   ORDER_STATUS_BADGE,
   ORDER_TIMELINE_STEPS,
   orderTimelineIndex,
+  CANCELLABLE_STATUSES,
 } from '@/lib/order-status';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
@@ -24,13 +25,9 @@ import SectionHead from '@/components/SectionHead';
 import { Skeleton } from '@/components/Skeleton';
 import { ArrowLeftIcon, CheckCircleIcon } from '@/components/Icons';
 import { withRedirect } from '@/lib/redirect';
-
-/** キャンセル操作をユーザーに許可するステータス */
-const CANCELLABLE_STATUSES: OrderStatus[] = ['pending', 'paid'];
-
-/** キャンセル操作の共通クラス（弁柄の輪郭ボタン）。 */
-const cancelButtonClass =
-  'inline-flex h-11 items-center gap-2 rounded-md border border-critical-300 px-4 text-body font-medium text-critical-600 transition-colors duration-fast hover:bg-critical-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-critical-600 focus-visible:ring-offset-2';
+import { FOCUS_RING, btnDangerOutline } from '@/lib/buttonStyles';
+import { formatDateTime } from '@/lib/formatDate';
+import CountLabel from '@/components/CountLabel';
 
 /** 注文の進行状況を横型のステップで表示する。cancelled は打ち消し表示にする。 */
 function OrderTimeline({ status }: { status: OrderStatus }) {
@@ -48,7 +45,6 @@ function OrderTimeline({ status }: { status: OrderStatus }) {
         {ORDER_TIMELINE_STEPS.map((step, i) => {
           const reached = !cancelled && currentIndex >= i;
           const isCurrent = !cancelled && currentIndex === i;
-          const lineFilled = !cancelled && currentIndex >= i;
           return (
             <li
               key={step.status}
@@ -58,7 +54,7 @@ function OrderTimeline({ status }: { status: OrderStatus }) {
               {i > 0 && (
                 <div
                   aria-hidden="true"
-                  className={`h-px flex-1 ${lineFilled ? 'bg-brand-600' : 'bg-line-strong'}`}
+                  className={`h-px flex-1 ${reached ? 'bg-brand-600' : 'bg-line-strong'}`}
                 />
               )}
               <div className="flex flex-col items-center">
@@ -128,9 +124,11 @@ function OrderDetailContent() {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.replace(withRedirect('/login', '/orders'));
+      // 戻り先はこの注文の詳細。'/orders' を渡すと、ログインし直した人が
+      // 見ようとしていた注文ではなく一覧に着く。
+      router.replace(withRedirect('/login', id ? `/orders/${id}` : '/orders'));
     }
-  }, [authLoading, user, router]);
+  }, [authLoading, user, router, id]);
 
   useEffect(() => {
     if (!user || !id) return;
@@ -200,7 +198,7 @@ function OrderDetailContent() {
           </p>
           <Link
             href="/orders"
-            className="mt-3 inline-flex items-center gap-1.5 rounded text-body text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+            className={`mt-3 inline-flex items-center gap-1.5 rounded text-body text-brand-700 hover:underline ${FOCUS_RING}`}
           >
             <ArrowLeftIcon className="h-4 w-4" />
             注文履歴に戻る
@@ -226,7 +224,7 @@ function OrderDetailContent() {
         /* 状態バッジは扉ではなく STATUS パネルの見出し行に置く（扉の右上は線画の場所）。 */
         right={
           <p className="tnum whitespace-nowrap text-caption text-ink-muted">
-            {new Date(order.created_at).toLocaleString('ja-JP')}
+            {formatDateTime(order.created_at)}
           </p>
         }
       />
@@ -244,7 +242,7 @@ function OrderDetailContent() {
               <p className="mt-1.5 text-body text-brand-700">お届けまで今しばらくお待ちください。</p>
               <Link
                 href="/products"
-                className="mt-3 inline-block rounded text-body font-medium text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className={`mt-3 inline-block rounded text-body font-medium text-brand-700 hover:underline ${FOCUS_RING}`}
               >
                 買い物を続ける →
               </Link>
@@ -271,9 +269,7 @@ function OrderDetailContent() {
               eyebrow="ITEMS"
               className="mt-10"
               right={
-                <p className="text-body text-ink-muted">
-                  全 <span className="tnum text-ink">{itemCount}</span> 点
-                </p>
+                <CountLabel value={itemCount} unit="点" size="md" />
               }
             />
             <ul className="mt-6 divide-y divide-line border-y border-line">
@@ -301,7 +297,7 @@ function OrderDetailContent() {
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <ReorderButton orderId={order.id} variant="primary" />
               {CANCELLABLE_STATUSES.includes(order.status) && (
-                <button type="button" onClick={() => setCancelOpen(true)} className={cancelButtonClass}>
+                <button type="button" onClick={() => setCancelOpen(true)} className={btnDangerOutline}>
                   注文をキャンセル
                 </button>
               )}
@@ -328,9 +324,15 @@ function OrderDetailContent() {
                         <span className="ml-1 font-normal">（{order.coupon_code}）</span>
                       )}
                     </dt>
-                    <dd className="tnum text-body font-medium">
-                      -¥{order.discount_amount.toLocaleString()}
-                    </dd>
+                    <Price
+                      value={order.discount_amount}
+                      sign="minus"
+                      size="base"
+                      tone="inherit"
+                      inheritWeight
+                      as="dd"
+                      className="font-medium"
+                    />
                   </div>
                 )}
                 <div className="flex items-baseline justify-between gap-4">
@@ -354,7 +356,7 @@ function OrderDetailContent() {
             <div className="mt-6">
               <Link
                 href="/orders"
-                className="inline-flex items-center gap-1.5 rounded text-body text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className={`inline-flex items-center gap-1.5 rounded text-body text-brand-700 hover:underline ${FOCUS_RING}`}
               >
                 <ArrowLeftIcon className="h-4 w-4" />
                 注文履歴に戻る

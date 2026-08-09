@@ -143,3 +143,23 @@ export function trackClick(elementKey: string, props?: Record<string, unknown>):
 export function trackImpression(elementKey: string, props?: Record<string, unknown>): void {
   track(EVENT_IMPRESSION, { elementKey, props });
 }
+
+/**
+ * 商品カードの計測属性。器へスプレッドして使う:
+ * `<article {...productCardTracking(product.id, 'related')}>`
+ *
+ * AnalyticsTracker が読む属性の綴りと props の形は tracker と同じ層に置く。
+ * ProductCard を使えない器（関連商品・アシスタント・ホームの表紙）がそれぞれ属性を
+ * 手で写しており、**表紙だけ `data-track-view` が抜けて impression が記録されていなかった**
+ * ——画面には何も現れないので、集計を見た人が「この枠は効いていない」と誤読するまで
+ * 気づけない類の欠落。属性名を変えたいときもここ1箇所で済む。
+ *
+ * ⚠ 商品カードの計測は器に1つだけ（CLAUDE.md の規律）。カードの内側の要素に足さないこと。
+ */
+export function productCardTracking(productId: number, section?: string | null) {
+  return {
+    'data-track-click': 'product_card',
+    'data-track-view': 'product_card',
+    'data-track-props': JSON.stringify({ product_id: productId, section: section ?? null }),
+  };
+}

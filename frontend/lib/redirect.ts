@@ -24,3 +24,34 @@ export function withRedirect(path: string, redirectTo: string): string {
   if (safe === '/') return path;
   return `${path}?redirect=${encodeURIComponent(safe)}`;
 }
+
+/**
+ * その現在地を戻り先にしてよいか判定して整える。
+ *
+ * /login・/register 自身に居るときは付けない——自分自身へ戻すループになり、かつ
+ * ログイン画面から会員登録へ渡り歩くたびにクエリが自分のパスで上書きされて、
+ * 本来の戻り先（カート等）を失う。この判定を呼び出し側ごとに書かないための1本。
+ */
+export function backTarget(path: string | null | undefined): string {
+  if (!path) return '/';
+  if (path.startsWith('/login') || path.startsWith('/register')) return '/';
+  return path;
+}
+
+/**
+ * いま見ている画面のパス（クエリ込み）。
+ *
+ * ⚠ 描画中に呼ばないこと。サーバー側では window が無く、クライアントとの食い違いで
+ *   hydration が壊れる。**イベントハンドラの中だけ**で使う。描画時に戻り先つきの
+ *   href を組みたいときは usePathname() を `backTarget()` に通すこと
+ *   （そちらはクエリを持たない——Header のコメント参照）。
+ */
+export function currentPath(): string {
+  if (typeof window === 'undefined') return '/';
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+/** クリック時に現在地（クエリ込み）を引き継いでログインへ送る URL。 */
+export function loginHref(): string {
+  return withRedirect('/login', backTarget(currentPath()));
+}

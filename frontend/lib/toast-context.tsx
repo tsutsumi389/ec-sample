@@ -12,6 +12,7 @@ import {
 } from 'react';
 import Link from 'next/link';
 import { CheckCircleIcon, InfoIcon, AlertCircleIcon, CloseIcon } from '@/components/Icons';
+import { FOCUS_RING } from './buttonStyles';
 
 export type ToastType = 'success' | 'error' | 'info';
 
@@ -108,7 +109,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
           <Link
             href={toast.action.href}
             onClick={handleClose}
-            className="mt-1.5 inline-block text-body font-medium text-brand-700 hover:text-brand-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+            className={`mt-1.5 inline-block text-body font-medium text-brand-700 hover:text-brand-800 hover:underline ${FOCUS_RING} rounded`}
           >
             {toast.action.label}
           </Link>
@@ -118,7 +119,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
         type="button"
         onClick={handleClose}
         aria-label="通知を閉じる"
-        className="hit -mr-1 -mt-1 shrink-0 rounded p-1 text-ink-faint hover:text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+        className={`hit -mr-1 -mt-1 shrink-0 rounded p-1 text-ink-faint hover:text-ink-soft ${FOCUS_RING}`}
       >
         <CloseIcon className="h-4 w-4" />
       </button>

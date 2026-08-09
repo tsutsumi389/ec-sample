@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/Skeleton';
 import AddressForm, { AddressFormValues } from '@/components/AddressForm';
 import SectionHead from '@/components/SectionHead';
 import { ArrowLeftIcon } from '@/components/Icons';
-import { btn } from '@/lib/buttonStyles';
+import { FOCUS_RING, btn } from '@/lib/buttonStyles';
 import { withRedirect } from '@/lib/redirect';
 
 /** 住所カード型のスケルトン。 */
@@ -249,7 +249,7 @@ export default function AddressesPage() {
         <div className="mt-8">
           <Link
             href="/account"
-            className="inline-flex items-center gap-1.5 rounded text-body text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+            className={`inline-flex items-center gap-1.5 rounded text-body text-brand-700 hover:underline ${FOCUS_RING}`}
           >
             <ArrowLeftIcon className="h-4 w-4" />
             アカウントに戻る

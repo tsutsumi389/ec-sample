@@ -15,6 +15,7 @@ import CategoryTiles from '@/components/CategoryTiles';
 import { ArrowRightIcon } from '@/components/Icons';
 import { PlantMotif } from '@/components/BrandMotifs';
 import { newArrivalsGrid } from '@/lib/gridStyles';
+import CountLabel from '@/components/CountLabel';
 
 /**
  * 新着セクションに出す件数。
@@ -114,9 +115,7 @@ function NewArrivals({ order }: { order: number }) {
           subtitle="季節のおすすめと定番の道具をご紹介します。"
           right={
             showTotal ? (
-              <p className="whitespace-nowrap text-body text-ink-muted">
-                全 <span className="text-num-lg tnum text-ink">{total}</span> 件
-              </p>
+              <CountLabel value={total} />
             ) : undefined
           }
         />

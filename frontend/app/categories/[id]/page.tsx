@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { notFound } from 'next/navigation';
-import { api, ApiError } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import type { Category } from '@/lib/types';
 import { type BreadcrumbItem } from '@/components/Breadcrumbs';
 import ProductListing from '@/components/ProductListing';

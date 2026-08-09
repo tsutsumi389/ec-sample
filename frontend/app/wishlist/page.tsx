@@ -12,22 +12,20 @@ import ProductCard from '@/components/ProductCard';
 import { ProductGridSkeleton } from '@/components/Skeleton';
 import PageMasthead from '@/components/PageMasthead';
 import EmptyState from '@/components/EmptyState';
-import { isSoldOut, PRODUCT_STATUS_META } from '@/lib/productStatus';
-import { btn } from '@/lib/buttonStyles';
+import { unavailableBadge } from '@/lib/productStatus';
+import { FOCUS_RING, btn } from '@/lib/buttonStyles';
 import { recommendGrid } from '@/lib/gridStyles';
 import { CartIcon } from '@/components/Icons';
 import { withRedirect } from '@/lib/redirect';
+import CountLabel from '@/components/CountLabel';
 
-/** 購入可否と、追加ボタンに出す文言を status / stock から導出する。 */
+/**
+ * 購入可否と、追加ボタンに出す文言。買えない理由の言い回しは lib/productStatus.ts が持つ
+ * （同じ状態にアシスタント・商品ページと3通りの言い方があった）。
+ */
 function addToCartState(product: Product): { disabled: boolean; label: string } {
-  if (product.purchasable) {
-    return { disabled: false, label: 'カートに追加' };
-  }
-  if (isSoldOut(product)) {
-    return { disabled: true, label: '在庫切れ' };
-  }
-  const meta = PRODUCT_STATUS_META[product.status];
-  return { disabled: true, label: meta.storefrontLabel ?? '現在お取り扱いできません' };
+  if (product.purchasable) return { disabled: false, label: 'カートに追加' };
+  return { disabled: true, label: unavailableBadge(product).label };
 }
 
 export default function WishlistPage() {
@@ -101,9 +99,7 @@ export default function WishlistPage() {
         breadcrumbs={[{ label: 'ホーム', href: '/' }, { label: 'お気に入り' }]}
         right={
           !showSkeleton && items.length > 0 ? (
-            <p className="whitespace-nowrap text-body text-ink-muted">
-              全 <span className="text-num-lg tnum text-ink">{items.length}</span> 件
-            </p>
+            <CountLabel value={items.length} />
           ) : undefined
         }
       />
@@ -143,7 +139,7 @@ export default function WishlistPage() {
                       type="button"
                       onClick={() => handleRemove(item.product.id)}
                       aria-label={`「${item.product.name}」をお気に入りから削除`}
-                      className="absolute right-3 top-3 z-20 inline-flex h-9 items-center rounded-full bg-surface/85 px-3 text-caption text-ink-muted shadow-paper backdrop-blur-sm transition-colors duration-fast ease-standard hover:text-critical-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                      className={`absolute right-3 top-3 z-20 inline-flex h-9 items-center rounded-full bg-surface/85 px-3 text-caption text-ink-muted shadow-paper backdrop-blur-sm transition-colors duration-fast ease-standard hover:text-critical-600 ${FOCUS_RING}`}
                     >
                       解除
                     </button>

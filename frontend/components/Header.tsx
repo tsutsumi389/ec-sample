@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
 import { btn, iconButton, navPill, NAV_ACTIVE_BAR, FOCUS_RING } from '@/lib/buttonStyles';
 import { useFocusTrap } from '@/lib/focusTrap';
-import { withRedirect } from '@/lib/redirect';
+import { backTarget, withRedirect } from '@/lib/redirect';
 import SearchBox from '@/components/SearchBox';
 import {
   SearchIcon,
@@ -22,6 +22,7 @@ import {
   ChevronRightIcon,
   ArrowRightIcon,
 } from '@/components/Icons';
+import { PULSE } from '@/components/Skeleton';
 
 export default function Header() {
   const { user, loading, logout } = useAuth();
@@ -40,18 +41,15 @@ export default function Header() {
 
   // ログイン・会員登録へ送るときに現在地を引き継ぐ（CLAUDE.md の規律。
   // 「カートに入れた → ログイン → トップに着く」経路を作らないため）。
-  // ただし /login・/register 自身に居るときは付けない——自分自身へ戻すループになり、
-  // かつログイン画面から会員登録へ渡り歩くたびにクエリが自分のパスで上書きされて、
-  // 本来の戻り先（カート等）を失う。
+  // /login・/register 自身を戻り先にしない規則は lib/redirect.ts の backTarget() が持つ。
   //
   // 既知の欠け: pathname だけなのでクエリは落ちる（/products?search=… から入ると
-  // 検索語・絞り込み・並び順が戻り先に残らない）。同じ画面の WishlistButton は
-  // pathname+search を渡しており、そこだけ挙動が割れている。
-  // 揃えるには useSearchParams が要るが、Header は layout でレンダリングされるため
+  // 検索語・絞り込み・並び順が戻り先に残らない）。クリック時に組む導線
+  // （WishlistButton 等）は loginHref() で pathname+search を渡せるが、ここは描画時に
+  // href が要るため useSearchParams が必要で、Header は layout でレンダリングされるため
   // Suspense 境界なしでは next build が落ちる（SearchBox が境界を持つのと同じ理由）。
   // 直すときは境界を1つ足して backTo をその中で組むこと。
-  const backTo =
-    pathname && !pathname.startsWith('/login') && !pathname.startsWith('/register') ? pathname : '/';
+  const backTo = backTarget(pathname);
 
   // カート数の増加時に一瞬バッジを弾ませる。
   const [bump, setBump] = useState(false);
@@ -156,6 +154,23 @@ export default function Header() {
     }`;
 
   /**
+   * ログイン中だけ出す会員の導線。ヘッダーの横並びとドロワーの縦並びが**同じ配列**を回す。
+   * 三つ組（href / icon / label）を両方に書いていた頃は、片方だけ項目が増えても
+   * コードの見た目からは食い違いに気づけなかった。
+   */
+  const memberNav =
+    !loading && user
+      ? [
+          { href: '/orders', icon: PackageIcon, label: '注文履歴' },
+          { href: '/wishlist', icon: HeartIcon, label: 'お気に入り' },
+          { href: '/account', icon: UserIcon, label: 'アカウント' },
+          ...(user.role === 'admin'
+            ? [{ href: '/admin', icon: ClipboardListIcon, label: '管理画面' }]
+            : []),
+        ]
+      : [];
+
+  /**
    * ドロワーの項目。ログイン状態での出し分けはここ（配列を組む側）に寄せ、
    * 描画側は行の造形を1つだけ持つ。
    * 一覧・検索は /products に独立した。ホーム自体へはロゴから戻れる。
@@ -174,16 +189,7 @@ export default function Header() {
   }[] = [
     { href: '/products', match: '/products', icon: BoxIcon, label: '商品一覧' },
     { href: '/cart', match: '/cart', icon: CartIcon, label: cartLabel },
-    ...(!loading && user
-      ? [
-          { href: '/orders', match: '/orders', icon: PackageIcon, label: '注文履歴' },
-          { href: '/wishlist', match: '/wishlist', icon: HeartIcon, label: 'お気に入り' },
-          { href: '/account', match: '/account', icon: UserIcon, label: 'アカウント' },
-          ...(user.role === 'admin'
-            ? [{ href: '/admin', match: '/admin', icon: ClipboardListIcon, label: '管理画面' }]
-            : []),
-        ]
-      : []),
+    ...memberNav.map((item) => ({ ...item, match: item.href })),
     ...(!loading && !user
       ? [
           {
@@ -322,51 +328,19 @@ export default function Header() {
                     aria-hidden="true"
                     className="mx-1 hidden h-5 w-px shrink-0 bg-line-strong lg:block xl:hidden"
                   />
-                  <Link
-                    href="/orders"
-                    className={navPill('quiet', { active: isActive('/orders'), label: 'xl' })}
-                    aria-current={isActive('/orders') ? 'page' : undefined}
-                    aria-label="注文履歴"
-                    title="注文履歴"
-                  >
-                    <PackageIcon className="h-5 w-5 shrink-0" />
-                    {navLabel('注文履歴')}
-                  </Link>
-                  <Link
-                    href="/wishlist"
-                    className={navPill('quiet', { active: isActive('/wishlist'), label: 'xl' })}
-                    aria-current={isActive('/wishlist') ? 'page' : undefined}
-                    aria-label="お気に入り"
-                    title="お気に入り"
-                  >
-                    <HeartIcon className="h-5 w-5 shrink-0" />
-                    {navLabel('お気に入り')}
-                  </Link>
-                  <Link
-                    href="/account"
-                    className={navPill('quiet', { active: isActive('/account'), label: 'xl' })}
-                    aria-current={isActive('/account') ? 'page' : undefined}
-                    aria-label="アカウント"
-                    title="アカウント"
-                  >
-                    <UserIcon className="h-5 w-5 shrink-0" />
-                    {navLabel('アカウント')}
-                  </Link>
-                  {user.role === 'admin' && (
+                  {memberNav.map(({ href, icon: Icon, label }) => (
                     <Link
-                      href="/admin"
-                      className={navPill('quiet', {
-                        active: !!pathname?.startsWith('/admin'),
-                        label: 'xl',
-                      })}
-                      aria-current={pathname?.startsWith('/admin') ? 'page' : undefined}
-                      aria-label="管理画面"
-                      title="管理画面"
+                      key={href}
+                      href={href}
+                      className={navPill('quiet', { active: isActive(href), label: 'xl' })}
+                      aria-current={isActive(href) ? 'page' : undefined}
+                      aria-label={label}
+                      title={label}
                     >
-                      <ClipboardListIcon className="h-5 w-5 shrink-0" />
-                      {navLabel('管理画面')}
+                      <Icon className="h-5 w-5 shrink-0" />
+                      {navLabel(label)}
                     </Link>
-                  )}
+                  ))}
 
                   {/* 会員ブロック（xl のみ）。ナビ項目と同じ視覚重量で並べない。
                       「氏名」は読ませるだけのラベル、「ログアウト」は破線の無い
@@ -403,12 +377,11 @@ export default function Header() {
                   なお「認証への入口が画面上に1つも無い」のは xl だけの話（圧縮群もドロワーも
                   xl:hidden のため）で、その穴自体はここでは塞がらない。ここが受け持つのは
                   横方向の跳ねだけ。
-                  呼吸は animate-breathe（animate-pulse はこの体系の duration/easing の
-                  どちらにも属さないため使わない）。 */}
+                  呼吸は Skeleton.tsx の PULSE トークン（根拠もそちらに一本化してある）。 */}
               {loading && (
                 <span
                   aria-hidden="true"
-                  className="ml-1 hidden h-11 w-[11.5rem] shrink-0 animate-breathe rounded-full bg-sunken lg:block"
+                  className={`ml-1 hidden h-11 w-[11.5rem] shrink-0 rounded-full bg-sunken lg:block ${PULSE}`}
                 />
               )}
 

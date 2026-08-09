@@ -22,12 +22,13 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import SectionHead from '@/components/SectionHead';
 import { Skeleton } from '@/components/Skeleton';
 import { TrashIcon, ChevronRightIcon } from '@/components/Icons';
-import { btn } from '@/lib/buttonStyles';
+import { FOCUS_RING, btn } from '@/lib/buttonStyles';
 import { EVENT_BEGIN_CHECKOUT, EVENT_VIEW_CART, track } from '@/lib/analytics';
 import { onImageError } from '@/lib/productImage';
 import { withRedirect } from '@/lib/redirect';
-import { SELECT_CHEVRON } from '@/lib/selectChevron';
+import { SELECT_CHEVRON, SELECT_CHEVRON_CLASS } from '@/lib/selectChevron';
 import { withWordBreaks } from '@/lib/wordBreak';
+import CountLabel from '@/components/CountLabel';
 
 /** 入力欄の共通クラス（罫は line-input）。角丸は呼び出し側の rounded-* で決める。
  *  placeholder の色はここで指定しない。globals.css の input::placeholder 既定
@@ -104,7 +105,7 @@ function CartRowSkeleton() {
 export default function CartPage() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { refresh } = useCart();
+  const { refresh, applyCount } = useCart();
   const { showToast } = useToast();
 
   // null は「まだ取得していない」。空配列は「カートが空」。
@@ -206,6 +207,14 @@ export default function CartPage() {
     const { rows: nextRows, subtotal: nextSubtotal } = await fetchCart();
     setRows(nextRows);
     setSubtotal(nextSubtotal);
+    // ヘッダーのバッジも、いま取ったこのカートから出す。ログイン時に refresh() を
+    // 併せて呼ぶと同じ GET /cart をもう1本投げることになる（数量を1回変えるたびに往復が2倍）。
+    // ゲストは控え（在庫で丸める前の要求数量）が源なので localStorage を読む refresh() が正しい。
+    if (user) {
+      applyCount(nextRows.reduce((sum, row) => sum + row.quantity, 0));
+    } else {
+      await refresh();
+    }
     return nextSubtotal;
   };
 
@@ -237,6 +246,31 @@ export default function CartPage() {
     }
   };
 
+  /**
+   * カートを変更する一連の流れ（変更 → 取り直し → 通知 → クーポン再検証）。
+   *
+   * 数量変更と削除で同じ骨格を2度書いていたため、売上に直結する後処理の順序が
+   * 2箇所に写っていた（片方だけ直すと「削除のときだけクーポンが古い額のまま残る」）。
+   * 進行フラグの上げ下げだけは呼び出し側が持つ（行単位／ダイアログ単位で粒度が違うため）。
+   */
+  const mutateCart = async (
+    apply: () => Promise<unknown> | void,
+    successMessage: string,
+    failMessage: string,
+    /** クーポン再検証（往復1本）を待たせたくない後始末。ダイアログを閉じる等。 */
+    onSuccess?: () => void
+  ): Promise<void> => {
+    try {
+      await apply();
+      const nextSubtotal = await refreshCart();
+      showToast(successMessage);
+      onSuccess?.();
+      await revalidateAppliedCoupon(nextSubtotal);
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : failMessage, { type: 'error' });
+    }
+  };
+
   // 認証状態が確定してから読む（確定前に読むと、ログイン済みでもゲスト経路で取ってしまう）。
   useEffect(() => {
     if (authLoading) return;
@@ -261,43 +295,31 @@ export default function CartPage() {
   const handleQuantityChange = async (row: CartRow, quantity: number) => {
     if (quantity < 1) return;
     setUpdatingId(row.targetId);
-    try {
-      // 宛先は行の出自で決まる（ログイン時はカート明細、ゲスト時は端末の控え）。
-      if (user) {
-        await api.put(`/cart/items/${row.targetId}`, { quantity });
-      } else {
-        setGuestCartQuantity(row.targetId, quantity);
-      }
-      // 明細の取り直し（画面）とバッジの数（ヘッダー）は互いに依存しないので並べて投げる。
-      // 直列にすると数量を1回変えるたびに往復が1本ぶん余計に積み上がる。
-      const [nextSubtotal] = await Promise.all([refreshCart(), refresh()]);
-      showToast('数量を変更しました');
-      await revalidateAppliedCoupon(nextSubtotal);
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : '更新に失敗しました', { type: 'error' });
-    } finally {
-      setUpdatingId(null);
-    }
+    // 宛先は行の出自で決まる（ログイン時はカート明細、ゲスト時は端末の控え）。
+    await mutateCart(
+      () =>
+        user
+          ? api.put(`/cart/items/${row.targetId}`, { quantity })
+          : setGuestCartQuantity(row.targetId, quantity),
+      '数量を変更しました',
+      '更新に失敗しました'
+    );
+    setUpdatingId(null);
   };
 
   const confirmRemove = async () => {
     if (!removeTarget) return;
     setRemoving(true);
-    try {
-      if (user) {
-        await api.delete(`/cart/items/${removeTarget.targetId}`);
-      } else {
-        removeFromGuestCart(removeTarget.targetId);
-      }
-      const [nextSubtotal] = await Promise.all([refreshCart(), refresh()]);
-      showToast('カートから削除しました');
-      setRemoveTarget(null);
-      await revalidateAppliedCoupon(nextSubtotal);
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : '削除に失敗しました', { type: 'error' });
-    } finally {
-      setRemoving(false);
-    }
+    await mutateCart(
+      () =>
+        user
+          ? api.delete(`/cart/items/${removeTarget.targetId}`)
+          : removeFromGuestCart(removeTarget.targetId),
+      'カートから削除しました',
+      '削除に失敗しました',
+      () => setRemoveTarget(null)
+    );
+    setRemoving(false);
   };
 
   const handleValidateCoupon = async () => {
@@ -406,7 +428,7 @@ export default function CartPage() {
       onClick={() => setRemoveTarget(row)}
       disabled={updatingId === row.targetId}
       aria-label={`${row.product.name}を削除`}
-      className={`hit inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors duration-fast hover:bg-critical-50 hover:text-critical-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-50 ${className}`}
+      className={`hit inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors duration-fast hover:bg-critical-50 hover:text-critical-600 ${FOCUS_RING} disabled:opacity-50 ${className}`}
     >
       <TrashIcon className="h-5 w-5" />
     </button>
@@ -438,9 +460,7 @@ export default function CartPage() {
         breadcrumbs={[{ label: 'ホーム', href: '/' }, { label: 'カート' }]}
         right={
           !loading && hasItems ? (
-            <p className="whitespace-nowrap text-body text-ink-muted">
-              全 <span className="tnum text-num-lg text-ink">{itemCount}</span> 点
-            </p>
+            <CountLabel value={itemCount} unit="点" />
           ) : undefined
         }
       />
@@ -514,7 +534,7 @@ export default function CartPage() {
                         <div className="min-w-0">
                           <Link
                             href={`/products/${row.product.id}`}
-                            className="text-h3 text-ink jp-name transition-colors duration-fast hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                            className={`text-h3 text-ink jp-name transition-colors duration-fast hover:text-brand-700 ${FOCUS_RING} rounded`}
                           >
                             {/* 素の商品名を書かない。<wbr> を語句境界だけに挿し、
                                 「ブルートゥースス／ピーカー」のような語中改行を止める。 */}
@@ -524,7 +544,9 @@ export default function CartPage() {
                               行合計「¥2,680」が同じ数字を2度言うだけになる。 */}
                           {row.quantity > 1 && (
                             <p className="mt-1.5 tnum text-caption text-ink-muted">
-                              単価 ¥{row.product.effective_price.toLocaleString()} ×{' '}
+                              単価{' '}
+                              <Price value={row.product.effective_price} size="sm" muted />
+                              {' × '}
                               {row.quantity}
                             </p>
                           )}
@@ -556,10 +578,14 @@ export default function CartPage() {
                               onChange={(e) => handleQuantityChange(row, Number(e.target.value))}
                               aria-label={`${row.product.name}の数量`}
                               style={{ backgroundImage: `url("${SELECT_CHEVRON}")` }}
-                              className="tnum h-11 appearance-none rounded-md border border-line-input bg-surface bg-[length:1rem_1rem] bg-[right_0.625rem_center] bg-no-repeat pl-3.5 pr-9 text-body text-ink focus-visible:border-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:opacity-50"
+                              className={`tnum h-11 ${SELECT_CHEVRON_CLASS} rounded-md border border-line-input bg-surface pl-3.5 text-body text-ink focus-visible:border-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 disabled:opacity-50`}
                             >
+                              {/* 上限は商品ページの数量セレクト（stock と 10 の小さい方）に揃える。
+                                  在庫そのままだと最大100個の <option> を行数ぶん作ることになり、
+                                  お届け先やクーポンコードを1文字打つたびに全行が組み直される。
+                                  現在数量が上限を超えている行（在庫が減った後）では、その数量まで残す。 */}
                               {Array.from(
-                                { length: Math.max(row.product.stock, row.quantity, 1) },
+                                { length: Math.max(Math.min(row.product.stock, 10), row.quantity, 1) },
                                 (_, i) => i + 1
                               ).map((q) => (
                                 <option key={q} value={q}>
@@ -597,7 +623,7 @@ export default function CartPage() {
                   onClick={() => setCouponOpen((o) => !o)}
                   aria-expanded={couponOpen}
                   aria-controls="coupon-panel"
-                  className="flex min-h-[3.25rem] w-full items-center justify-between gap-3 px-5 py-3.5 text-body font-medium text-ink-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  className={`flex min-h-[3.25rem] w-full items-center justify-between gap-3 px-5 py-3.5 text-body font-medium text-ink-soft ${FOCUS_RING}`}
                 >
                   <span>
                     クーポンをお持ちの方
@@ -682,7 +708,7 @@ export default function CartPage() {
                   {/* h-8(32px) + .hit(±6px) = 実効 44px。見た目の丈は変えない。 */}
                   <Link
                     href="/account/addresses"
-                    className="hit inline-flex h-8 items-center rounded text-caption text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                    className={`hit inline-flex h-8 items-center rounded text-caption text-brand-700 hover:underline ${FOCUS_RING}`}
                   >
                     住所帳を管理
                   </Link>
@@ -793,9 +819,15 @@ export default function CartPage() {
                       <dt className="text-body font-medium">
                         クーポン割引（{appliedCoupon.code}）
                       </dt>
-                      <dd className="tnum text-body font-medium">
-                        -¥{discount.toLocaleString()}
-                      </dd>
+                      <Price
+                        value={discount}
+                        sign="minus"
+                        size="base"
+                        tone="inherit"
+                        inheritWeight
+                        as="dd"
+                        className="font-medium"
+                      />
                     </div>
                   )}
                   <div className="flex items-baseline justify-between gap-4">

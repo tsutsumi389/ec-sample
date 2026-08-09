@@ -16,11 +16,12 @@ import EmptyState from '@/components/EmptyState';
 import ErrorNotice from '@/components/ErrorNotice';
 import { ChatBubbleIcon, XMarkIcon } from '@/components/Icons';
 import ProductFilters, { type ProductFiltersValue, type ProductSort } from '@/components/ProductFilters';
-import { btn } from '@/lib/buttonStyles';
+import { FOCUS_RING, btn } from '@/lib/buttonStyles';
 import { listingGrid } from '@/lib/gridStyles';
 import { EVENT_SEARCH_NO_RESULT, track } from '@/lib/analytics';
 import { useAssistant } from '@/lib/assistant-context';
 import { fetchCategories } from '@/lib/categories';
+import CountLabel from '@/components/CountLabel';
 
 const LIMIT = 12;
 
@@ -65,7 +66,7 @@ function FilterChip({
         type="button"
         onClick={onRemove}
         aria-label={removeLabel}
-        className="hit inline-flex h-6 w-6 items-center justify-center rounded-full text-brand-600 transition-colors duration-fast ease-standard hover:bg-brand-100 hover:text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+        className={`hit inline-flex h-6 w-6 items-center justify-center rounded-full text-brand-600 transition-colors duration-fast ease-standard hover:bg-brand-100 hover:text-brand-800 ${FOCUS_RING}`}
       >
         <XMarkIcon className="h-3.5 w-3.5" />
       </button>
@@ -278,15 +279,21 @@ export default function ProductListing({
     // カテゴリ固定ページ（/categories/[id]）でカテゴリが変わったら「別ページへの移動」として扱う。
     // 検索語・並び順・価格帯は持ち越し、ページ番号だけ 1 に戻す。
     if (fixedCategory && next.categoryId !== fixedCategory.id) {
-      const params = new URLSearchParams();
-      if (search) params.set('search', search);
-      if (next.sort) params.set('sort', next.sort);
-      if (next.minPrice) params.set('min_price', next.minPrice);
-      if (next.maxPrice) params.set('max_price', next.maxPrice);
-      params.set('page', '1');
       // 「すべて」（解除）なら /products、別カテゴリならそのカテゴリページへ。
+      // クエリの組み立ては buildParams を通す（キーの一覧を2箇所に持つと、新しい絞り込みを
+      // 足したときにこの経路だけ持ち越されない）。fixedCategory があるので category_id は出ない。
       const target = next.categoryId ? `/categories/${next.categoryId}` : '/products';
-      router.push(withQuery(target, params));
+      router.push(
+        withQuery(
+          target,
+          buildParams({
+            sort: next.sort,
+            min_price: next.minPrice,
+            max_price: next.maxPrice,
+            page: '1',
+          })
+        )
+      );
       return;
     }
 
@@ -380,13 +387,7 @@ export default function ProductListing({
   // これで商品セルは常に 12 枚＝どの列数でも行が閉じる。lg 未満でも出す。
   const showEditorsNote = page === 1 && products.length >= 6;
   // 出現の段は親の .stagger（globals.css §3b）が配る。子ごとの inline style は持たない。
-  //
-  // ⚠ ここを `motion-safe:animate-rise` にしないこと。motion-safe は media variant なので
-  //   Tailwind が生成 CSS の**最後**に出力し、その `animation:` ショートハンドが
-  //   .stagger の animation-delay を 0s に巻き戻す（実測: .stagger>* @382682 に対し
-  //   .motion-safe\:animate-rise @396059）。素の `animate-rise` は 345k 付近＝
-  //   .stagger より前に出るので遅延が残る。低モーション環境は globals.css §5 の
-  //   `*{animation-duration:.01ms!important}` が全称で止めるため motion-safe は不要。
+  // 刻み・8枚での頭打ち・低モーション時の扱いはすべて globals.css §3b の頭注にある。
   //
   // グリッドの途中に挟む「棚の途中で」の帯。帯の後ろに最低2枚が残る枚数のときだけ出す
   // （残り1枚だと帯の直後に孤立行ができ、割った意味が消える）。
@@ -468,9 +469,7 @@ export default function ProductListing({
         breadcrumbs={mastheadBreadcrumbs}
         right={
           !loading && !error ? (
-            <p className="whitespace-nowrap text-body text-ink-muted">
-              全 <span className="text-num-lg tnum text-ink">{total}</span> 件
-            </p>
+            <CountLabel value={total} />
           ) : undefined
         }
       />
@@ -522,7 +521,7 @@ export default function ProductListing({
                   type="button"
                   // カテゴリページからの「すべて解除」もカテゴリ固定を外す＝素の /products へ戻す。
                   onClick={() => router.push('/products')}
-                  className="hit rounded text-caption font-medium text-ink-muted underline-offset-4 transition-colors duration-fast ease-standard hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  className={`hit rounded text-caption font-medium text-ink-muted underline-offset-4 transition-colors duration-fast ease-standard hover:text-ink hover:underline ${FOCUS_RING}`}
                 >
                   すべて解除
                 </button>
@@ -562,7 +561,7 @@ export default function ProductListing({
                           <Link
                             key={category.id}
                             href={`/categories/${category.id}`}
-                            className="inline-flex h-11 items-center whitespace-nowrap rounded-full bg-sunken px-4 text-body font-medium text-ink-soft transition-[background-color,color] duration-fast ease-standard hover:bg-brand-50 hover:text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                            className={`inline-flex h-11 items-center whitespace-nowrap rounded-full bg-sunken px-4 text-body font-medium text-ink-soft transition-[background-color,color] duration-fast ease-standard hover:bg-brand-50 hover:text-brand-800 ${FOCUS_RING}`}
                           >
                             {category.name}
                           </Link>

@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
-import type { Order, OrderStatus } from '@/lib/types';
+import type { Order } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
-import { ORDER_STATUS_LABELS, ORDER_STATUS_BADGE } from '@/lib/order-status';
+import { ORDER_STATUS_LABELS, ORDER_STATUS_BADGE, CANCELLABLE_STATUSES } from '@/lib/order-status';
 import Spinner from '@/components/Spinner';
 import Price from '@/components/Price';
 import Badge from '@/components/Badge';
@@ -17,15 +17,10 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import ReorderButton from '@/components/ReorderButton';
 import { Skeleton } from '@/components/Skeleton';
 import { PlantMotif } from '@/components/BrandMotifs';
-import { btn } from '@/lib/buttonStyles';
+import { FOCUS_RING, btn, btnDangerOutline } from '@/lib/buttonStyles';
 import { withRedirect } from '@/lib/redirect';
-
-/** キャンセル操作をユーザーに許可するステータス */
-const CANCELLABLE_STATUSES: OrderStatus[] = ['pending', 'paid'];
-
-/** キャンセル操作の共通クラス（弁柄の輪郭ボタン）。 */
-const cancelButtonClass =
-  'inline-flex h-11 items-center gap-2 rounded-md border border-critical-300 px-4 text-body font-medium text-critical-600 transition-colors duration-fast hover:bg-critical-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-critical-600 focus-visible:ring-offset-2';
+import { formatDateTime } from '@/lib/formatDate';
+import CountLabel from '@/components/CountLabel';
 
 /** 帳面の1行。注文カードとスケルトンで同じ 4 : 5 : 3 の桁割りを使う。 */
 const LEDGER_ROW = 'grid gap-x-8 gap-y-5 md:grid-cols-12 md:items-start';
@@ -130,9 +125,7 @@ export default function OrdersPage() {
         breadcrumbs={[{ label: 'ホーム', href: '/' }, { label: '注文履歴' }]}
         right={
           !loading && orders.length > 0 ? (
-            <p className="whitespace-nowrap text-body text-ink-muted">
-              全 <span className="tnum text-num-lg text-ink">{orders.length}</span> 件
-            </p>
+            <CountLabel value={orders.length} />
           ) : undefined
         }
       />
@@ -179,7 +172,7 @@ export default function OrdersPage() {
                 >
                   <Link
                     href={`/orders/${order.id}`}
-                    className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                    className={`absolute inset-0 rounded-xl ${FOCUS_RING}`}
                   >
                     <span className="sr-only">注文番号 #{order.id} の詳細を見る</span>
                   </Link>
@@ -196,7 +189,7 @@ export default function OrdersPage() {
                       {/* 日時と状態は1行に並べ、入らない幅でだけ折る（狭幅で行数を増やさない）。 */}
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
                         <p className="tnum text-caption text-ink-muted">
-                          {new Date(order.created_at).toLocaleString('ja-JP')}
+                          {formatDateTime(order.created_at)}
                         </p>
                         <Badge {...ORDER_STATUS_BADGE[order.status]}>
                           {ORDER_STATUS_LABELS[order.status]}
@@ -233,7 +226,14 @@ export default function OrdersPage() {
                         <p className="mt-1 text-caption text-brand-700">
                           クーポン割引
                           {order.coupon_code && <span className="ml-1">（{order.coupon_code}）</span>}
-                          ：<span className="tnum">-¥{order.discount_amount.toLocaleString()}</span>
+                          ：
+                          <Price
+                            value={order.discount_amount}
+                            sign="minus"
+                            size="sm"
+                            tone="inherit"
+                            inheritWeight
+                          />
                         </p>
                       )}
                     </div>
@@ -247,7 +247,7 @@ export default function OrdersPage() {
                       <button
                         type="button"
                         onClick={() => setCancelTarget(order)}
-                        className={cancelButtonClass}
+                        className={btnDangerOutline}
                       >
                         注文をキャンセル
                       </button>

@@ -42,7 +42,6 @@ export default function PageMasthead({
   motif = 'cup',
   breadcrumbs,
   width = 'wide',
-  as: Tag = 'h1',
   className = '',
 }: {
   /** 欧文ラベル。uppercase は CSS 側で当てる。 */
@@ -57,7 +56,6 @@ export default function PageMasthead({
   breadcrumbs?: BreadcrumbItem[];
   /** 帯の内側の版面幅。**続く本文と必ず揃えること。** */
   width?: MastheadWidth;
-  as?: 'h1' | 'h2';
   className?: string;
 }) {
   const Motif = motif === 'none' ? null : MOTIFS[motif];
@@ -96,13 +94,13 @@ export default function PageMasthead({
             )}
             {/* 可変長の和文。<wbr> を語境界に挿し（jp-name の keep-all と対）、
                 大見出しなので jp-display（balance ＋ カタカナの字送り補正）を併用する。 */}
-            <Tag
+            <h1
               className={`font-mincho text-h1 text-ink jp-head jp-name jp-display ${
                 eyebrow ? 'mt-3' : ''
               }`}
             >
               {withWordBreaks(title)}
-            </Tag>
+            </h1>
             {subtitle && (
               <p className="mt-3 max-w-[34rem] text-body text-ink-muted">{subtitle}</p>
             )}

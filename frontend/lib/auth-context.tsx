@@ -13,12 +13,24 @@ import { api, getToken, setToken, clearToken } from './api';
 import { clearGuestCart, readGuestCart } from './guestCart';
 import type { AuthResponse, CartMergeResult, User } from './types';
 
+/**
+ * 認証（ログイン・会員登録）の結果。
+ * 確定したユーザーを一緒に返すのは、呼び出し側が歓迎トーストの氏名のためだけに
+ * `GET /auth/me` をもう一度叩かずに済むようにするため（ログイン確定という一番待たされる
+ * 瞬間に往復が1本増えていた）。
+ */
+export interface AuthResult {
+  /** 端末が持っていたゲストカートの合算結果（控えが空なら null）。 */
+  merged: CartMergeResult | null;
+  /** 認証後のユーザー。取得に失敗した場合のみ null。 */
+  user: User | null;
+}
+
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  /** 認証後、端末が持っていたゲストカートの合算結果を返す（控えが空なら null）。 */
-  login: (email: string, password: string) => Promise<CartMergeResult | null>;
-  register: (email: string, password: string, name: string) => Promise<CartMergeResult | null>;
+  login: (email: string, password: string) => Promise<AuthResult>;
+  register: (email: string, password: string, name: string) => Promise<AuthResult>;
   logout: () => void;
   updateUser: (partial: Partial<User>) => void;
 }
@@ -49,12 +61,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchMe = useCallback(async () => {
+  const fetchMe = useCallback(async (): Promise<User | null> => {
     try {
       const me = await api.get<User>('/auth/me');
       setUser(me);
+      return me;
     } catch {
       setUser(null);
+      return null;
     }
   }, []);
 
@@ -73,14 +87,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchMe]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string): Promise<AuthResult> => {
       const data = await api.post<AuthResponse>('/auth/login', { email, password });
       setToken(data.access_token);
       // user を反映する前にマージする。CartProvider は user の変化でカートを取り直すため、
       // この順序でないとマージ前のカート数がバッジに出て、直後に増える形になる。
       const merged = await mergeGuestCart();
-      await fetchMe();
-      return merged;
+      return { merged, user: await fetchMe() };
     },
     [fetchMe]
   );

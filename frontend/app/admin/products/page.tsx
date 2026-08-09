@@ -1,157 +1,94 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api, ApiError } from '@/lib/api';
 import type { Product } from '@/lib/types';
 import ProductFormModal, { ProductFormValues } from '@/components/ProductFormModal';
-import ScrollableTable from '@/components/ScrollableTable';
-import Spinner from '@/components/Spinner';
 import ProductPrice from '@/components/ProductPrice';
 import Badge from '@/components/Badge';
-import { PlusIcon } from '@/components/Icons';
-import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import AdminList, {
+  AdminListHeader,
+  AdminRowActions,
+  adminRowClass,
+} from '@/components/admin/AdminList';
 import { PRODUCT_STATUS_META } from '@/lib/productStatus';
+import { useAdminResource } from '@/lib/useAdminResource';
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const products = useAdminResource<Product>({
+    path: '/admin/products',
+    loadError: '商品一覧の取得に失敗しました',
+    deleteError: '削除に失敗しました',
+    // 商品は論理削除（status="archived"）。一覧は archived も返すので、行は消さず差し替える。
+    deleteEffect: 'replace',
+  });
 
-  const loadProducts = () => {
-    setLoading(true);
-    api
-      .get<Product[]>('/admin/products')
-      .then(setProducts)
-      .catch(() => setError('商品一覧の取得に失敗しました'))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  const openCreate = () => {
-    setEditingProduct(null);
-    setModalOpen(true);
-  };
-
-  const openEdit = (product: Product) => {
-    setEditingProduct(product);
-    setModalOpen(true);
-  };
-
-  const handleSubmit = async (values: ProductFormValues) => {
-    if (editingProduct) {
-      await api.put(`/admin/products/${editingProduct.id}`, values);
-    } else {
-      await api.post('/admin/products', values);
-    }
-    setModalOpen(false);
-    loadProducts();
-  };
-
-  const handleDelete = async (product: Product) => {
-    if (!window.confirm(`「${product.name}」を削除しますか？`)) return;
-    setError('');
-    setDeletingId(product.id);
-    try {
-      await api.delete(`/admin/products/${product.id}`);
-      loadProducts();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : '削除に失敗しました');
-    } finally {
-      setDeletingId(null);
-    }
-  };
+  const handleSubmit = (values: ProductFormValues) => products.save(values);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">商品管理</h1>
-        <button type="button" onClick={openCreate} className={`${btnPrimary} inline-flex items-center gap-2`}>
-          <PlusIcon className="w-4 h-4" />
-          新規作成
-        </button>
-      </div>
+      <AdminListHeader title="商品管理" onCreate={products.openCreate} />
 
-      {loading && <p className="text-gray-600 flex items-center"><Spinner className="mr-2" />読み込み中...</p>}
-      {error && (
-        <p role="alert" className="text-red-600 mb-4">
-          {error}
-        </p>
+      <AdminList
+        loading={products.loading}
+        error={products.error}
+        isEmpty={products.items.length === 0}
+        emptyText="登録された商品がありません。「新規作成」から商品を追加してください。"
+        onCreate={products.openCreate}
+        minWidth={640}
+        head={
+          <tr>
+            <th className="px-4 py-3 whitespace-nowrap">商品名</th>
+            <th className="px-4 py-3 whitespace-nowrap text-right">価格</th>
+            <th className="px-4 py-3 whitespace-nowrap text-right">在庫</th>
+            <th className="px-4 py-3 whitespace-nowrap">状態</th>
+            <th className="px-4 py-3" />
+          </tr>
+        }
+      >
+        {products.items.map((product) => (
+          <tr key={product.id} className={adminRowClass}>
+            <td className="px-4 py-3 font-medium whitespace-nowrap">{product.name}</td>
+            <td className="px-4 py-3 whitespace-nowrap text-right">
+              {/* 実売価格は effective_price（sale_price があればそれ）。
+                  price を直に出すと、セール中の商品だけ管理画面と店頭で違う額が並ぶ。 */}
+              <ProductPrice product={product} size="sm" className="justify-end" />
+            </td>
+            <td className="px-4 py-3 whitespace-nowrap text-right">{product.stock}</td>
+            <td className="px-4 py-3 whitespace-nowrap">
+              <Badge variant={PRODUCT_STATUS_META[product.status].variant}>
+                {PRODUCT_STATUS_META[product.status].adminLabel}
+              </Badge>
+            </td>
+            <AdminRowActions
+              label={product.name}
+              onEdit={() => products.openEdit(product)}
+              onDelete={() => products.requestDelete(product)}
+              deleting={products.deleting && products.deleteTarget?.id === product.id}
+            />
+          </tr>
+        ))}
+      </AdminList>
+
+      {products.modalOpen && (
+        <ProductFormModal
+          product={products.editing}
+          onClose={products.closeModal}
+          onSubmit={handleSubmit}
+        />
       )}
 
-      {!loading && products.length === 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <p className="text-gray-600 mb-4">登録された商品がありません。「新規作成」から商品を追加してください。</p>
-          <button type="button" onClick={openCreate} className={`${btnSecondary} inline-flex items-center gap-2`}>
-            <PlusIcon className="w-4 h-4" />
-            新規作成
-          </button>
-        </div>
-      )}
-
-      {!loading && products.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <ScrollableTable>
-            <table className="min-w-[640px] w-full text-sm">
-              <thead className="bg-gray-50 text-left text-gray-600">
-                <tr>
-                  <th className="px-4 py-3 whitespace-nowrap">商品名</th>
-                  <th className="px-4 py-3 whitespace-nowrap text-right">価格</th>
-                  <th className="px-4 py-3 whitespace-nowrap text-right">在庫</th>
-                  <th className="px-4 py-3 whitespace-nowrap">状態</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {products.map((product) => (
-                  <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium whitespace-nowrap">{product.name}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right">
-                      {/* 実売価格は effective_price（sale_price があればそれ）。
-                          price を直に出すと、セール中の商品だけ管理画面と店頭で違う額が並ぶ。 */}
-                      <ProductPrice product={product} size="sm" className="justify-end" />
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right">{product.stock}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <Badge variant={PRODUCT_STATUS_META[product.status].variant}>
-                        {PRODUCT_STATUS_META[product.status].adminLabel}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-right space-x-1 whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(product)}
-                        aria-label={`${product.name}を編集`}
-                        className="text-brand-600 hover:underline px-2 py-2 -m-2 inline-block"
-                      >
-                        編集
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(product)}
-                        disabled={deletingId === product.id}
-                        aria-label={`${product.name}を削除`}
-                        className="text-red-600 hover:underline px-2 py-2 -m-2 inline-block disabled:opacity-50"
-                      >
-                        {deletingId === product.id ? '削除中...' : '削除'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ScrollableTable>
-        </div>
-      )}
-
-      {modalOpen && (
-        <ProductFormModal product={editingProduct} onClose={() => setModalOpen(false)} onSubmit={handleSubmit} />
-      )}
+      {/* 店頭側と同じ確認の作法（フォーカストラップ・busy 中の二重確定防止）。
+          window.confirm はメインスレッドを止め、削除中の状態も説明文も持てない。 */}
+      <ConfirmDialog
+        open={products.deleteTarget !== null}
+        danger
+        busy={products.deleting}
+        title={`「${products.deleteTarget?.name ?? ''}」を削除しますか？`}
+        description="一覧・商品ページから外れます（アーカイブとしてデータは残り、過去の注文明細も変わりません）。"
+        confirmLabel="削除する"
+        onConfirm={products.confirmDelete}
+        onCancel={products.cancelDelete}
+      />
     </div>
   );
 }

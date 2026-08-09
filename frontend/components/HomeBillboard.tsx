@@ -11,6 +11,7 @@ import { onImageError } from '@/lib/productImage';
 // 和文の改行位置（<wbr>）とカタカナの字送り（span.kana）を1箇所に閉じた共通処理。
 // 可変長の和文をテキストとして描く場所は例外なくこれを通す（lib/wordBreak.ts の頭注を参照）。
 import { withWordBreaks } from '@/lib/wordBreak';
+import { productCardTracking } from '@/lib/analytics';
 
 /**
  * ホーム最上部のビルボード（layout: "hero"）＝「日々帖」の表紙。
@@ -64,9 +65,7 @@ export default function HomeBillboard({ item }: { item: RecommendationItem }) {
         {/* relative z-10: 透かし（KettleMotif）より必ず前。装飾が字面や CTA に触れない保証を
             重ね順で持たせる（位置だけの調整は、幅が変わると簡単に破れる）。
             .stagger + animate-rise: 罫 → 柱 → 見出し → 本文 → 価格 → CTA の順に置かれていく。
-            表紙は誌面の第一印象なので、要素が一斉に出るのではなく組み上がる順で見せる。
-            子は素の `animate-rise` を書く（motion-safe: を付けると生成 CSS の順で
-            animation ショートハンドが delay を 0s に戻す。globals.css §3b の頭注を参照）。 */}
+            表紙は誌面の第一印象なので、要素が一斉に出るのではなく組み上がる順で見せる。 */}
         <div className="stagger relative z-10 [--stagger-step:60ms] md:col-span-7">
           <div aria-hidden className="h-px w-12 animate-rise bg-brand-400/50" />
           {/* eyebrow は行の中で字間の系統を1つに保つ。和文だけ font-sans + tracking-[0.12em] に
@@ -109,8 +108,9 @@ export default function HomeBillboard({ item }: { item: RecommendationItem }) {
             <Link
               href={`/products/${product.id}`}
               // 表紙はホームの一等地。ここが効いているかを他の枠と同じ鍵で比べる。
-              data-track-click="product_card"
-              data-track-props={JSON.stringify({ product_id: product.id, section: 'billboard' })}
+              // 属性を手で書いていた頃は data-track-view が抜けており、表紙だけ
+              // impression が記録されず CTR の分母が他の枠と揃っていなかった。
+              {...productCardTracking(product.id, 'billboard')}
               className={btn('onDark', 'lg')}
             >
               詳しく見る

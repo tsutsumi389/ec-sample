@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { ChatBubbleIcon } from '@/components/Icons';
 import AssistantPanel from '@/components/assistant/AssistantPanel';
 import { useAssistant } from '@/lib/assistant-context';
+import { FOCUS_RING } from '@/lib/buttonStyles';
 
 /**
  * 全ページ右下に常駐する AIショッピングアシスタントのウィジェット。
@@ -135,7 +136,7 @@ export default function AssistantWidget() {
         onClick={() => openAssistant({ returnFocusTo: fabRef })}
         aria-label="アシスタントを開く"
         aria-expanded={open}
-        className={`fixed z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-float ring-1 ring-washi-50/25 transition-[background-color,transform] duration-fast ease-standard hover:bg-brand-700 active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${fabRight} ${fabPosition} ${
+        className={`fixed z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-float ring-1 ring-washi-50/25 transition-[background-color,transform] duration-fast ease-standard hover:bg-brand-700 active:scale-[0.98] motion-reduce:active:scale-100 ${FOCUS_RING} ${fabRight} ${fabPosition} ${
           open ? 'hidden' : ''
         }`}
       >

@@ -1,4 +1,4 @@
-export type PriceSize = 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | 'num-lg' | 'feature';
+export type PriceSize = 'sm' | 'base' | 'lg' | 'xl' | '3xl' | 'num-lg' | 'feature';
 
 /**
  * 号数は **自前の fontSize トークンだけ**で組む（tailwind 既定の text-sm/lg/3xl … は使わない）。
@@ -17,7 +17,6 @@ const SIZE_CLASSES: Record<PriceSize, string> = {
   lg: 'text-h3',
   // 旧 text-xl。h3 の段に畳んだ（18px と 20px の差は価格の階層として意味を持たない）。
   xl: 'text-h3',
-  '2xl': 'text-num-lg',
   '3xl': 'text-num-lg',
   // 表紙・合計金額など「金額そのものが主役」の場所用（clamp 24→32px）
   'num-lg': 'text-num-lg',
@@ -27,7 +26,7 @@ const SIZE_CLASSES: Record<PriceSize, string> = {
   feature: 'text-h3 lg:text-num-lg',
 };
 
-export type PriceTone = 'default' | 'onDark';
+export type PriceTone = 'default' | 'onDark' | 'inherit';
 
 interface PriceProps {
   /** 表示する金額（円）。¥ と桁区切りはこのコンポーネントが付与する。 */
@@ -51,6 +50,12 @@ interface PriceProps {
    *   外れる。既存2箇所の見た目を変えずに ¥ 記号の組版だけをここへ寄せるための逃げ道。
    */
   inheritWeight?: boolean;
+  /**
+   * 金額の前に付ける符号。クーポン割引など「引かれる額」は 'minus'。
+   * ここを通さずに `-¥{n}` と直書きすると、同じ &lt;dl&gt; の中で小計・合計（Price 経由）と
+   * 通貨記号の級数・濃度が食い違う。
+   */
+  sign?: 'minus';
   className?: string;
   as?: 'span' | 'p' | 'dd';
 }
@@ -58,6 +63,10 @@ interface PriceProps {
 const TONE_CLASSES: Record<PriceTone, { text: string; symbol: string; muted: string }> = {
   default: { text: 'text-ink', symbol: 'text-ink-muted', muted: 'text-ink-muted' },
   onDark: { text: 'text-on-dark', symbol: 'text-on-dark-muted', muted: 'text-on-dark-muted' },
+  // 器が色を持つ行（クーポン割引の brand-700 など）。色は器から継承し、記号を淡くする
+  // 規則だけを opacity で効かせる。色を固定してしまうと、この4行のためだけに
+  // Price を通さない選択肢が生まれ、¥ の組版が本文級に戻る。
+  inherit: { text: '', symbol: 'opacity-70', muted: '' },
 };
 
 /**
@@ -78,6 +87,7 @@ export default function Price({
   muted = false,
   tone = 'default',
   inheritWeight = false,
+  sign,
   className = '',
   as: Tag = 'span',
 }: PriceProps) {
@@ -93,6 +103,8 @@ export default function Price({
 
   return (
     <Tag className={`tnum ${textClass} ${weightClass} ${SIZE_CLASSES[size]} ${className}`}>
+      {/* 符号は通貨記号と同じ span に入れず、本文級のまま出す（−だけ小さいと引き算に見えない）。 */}
+      {sign === 'minus' && '−'}
       <span
         className={`mr-[0.1em] align-baseline text-[0.68em] font-medium ${
           muted ? textClass : toneClasses.symbol

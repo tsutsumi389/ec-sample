@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import type { Experiment, ExperimentStatus, ExperimentVariantInput } from '@/lib/types';
@@ -8,8 +8,10 @@ import { EXPERIMENT_STATUS_META } from '@/lib/experimentStatus';
 import ScrollableTable from '@/components/ScrollableTable';
 import Spinner from '@/components/Spinner';
 import Badge from '@/components/Badge';
-import { PlusIcon, TrashIcon } from '@/components/Icons';
-import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
+import { TrashIcon } from '@/components/Icons';
+import { AdminError, AdminListHeader } from '@/components/admin/AdminList';
+import AdminModal, { AdminModalActions } from '@/components/admin/AdminModal';
+import { adminHintClass, adminInputClass, adminLabelClass } from '@/lib/formStyles';
 
 /** 新規作成時の初期値。対照群を必ず 1 つ含んだ 2 枝から始める。 */
 const emptyVariants: ExperimentVariantInput[] = [
@@ -51,6 +53,7 @@ function ExperimentFormModal({
   const [values, setValues] = useState<FormValues>(emptyForm);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const keyInputRef = useRef<HTMLInputElement>(null);
 
   const updateVariant = (index: number, partial: Partial<ExperimentVariantInput>) => {
     setValues((prev) => ({
@@ -144,22 +147,19 @@ function ExperimentFormModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-invert/50 flex items-center justify-center z-50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="experiment-form-title"
+    <AdminModal
+      titleId="experiment-form-title"
+      title="実験の新規作成"
+      width="2xl"
+      onClose={onClose}
+      initialFocus={keyInputRef}
     >
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-        <h2 id="experiment-form-title" className="text-lg font-bold mb-4">
-          実験の新規作成
-        </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="key" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="key" className={adminLabelClass}>
                 実験キー
-                <span className="ml-1 text-xs font-normal text-gray-600">
+                <span className={adminHintClass}>
                   （コードから参照。後から変更しない）
                 </span>
               </label>
@@ -167,14 +167,15 @@ function ExperimentFormModal({
                 id="key"
                 type="text"
                 required
+                ref={keyInputRef}
                 value={values.key}
                 onChange={(e) => setValues({ ...values, key: e.target.value })}
                 placeholder="pdp_section_order"
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+                className={adminInputClass}
               />
             </div>
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="name" className={adminLabelClass}>
                 実験名
               </label>
               <input
@@ -183,15 +184,15 @@ function ExperimentFormModal({
                 required
                 value={values.name}
                 onChange={(e) => setValues({ ...values, name: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+                className={adminInputClass}
               />
             </div>
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="description" className={adminLabelClass}>
               仮説
-              <span className="ml-1 text-xs font-normal text-gray-600">
+              <span className={adminHintClass}>
                 （何がどうなると考えたか。結果を読むときの前提になる）
               </span>
             </label>
@@ -200,7 +201,7 @@ function ExperimentFormModal({
               rows={2}
               value={values.description}
               onChange={(e) => setValues({ ...values, description: e.target.value })}
-              className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+              className={adminInputClass}
             />
           </div>
 
@@ -208,7 +209,7 @@ function ExperimentFormModal({
             <div>
               <label
                 htmlFor="traffic_allocation"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className={adminLabelClass}
               >
                 対象にする訪問者の割合（%）
               </label>
@@ -222,13 +223,13 @@ function ExperimentFormModal({
                 onChange={(e) =>
                   setValues({ ...values, traffic_allocation: Number(e.target.value) })
                 }
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+                className={adminInputClass}
               />
             </div>
             <div>
               <label
                 htmlFor="primary_metric"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className={adminLabelClass}
               >
                 主要指標（イベント名）
               </label>
@@ -239,7 +240,7 @@ function ExperimentFormModal({
                 list="metric-suggestions"
                 value={values.primary_metric}
                 onChange={(e) => setValues({ ...values, primary_metric: e.target.value })}
-                className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm"
+                className={adminInputClass}
               />
               <datalist id="metric-suggestions">
                 {METRIC_SUGGESTIONS.map((metric) => (
@@ -340,17 +341,14 @@ function ExperimentFormModal({
             </p>
           )}
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className={btnSecondary}>
-              キャンセル
-            </button>
-            <button type="submit" disabled={submitting} className={btnPrimary}>
-              {submitting ? '作成中...' : '下書きとして作成'}
-            </button>
-          </div>
+          <AdminModalActions
+            onCancel={onClose}
+            submitting={submitting}
+            submitLabel="下書きとして作成"
+            submittingLabel="作成中..."
+          />
         </form>
-      </div>
-    </div>
+    </AdminModal>
   );
 }
 
@@ -374,8 +372,12 @@ export default function AdminExperimentsPage() {
   const changeStatus = async (experiment: Experiment, next: ExperimentStatus) => {
     setError('');
     try {
-      await api.put(`/admin/experiments/${experiment.id}`, { status: next });
-      load();
+      // PUT は更新後の実験を返す。一覧を取り直すと、状態を1つ変えるたびに
+      // 全件（枝つき）がもう一度流れる。
+      const updated = await api.put<Experiment>(`/admin/experiments/${experiment.id}`, {
+        status: next,
+      });
+      setExperiments((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '状態の変更に失敗しました');
     }
@@ -383,19 +385,9 @@ export default function AdminExperimentsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">A/Bテスト</h1>
-        <button type="button" onClick={() => setFormOpen(true)} className={`${btnPrimary} inline-flex items-center gap-1.5`}>
-          <PlusIcon className="w-4 h-4" />
-          新規作成
-        </button>
-      </div>
+      <AdminListHeader title="A/Bテスト" onCreate={() => setFormOpen(true)} />
 
-      {error && (
-        <p role="alert" className="text-red-600 mb-4">
-          {error}
-        </p>
-      )}
+      <AdminError message={error} />
 
       {loading ? (
         <p className="text-gray-600 flex items-center">

@@ -23,6 +23,7 @@ import {
   getSearchHistory,
   removeSearchHistory,
 } from '@/lib/searchHistory';
+import { FOCUS_RING } from '@/lib/buttonStyles';
 
 interface SearchBoxProps {
   /** 外側 form に付けるクラス（表示/レイアウトの差はここで吸収する）。 */
@@ -394,7 +395,7 @@ export default function SearchBox({
         </div>
         <button
           type="submit"
-          className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-r-md border border-l-0 border-line-input bg-sunken px-4 text-body text-ink-soft transition-colors duration-fast hover:bg-line focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${buttonClassName}`}
+          className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-r-md border border-l-0 border-line-input bg-sunken px-4 text-body text-ink-soft transition-colors duration-fast hover:bg-line ${FOCUS_RING} ${buttonClassName}`}
         >
           <SearchIcon />
           検索

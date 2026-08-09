@@ -70,7 +70,7 @@ interface ExperimentContextValue {
 const ExperimentContext = createContext<ExperimentContextValue | undefined>(undefined);
 
 export function ExperimentProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [assignments, setAssignments] = useState<ExperimentAssignment[]>([]);
   const [isReady, setIsReady] = useState(false);
 
@@ -86,7 +86,10 @@ export function ExperimentProvider({ children }: { children: ReactNode }) {
 
   // ログイン状態が変わったら取り直す。割り当て自体は端末IDで決まるので変わらないが、
   // サーバー側で曝露レコードに user_id を紐付け直せるようにするため。
+  // 認証の確定を待つ（user?.id が undefined → 確定値 と2段階で動くので、待たないと
+  // 全ページで同じ内容の割り当て取得が2本走り、isReady の確定も1往復ぶん遅れる）。
   useEffect(() => {
+    if (authLoading) return;
     let cancelled = false;
     api
       .get<ExperimentAssignment[]>('/experiments/assignments')
@@ -104,7 +107,7 @@ export function ExperimentProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [authLoading, user?.id]);
 
   const value = useMemo<ExperimentContextValue>(() => {
     const byKey: Record<string, ExperimentAssignment> = {};

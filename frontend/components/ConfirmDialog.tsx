@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { btn, btnPrimary, btnSecondary } from '@/lib/buttonStyles';
 import { useFocusTrap } from '@/lib/focusTrap';
+import { withWordBreaks } from '@/lib/wordBreak';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -82,8 +83,10 @@ export default function ConfirmDialog({
           entered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
         }`}
       >
-        <h2 id={titleId} className="font-mincho text-h3 text-ink jp-head">
-          {title}
+        {/* 見出しには商品名がそのまま入る（「『◯◯』を削除しますか？」）。器が max-w-sm と
+            狭いので、語中改行を防ぐ <wbr> はここで挿す。 */}
+        <h2 id={titleId} className="font-mincho text-h3 text-ink jp-head jp-name">
+          {withWordBreaks(title)}
         </h2>
         {description && (
           <p id={descId} className="mt-2 text-body text-ink-muted">
@@ -100,7 +103,6 @@ export default function ConfirmDialog({
             className={danger ? dangerConfirmClass : btnPrimary}
             onClick={onConfirm}
             disabled={busy}
-            autoFocus
           >
             {confirmLabel}
           </button>

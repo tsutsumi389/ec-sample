@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { KettleMotif, CupMotif, PlantMotif } from '@/components/BrandMotifs';
+import { FOCUS_RING } from '@/lib/buttonStyles';
 
 /** リンクの当たり判定は .hit（::after で上下左右 6px 広げる）で確保する。
  *  min-h-11 で背を伸ばすと 390px のフッターがさらに縦に伸びるため、
@@ -8,7 +9,7 @@ import { KettleMotif, CupMotif, PlantMotif } from '@/components/BrandMotifs';
  *  py-0.5 を外すと 40px になり 44px を割るので消さないこと。
  *  隣の項目と当たり判定が重ならないよう、リストの行間は space-y-3（12px = 6px×2）に取る。 */
 const footerLinkClass =
-  'hit inline-block rounded py-0.5 text-ink-soft transition-colors duration-fast hover:text-brand-700 hover:underline decoration-line-strong underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
+  `hit inline-block rounded py-0.5 text-ink-soft transition-colors duration-fast hover:text-brand-700 hover:underline decoration-line-strong underline-offset-4 ${FOCUS_RING}`;
 
 const columnHeadClass = 'mb-4 text-eyebrow uppercase font-num text-ink-muted';
 
@@ -62,7 +63,7 @@ export default function Footer() {
               {/* py-2 は見た目の余白ではなくタップ域（文字丈 28px → 44px）。 */}
               <Link
                 href="/"
-                className="inline-flex items-center gap-2 rounded py-2 font-mincho text-lg font-bold tracking-[0.06em] text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className={`inline-flex items-center gap-2 rounded py-2 font-mincho text-lg font-bold tracking-[0.06em] text-brand-700 ${FOCUS_RING}`}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="shrink-0">
                   <path

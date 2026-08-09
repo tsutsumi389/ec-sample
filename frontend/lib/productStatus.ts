@@ -40,6 +40,16 @@ interface StatusMeta {
    * coming_soon は"これから買える"ので沈ませない（沈むのは買えなくなった状態だけ）。
    */
   dimmed: boolean;
+  /**
+   * 買えないときに商品ページで示す理由の一文。買える状態（on_sale）と、
+   * そもそも店頭に出ない状態（draft / archived）は null。
+   *
+   * 以前は商品ページが `Record<string, string>` のローカル表を持っていた。キーが
+   * ProductStatus ではないので状態を1つ足しても型が漏れを検出せず、無言で既定文
+   * （「この商品は現在購入いただけません。」）に落ちた。ここは Record<ProductStatus, …>
+   * なので、状態を足すとコンパイルが止まる。
+   */
+  purchaseNotice: string | null;
 }
 
 /**
@@ -53,12 +63,48 @@ interface StatusMeta {
  *   `elevated`（縁＋影）で担保し、色はこの表の値をそのまま使う。
  */
 export const PRODUCT_STATUS_META: Record<ProductStatus, StatusMeta> = {
-  draft: { adminLabel: '下書き', variant: 'neutral', storefrontLabel: null, dimmed: false },
-  coming_soon: { adminLabel: '近日発売', variant: 'brand', storefrontLabel: '近日発売', dimmed: false },
-  on_sale: { adminLabel: '公開中', variant: 'brand', storefrontLabel: null, dimmed: false },
-  suspended: { adminLabel: '一時停止', variant: 'accent', storefrontLabel: '販売停止中', dimmed: true },
-  discontinued: { adminLabel: '販売終了', variant: 'neutral', storefrontLabel: '販売終了', dimmed: true },
-  archived: { adminLabel: 'アーカイブ', variant: 'neutral', storefrontLabel: null, dimmed: true },
+  draft: {
+    adminLabel: '下書き',
+    variant: 'neutral',
+    storefrontLabel: null,
+    dimmed: false,
+    purchaseNotice: null,
+  },
+  coming_soon: {
+    adminLabel: '近日発売',
+    variant: 'brand',
+    storefrontLabel: '近日発売',
+    dimmed: false,
+    purchaseNotice: 'この商品は近日発売予定です。公開までもうしばらくお待ちください。',
+  },
+  on_sale: {
+    adminLabel: '公開中',
+    variant: 'brand',
+    storefrontLabel: null,
+    dimmed: false,
+    purchaseNotice: null,
+  },
+  suspended: {
+    adminLabel: '一時停止',
+    variant: 'accent',
+    storefrontLabel: '販売停止中',
+    dimmed: true,
+    purchaseNotice: 'この商品は現在販売を停止しています。再開までお待ちください。',
+  },
+  discontinued: {
+    adminLabel: '販売終了',
+    variant: 'neutral',
+    storefrontLabel: '販売終了',
+    dimmed: true,
+    purchaseNotice: 'この商品は販売を終了しました。',
+  },
+  archived: {
+    adminLabel: 'アーカイブ',
+    variant: 'neutral',
+    storefrontLabel: null,
+    dimmed: true,
+    purchaseNotice: null,
+  },
 };
 
 /**
@@ -68,6 +114,23 @@ export const PRODUCT_STATUS_META: Record<ProductStatus, StatusMeta> = {
  * 図版の上に重ねるときは Badge の `elevated`（縁＋影）だけを足し、色は変えない。
  */
 export const SOLD_OUT_BADGE = { label: '在庫切れ', variant: 'neutral' as BadgeVariant };
+
+/**
+ * 買えない商品の「札」に出す文言と色。在庫切れ（status は on_sale のまま stock が 0）と
+ * status 由来の状態を1つの分岐に畳む。
+ *
+ * お気に入り一覧・アシスタントの提案カード・商品ページが、同じ状態にそれぞれ
+ * 「現在お取り扱いできません」「購入できません」「この商品は現在購入いただけません。」と
+ * 3通りの言い方を持っていた。呼び出し側は purchasable が false のときだけこれを使う。
+ */
+export function unavailableBadge(product: {
+  status: ProductStatus;
+  stock: number;
+}): { label: string; variant: BadgeVariant } {
+  if (isSoldOut(product)) return SOLD_OUT_BADGE;
+  const meta = PRODUCT_STATUS_META[product.status];
+  return { label: meta.storefrontLabel ?? 'お取り扱いできません', variant: meta.variant };
+}
 
 /** 管理画面で選択できる状態（archived は削除操作でのみ遷移するため除外）。 */
 export const ADMIN_SELECTABLE_STATUSES: ProductStatus[] = [

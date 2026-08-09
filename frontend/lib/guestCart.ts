@@ -160,19 +160,14 @@ export function reconcileGuestCart(lines: GuestCartLine[]): void {
   writeGuestCart(next);
 }
 
-/** 控えを空にする（ログイン後のマージが済んだとき）。 */
+/**
+ * 控えを空にする（ログイン後のマージが済んだとき）。
+ * 空配列の書き込みは writeGuestCart が「キーごと消す」に畳むので、保存形式や
+ * 変更イベントの発火条件をここで書き直さない（片方だけ直ると、ヘッダーのバッジが
+ * マージ後も古い数のまま残る類の食い違いになる）。
+ */
 export function clearGuestCart(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // 消せなくても、マージ済みのカートはサーバー側が持っている。
-  }
-  try {
-    window.dispatchEvent(new Event(GUEST_CART_CHANGE_EVENT));
-  } catch {
-    // 同上。
-  }
+  writeGuestCart([]);
 }
 
 /** 同じタブ内のカート変更を購読する。返り値を呼ぶと解除する。 */

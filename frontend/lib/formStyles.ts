@@ -22,3 +22,18 @@ export const inputClass =
 
 /** 入力ラベル。 */
 export const labelClass = 'mb-1.5 block text-caption font-medium text-ink-soft';
+
+/* ── 管理画面 ──────────────────────────────────────────────
+ * 管理画面は店頭とは別系統（gray-* / text-sm）で組む。これは意図的な使い分けなので
+ * 上の2つに寄せない。ただし**管理画面の中では**1組であるべきで、実際には
+ * ラベル24箇所・入力欄22箇所に同じ文字列が写されていた（ProductFormModal だけで各10回）。
+ */
+
+/** 管理画面の入力ラベル。 */
+export const adminLabelClass = 'block text-sm font-medium text-gray-700 mb-2';
+
+/** 管理画面の入力欄・セレクト。 */
+export const adminInputClass = 'w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm';
+
+/** 管理画面のラベル脇の補足（「（任意）」「（後から変更しない）」など）。 */
+export const adminHintClass = 'ml-1 text-xs font-normal text-gray-600';

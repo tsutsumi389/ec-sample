@@ -5,11 +5,11 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import type { HomeResponse, HomeSection } from '@/lib/types';
 import { getRecentlyViewedIds } from '@/lib/recentlyViewed';
-import { ProductCardSkeleton, Skeleton } from '@/components/Skeleton';
+import { ProductCardSkeleton, PULSE, Skeleton } from '@/components/Skeleton';
 import BrandHero from '@/components/BrandHero';
 import HomeBillboard from '@/components/HomeBillboard';
 import SignatureBand from '@/components/SignatureBand';
-import ProductLane, { type ProductLaneVariant } from '@/components/ProductLane';
+import ProductLane, { LANE_STYLES, type ProductLaneVariant } from '@/components/ProductLane';
 import EmptyState from '@/components/EmptyState';
 
 /** 1リクエストで取得するレーンの上限（契約上 1..12）。表紙＋実際に出す3本ぶんで足りる。 */
@@ -109,9 +109,8 @@ function selectLanes(sections: HomeSection[]) {
  * 差し替わった瞬間に版面が動かないようにしている。
  */
 export function BillboardSkeleton() {
-  // 明滅は体系のトークン animate-breathe（1.6s / ease-standard）。Tailwind 既定の
-  // animate-pulse は 2s / cubic-bezier(.4,0,.6,1) でこの体系の duration・easing に属さない。
-  const block = 'rounded-md bg-brand-800 animate-breathe motion-reduce:animate-none';
+  // 明滅のトークンは Skeleton.tsx の PULSE（根拠もそちらに一本化してある）。地色だけが違う。
+  const block = `rounded-md bg-brand-800 ${PULSE}`;
   return (
     <div
       aria-hidden="true"
@@ -127,7 +126,7 @@ export function BillboardSkeleton() {
         </div>
         <div className="mt-6 md:col-span-5 md:col-start-8 md:mt-0">
           <div className="rounded-2xl bg-tile p-4 md:p-6">
-            <div className="aspect-[16/9] w-full animate-breathe rounded-xl bg-sunken motion-reduce:animate-none md:aspect-square" />
+            <div className={`aspect-[16/9] w-full rounded-xl bg-sunken md:aspect-square ${PULSE}`} />
           </div>
         </div>
       </div>
@@ -141,20 +140,15 @@ export function BillboardSkeleton() {
  */
 function LaneSkeleton({ variant = 'lane' }: { variant?: 'lane' | 'ranked' }) {
   const ranked = variant === 'ranked';
+  // カード幅は ProductLane と**同じ表**から引く。写しにすると、片方だけ直したときに
+  // 読み込み完了の瞬間にレーンが横へ跳ねる。
   return (
     <div className={ranked ? 'band-lg bg-invert' : 'band'} aria-hidden="true">
       <section className="wrap-wide">
         <Skeleton className={`h-7 w-48 ${ranked ? 'opacity-25' : ''}`} />
         <div className="mt-6 flex gap-4 overflow-hidden">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className={
-                ranked
-                  ? 'w-[72%] flex-none sm:w-[48%] md:w-[36%] lg:w-[27%]'
-                  : 'w-[60%] flex-none sm:w-[38%] md:w-[30%] lg:w-[21%]'
-              }
-            >
+            <div key={i} className={`flex-none ${LANE_STYLES[variant].item}`}>
               <ProductCardSkeleton />
             </div>
           ))}
@@ -187,13 +181,17 @@ export default function HomeSections({
 }: {
   onLaneCount?: (n: number) => void;
 }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [sections, setSections] = useState<HomeSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
   // user を依存に入れ、ログイン状態が変わったら取り直す（パーソナライズが切り替わるため）。
+  // ただし認証が確定するまでは引かない。AuthProvider は null → 確定 の2段階で user を
+  // 決めるので、待たないとログイン済みの訪問者はホームを開くたびに /home（このサイトで
+  // 最も重い口）を2本投げ、1本目のゲスト向けレスポンスを捨ててスケルトンに巻き戻る。
   useEffect(() => {
+    if (authLoading) return;
     let cancelled = false;
     setLoading(true);
     setFailed(false);
@@ -222,7 +220,7 @@ export default function HomeSections({
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [authLoading, user]);
 
   // 早期 return より前に置くこと（フックの順序を固定する）。
   const lanes = useMemo(() => selectLanes(sections), [sections]);

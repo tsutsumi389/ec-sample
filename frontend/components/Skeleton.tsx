@@ -15,9 +15,10 @@ import { recommendGrid } from '@/lib/gridStyles';
  *   `animate-breathe [animation-duration:…]` では後勝ちで巻き戻される。値を変えるときは
  *   tailwind.config.ts の animation.breathe を直すこと。
  * ⚠ 同じ明滅を使う場所（components/CategoryTiles.tsx / components/HomeSections.tsx の
- *   BillboardSkeleton）も必ずこのトークンを使う。
+ *   BillboardSkeleton / components/Header.tsx）も必ずこのトークンを import すること。
+ *   地色や角丸が Skeleton と違うだけの箇所は、コンポーネントではなくこのトークンだけを共有する。
  */
-const PULSE = 'animate-breathe motion-reduce:animate-none';
+export const PULSE = 'animate-breathe motion-reduce:animate-none';
 
 /** 汎用スケルトンブロック。className で形・サイズを調整する。 */
 export function Skeleton({ className }: { className?: string }) {

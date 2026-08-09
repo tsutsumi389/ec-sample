@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { CupMotif } from '@/components/BrandMotifs';
+import { withWordBreaks } from '@/lib/wordBreak';
 
 interface EmptyStateProps {
   /** 差し替えたい図版。省略時はブランドの線画（湯呑み）が入る。 */
@@ -29,7 +30,9 @@ export default function EmptyState({ icon, title, description, action }: EmptySt
           図版の下端から 8px 上（= -mt-2）に引くと線画がちょうど罫の上に立つ。
           mb-2 で見た目の丈を 80px に戻し、下の見出しとのアキ（mt-5）を変えない。 */}
       <div aria-hidden="true" className="-mt-2 mb-2 h-px w-24 bg-line-strong" />
-      <p className="mt-5 font-mincho text-h3 text-ink jp-head">{title}</p>
+      {/* 見出しは呼び出し側から可変長の和文（検索語・商品名）が来る。語中改行を防ぐ
+          <wbr> はここで挿す——PageMasthead / SectionHead と同じく、通すのは器の側の責務。 */}
+      <p className="mt-5 font-mincho text-h3 text-ink jp-head jp-name">{withWordBreaks(title)}</p>
       {description && <p className="wrap-read mt-2 text-body text-ink-muted">{description}</p>}
       {action && <div className="mt-7">{action}</div>}
     </div>
