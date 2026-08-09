@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC 運用フロー書</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 運用フロー</a><small>運用手順書 / 2026-08-09</small></div>
+    <ol>
+      <li><a href="01-overview.html">運用の全体像</a></li>
+      <li><a href="02-product.html">商品ライフサイクル</a></li>
+      <li><a href="03-inventory-price.html">在庫と価格</a></li>
+      <li><a href="04-order.html">受注〜出荷〜完了</a></li>
+      <li><a href="05-coupon.html">クーポン運用</a></li>
+      <li><a href="06-experiment.html">A/Bテスト運用</a></li>
+      <li><a href="07-quality.html">カタログ品質と顧客接点</a></li>
+      <li><a href="08-gaps.html">画面が無い作業と落とし穴</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <header class="cover" id="top">
+    <div class="kicker">Operations</div>
+    <h1>Hibino EC 運用フロー書</h1>
+    <div class="subtitle">管理者が実際に手を動かしている運用手順を、「どの画面で」「何を操作すると」「何が起きるか」の順に書き起こした現状の記録</div>
+    <div class="meta-grid">
+      <div class="cell"><div class="k">ドキュメント</div><div class="v">運用フロー書（As-Is）</div></div>
+      <div class="cell"><div class="k">対象システム</div><div class="v">Hibino（EC サンプル）</div></div>
+      <div class="cell"><div class="k">収録</div><div class="v">全 8 章</div></div>
+      <div class="cell"><div class="k">更新日</div><div class="v">2026-08-09</div></div>
+    </div>
+  </header>
+
+  <section id="scope">
+    <h2>この文書の位置づけ</h2>
+    <p class="lead">本書は <strong>現在この EC を運用するとしたら、人間が実際にどう手を動かすことになるか</strong> を、実装から読み取って書き起こしたものである。理想の運用手順でも、改善提案でもない。</p>
+
+    <div class="note">
+      <div class="lbl">本書に書くこと</div>
+      <p>管理画面の各操作の手順、入力項目の意味、押した結果として店頭・在庫・注文がどう変わるか。そして <strong>画面が用意されていない作業</strong>（＝現状は DB を直接触るか、API を直接叩くしかない作業）。</p>
+    </div>
+
+    <div class="note">
+      <div class="lbl">本書に書かないこと</div>
+      <p>設計の改善案、機能追加の提案、自動化の設計。実装を変えるべきかどうかの判断は本書の外で行う。本書は「今こうなっている」だけを固定するためにある。</p>
+    </div>
+
+    <p>したがって本書には、直感に反する挙動や、明らかに不便な制約がそのまま記述されている。それらは誤記ではなく現状である。運用の設計を変えるときは、まずこの記録を出発点にすること。</p>
+  </section>
+
+  <section id="contents">
+    <h2>目次</h2>
+    <div class="ch-list">
+      <a class="ch-card" href="01-overview.html"><span class="n">01</span><span class="t">運用の全体像</span><span class="d">登場人物と権限、管理画面 7 つの地図、全画面に共通する作法、できること・できないことの総覧。</span></a>
+      <a class="ch-card" href="02-product.html"><span class="n">02</span><span class="t">商品ライフサイクル</span><span class="d">商品を登録して公開し、情報を直し、売るのをやめるまで。6 つの販売状態、登録フォーム 11 項目、削除＝アーカイブの正体、カテゴリ管理。</span></a>
+      <a class="ch-card" href="03-inventory-price.html"><span class="n">03</span><span class="t">在庫と価格</span><span class="d">在庫数を直す唯一の経路、欠品したときに起きること、セール価格の入れ方と終わらせ方。期間指定も履歴も無い前提での回し方。</span></a>
+      <a class="ch-card" href="04-order.html"><span class="n">04</span><span class="t">受注〜出荷〜完了</span><span class="d">注文が入ってから配達完了まで、プルダウンを進めるだけの運用。キャンセルの経路が 2 つあり、在庫が戻るのは片方だけという分岐。</span></a>
+      <a class="ch-card" href="05-coupon.html"><span class="n">05</span><span class="t">クーポン運用</span><span class="d">クーポンの発行・配布・停止・失効。割引額の計算規則と、使用回数を制限できないことから来る運用上の制約。</span></a>
+      <a class="ch-card" href="06-experiment.html"><span class="n">06</span><span class="t">A/Bテスト運用</span><span class="d">実験の企画から開始・監視・判定・終了まで。実際に画面が変わる 2 つの実験キー、結果画面の読む順序、やってはいけない操作。</span></a>
+      <a class="ch-card" href="07-quality.html"><span class="n">07</span><span class="t">カタログ品質と顧客接点</span><span class="d">検索・レコメンドの土台になる埋め込みの更新、レビューと商品 Q&amp;A の扱い、AI アシスタントの会話、ユーザー管理。</span></a>
+      <a class="ch-card" href="08-gaps.html"><span class="n">08</span><span class="t">画面が無い作業と落とし穴</span><span class="d">DB シェルと API 直叩きでしかできない作業の手順、そして全章の警告を 1 枚にまとめた罠の一覧。</span></a>
+    </div>
+  </section>
+
+  <section id="related">
+    <h2>関連ドキュメント</h2>
+    <div class="ch-list">
+      <a class="ch-card" href="../system-design/index.html"><span class="n">SYSTEM</span><span class="t">Hibino EC システム設計書</span><span class="d">コードベースの構造化分析に基づく統合設計書（全 11 章）。データモデル・API・処理フロー・AI 設計を扱う。本書が「運用者から見た挙動」を書くのに対し、こちらは「実装から見た構造」を書く。</span></a>
+      <a class="ch-card" href="../design/index.html"><span class="n">DESIGN</span><span class="t">Hibino EC 機能設計書</span><span class="d">AI アシスタント・商品検索 UI/UX・EC 標準機能の拡充を、機能単位でまとめた設計書の索引。</span></a>
+    </div>
+  </section>
+
+  <footer class="docfoot">
+    Hibino EC 運用フロー書 索引 / スタイル・スクリプトは <code>../system-design/assets/</code> と共通
+  </footer>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>

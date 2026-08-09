@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC 運用フロー書 — 04 受注〜出荷〜完了</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 運用フロー</a><small>運用手順書 / 2026-08-09</small></div>
+    <ol>
+      <li><a href="01-overview.html">運用の全体像</a></li>
+      <li><a href="02-product.html">商品ライフサイクル</a></li>
+      <li><a href="03-inventory-price.html">在庫と価格</a></li>
+      <li><a href="04-order.html" class="active">受注〜出荷〜完了</a></li>
+      <li><a href="05-coupon.html">クーポン運用</a></li>
+      <li><a href="06-experiment.html">A/Bテスト運用</a></li>
+      <li><a href="07-quality.html">カタログ品質と顧客接点</a></li>
+      <li><a href="08-gaps.html">画面が無い作業と落とし穴</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s4">
+    <h2><span class="num">04</span>受注〜出荷〜完了</h2>
+    <p class="lead">注文が入ってから配達完了まで、運営がする操作は <strong>プルダウンを 1 段ずつ進めること</strong>だけである。決済も配送も外部と繋がっていないため、ステータスは「実際に起きたこと」を人が記録する台帳として使う。</p>
+
+    <h3><span class="num">4.1</span>注文が入った時点で済んでいること</h3>
+    <ol class="steps">
+      <li>購入者がカートから注文を確定した時点で、<strong>在庫は既に減っている</strong>（同時注文でも売り越さないよう、確定処理の中で押さえられる）</li>
+      <li>注文明細には、その時点の <strong>商品名と実売価格が写し取られている</strong>。あとで商品を編集しても注文の金額は変わらない</li>
+      <li>クーポンが使われていれば、確定時にもう一度検証されたうえで割引額が確定している</li>
+      <li>カートは空になり、注文は <strong>必ず「未処理」（pending）</strong> で作られる</li>
+    </ol>
+
+    <h3><span class="num">4.2</span>5 つの注文状態</h3>
+    <div class="sm">
+      <div class="st">
+        <div class="name">pending</div>
+        <div class="desc">未処理。注文直後の状態。入金確認待ち。</div>
+        <div class="flags"><span class="flg on">購入者がキャンセルできる</span></div>
+      </div>
+      <div class="st">
+        <div class="name">paid</div>
+        <div class="desc">支払い済み。入金を確認したら運営が手で進める。</div>
+        <div class="flags"><span class="flg on">購入者がキャンセルできる</span></div>
+      </div>
+      <div class="st">
+        <div class="name">shipped</div>
+        <div class="desc">発送済み。荷物を出したら進める。</div>
+        <div class="flags"><span class="flg off">購入者がキャンセルできる</span></div>
+      </div>
+      <div class="st">
+        <div class="name">delivered</div>
+        <div class="desc">配達完了。<strong>この状態になって初めてレビューの前提が満たされる</strong>わけではない点に注意（レビューはキャンセル以外なら書ける）。</div>
+        <div class="flags"><span class="flg off">購入者がキャンセルできる</span></div>
+      </div>
+      <div class="st">
+        <div class="name">cancelled</div>
+        <div class="desc">キャンセル。購入者の履歴では打ち消し表示になる。</div>
+        <div class="flags"><span class="flg off">購入者がキャンセルできる</span></div>
+      </div>
+    </div>
+
+    <div class="note">
+      <div class="lbl">購入者側の見え方</div>
+      <p>購入者のマイページには「注文受付 → お支払い → 発送 → お届け完了」の 4 段のタイムラインが出る。運営がプルダウンを進めると、購入者の画面でもその段が進む。キャンセルはタイムラインに乗らず、打ち消し表示になる。</p>
+    </div>
+
+    <h3><span class="num">4.3</span>日々の受注処理</h3>
+    <ol class="steps">
+      <li><code>/admin</code> のダッシュボードで「最近の注文」5 件を眺め、新しい注文が入っているかを確認する</li>
+      <li><code>/admin/orders</code> を開く。<strong>新しい順に全件</strong>が並ぶ。絞り込みが無いので、未処理の注文は目視で探す</li>
+      <li>入金を確認したら、その行のプルダウンで「支払い済み」を選ぶ。<strong>選んだ瞬間に確定する</strong>（確認ダイアログは出ない）</li>
+      <li>何を何個送るかは<strong>この画面には出ない</strong>ので、別途確認する（4.4 を参照）</li>
+      <li>荷物を出したらプルダウンで「発送済み」を選ぶ</li>
+      <li>到着が確認できたら「配達完了」を選ぶ。これで一件が終わる</li>
+    </ol>
+
+    <div class="note warn">
+      <div class="lbl">プルダウンは確認なしで即確定し、順序も検査されない</div>
+      <p>「配達完了」から「未処理」へ戻すような遷移も、そのまま通ってしまう。<strong>取り消し（undo）は無く、変更履歴も残らない</strong>ので、誤って選んだときは正しい状態を選び直すしかない（誰がいつ間違えたかは追跡できない）。行を選ぶときは注文番号を必ず確認すること。</p>
+    </div>
+
+    <h3><span class="num">4.4</span>注文一覧に出る情報・出ない情報</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>画面に出る（5 列）</th><th>画面に出ない</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>
+              注文番号<br>
+              注文者（名前とメールアドレス）<br>
+              合計金額<br>
+              注文日<br>
+              ステータス（プルダウン）
+            </td>
+            <td>
+              <strong>注文明細（何をいくつ買ったか）</strong><br>
+              <strong>配送先住所</strong><br>
+              割引額と適用されたクーポンコード<br>
+              注文の詳細ページ（そもそも存在しない）
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <div class="lbl">出荷に必要な情報が管理画面から得られない</div>
+      <p>注文明細と配送先は、サーバーからは返っているのに<strong>画面に描かれていない</strong>。したがって「何を、どこへ送るか」を管理画面だけで知ることはできない。現状の手段は次の 2 つ。</p>
+      <ul>
+        <li><code>make db-shell</code> で注文明細と配送先を直接引く（手順は <a href="08-gaps.html">08 章</a>）</li>
+        <li>API ドキュメント（<code>http://localhost:8000/docs</code>）から <code>GET /api/admin/orders</code> を実行し、返ってきた JSON を読む</li>
+      </ul>
+      <p>どちらも管理画面の外の作業になる。<strong>受注件数が増えるほど、この一手間が運用の律速になる。</strong></p>
+    </div>
+
+    <h3><span class="num">4.5</span>キャンセルの 2 つの経路</h3>
+    <p>「キャンセル」と呼ばれる操作は 2 つあり、<strong>在庫の扱いが違う</strong>。ここを取り違えると在庫がずれる。</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:8em">経路</th><th>できる条件</th><th>在庫</th><th>備考</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>購入者がキャンセル</strong><br><small>マイページの注文詳細から</small></td>
+            <td>その注文が「未処理」か「支払い済み」のときだけ</td>
+            <td><strong>自動で戻る</strong></td>
+            <td>確認ダイアログ（「この操作は取り消せません」）が出る。運営の操作は不要</td>
+          </tr>
+          <tr>
+            <td><strong>運営がキャンセル</strong><br><small>注文管理のプルダウン</small></td>
+            <td>いつでも（発送済み・配達完了からでも通る）</td>
+            <td><strong>戻らない</strong></td>
+            <td>在庫を戻したければ、続けて商品編集で手入力する</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>運営側でキャンセルするときの手順</h4>
+    <ol class="steps">
+      <li>キャンセルする注文の<strong>明細を先に控える</strong>（何をいくつ戻すのかが後から分からなくなるため。明細の調べ方は 4.4）</li>
+      <li>注文管理のプルダウンで「キャンセル」を選ぶ</li>
+      <li><code>/admin/products</code> で該当商品を開き、<strong>在庫数に控えた数量を足した値</strong>を入力して保存する（商品が複数あるなら 1 つずつ繰り返す）</li>
+      <li>一覧の在庫列で、加算後の数値になっていることを確認する</li>
+    </ol>
+
+    <div class="note">
+      <div class="lbl">キャンセルされた注文からも「もう一度買う」ことはできる</div>
+      <p>購入者は、キャンセル済みの注文からでも同じ商品をカートへ入れ直せる。その際、買えなくなっている商品や在庫が足りない商品は<strong>エラーにせず見送られる</strong>（1 件の在庫切れで一括投入ごと失敗させない設計）。運営側の操作は不要。</p>
+    </div>
+
+    <h3><span class="num">4.6</span>外部との連携は無い</h3>
+    <div class="note warn">
+      <div class="lbl">決済・配送・通知は、いずれも実際には起きない</div>
+      <p>「支払い済み」にしても決済は発生せず、「発送済み」にしても配送業者へは何も飛ばない。追跡番号・配送業者・出荷日を記録する項目も無く、購入者へのメール通知も送られない。<strong>ステータスは実世界で起きたことを人が後追いで記録する台帳であり、システムが何かを実行するトリガーではない。</strong></p>
+      <p>また、商品ページに出ている「14 時までのご注文で翌営業日に出荷いたします」「全国一律 送料無料」「30 日間の返品保証」は<strong>固定の文言</strong>で、これを裏づける処理は実装されていない。運用としてこの約束を守れるかどうかは、管理画面の外の話になる。</p>
+    </div>
+
+    <h3><span class="num">4.7</span>根拠</h3>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>記述</th><th>実装</th></tr></thead>
+        <tbody>
+          <tr><td>注文確定の処理（在庫引き当て・価格の写し取り）</td><td><code>backend/app/routers/orders.py:29-159</code></td></tr>
+          <tr><td>注文は必ず pending で作られる</td><td><code>backend/app/routers/orders.py:125</code></td></tr>
+          <tr><td>5 状態のラベルとタイムライン</td><td><code>frontend/lib/order-status.ts:4-10, 49-59</code></td></tr>
+          <tr><td>ステータス変更（遷移の検査なし・在庫に触れない）</td><td><code>backend/app/routers/admin.py:184-198</code></td></tr>
+          <tr><td>プルダウンで即時送信</td><td><code>frontend/app/admin/orders/page.tsx:45-56, 106-119</code></td></tr>
+          <tr><td>一覧が 5 列であること</td><td><code>frontend/app/admin/orders/page.tsx:80-85</code></td></tr>
+          <tr><td>API は明細・配送先・割引額を返している</td><td><code>backend/app/schemas.py:423-444</code></td></tr>
+          <tr><td>購入者によるキャンセル（条件と在庫戻し）</td><td><code>backend/app/routers/orders.py:233-275</code></td></tr>
+          <tr><td>再注文で買えない明細を見送ること</td><td><code>backend/app/routers/orders.py:191-230</code> / <code>backend/app/services/cart.py:73-156</code></td></tr>
+          <tr><td>出荷・決済・通知の連携が無いこと</td><td><code>backend/app/models.py:281-298</code>（該当カラムが無い）</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="03-inventory-price.html">← <span class="n">03</span> 在庫と価格</a>
+    <a class="next" href="05-coupon.html"><span class="n">05</span> クーポン運用 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>

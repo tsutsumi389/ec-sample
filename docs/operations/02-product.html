@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC 運用フロー書 — 02 商品ライフサイクル</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 運用フロー</a><small>運用手順書 / 2026-08-09</small></div>
+    <ol>
+      <li><a href="01-overview.html">運用の全体像</a></li>
+      <li><a href="02-product.html" class="active">商品ライフサイクル</a></li>
+      <li><a href="03-inventory-price.html">在庫と価格</a></li>
+      <li><a href="04-order.html">受注〜出荷〜完了</a></li>
+      <li><a href="05-coupon.html">クーポン運用</a></li>
+      <li><a href="06-experiment.html">A/Bテスト運用</a></li>
+      <li><a href="07-quality.html">カタログ品質と顧客接点</a></li>
+      <li><a href="08-gaps.html">画面が無い作業と落とし穴</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s2">
+    <h2><span class="num">02</span>商品ライフサイクル</h2>
+    <p class="lead">商品を登録し、公開し、情報を直し、売るのをやめるまで。すべて <code>/admin/products</code> の一画面と、そこから開くモーダル 1 つで行う。</p>
+
+    <h3><span class="num">2.1</span>6 つの販売状態</h3>
+    <p>商品の見え方・買えるかどうかは、<strong>すべて「販売状態」1 項目から決まる</strong>。「公開フラグ」「在庫切れフラグ」のような個別のスイッチは存在しない。</p>
+
+    <div class="sm">
+      <div class="st">
+        <div class="name">draft</div>
+        <div class="desc">下書き。作りかけの商品を置いておく状態。新規登録の初期値。</div>
+        <div class="flags"><span class="flg off">一覧に出る</span><span class="flg off">ページが開く</span><span class="flg off">買える</span></div>
+      </div>
+      <div class="st">
+        <div class="name">coming_soon</div>
+        <div class="desc">近日発売。棚には並べて見せるが、まだ買わせない。店頭には「近日発売」と出る。</div>
+        <div class="flags"><span class="flg on">一覧に出る</span><span class="flg on">ページが開く</span><span class="flg off">買える</span></div>
+      </div>
+      <div class="st">
+        <div class="name">on_sale</div>
+        <div class="desc">公開中。<strong>買える唯一の状態</strong>。ただし在庫が 0 ならボタンは「在庫切れ」になる。</div>
+        <div class="flags"><span class="flg on">一覧に出る</span><span class="flg on">ページが開く</span><span class="flg on">買える</span></div>
+      </div>
+      <div class="st">
+        <div class="name">suspended</div>
+        <div class="desc">一時停止。棚には残したまま販売だけ止める。店頭には「販売停止中」と出て、図版が沈む。</div>
+        <div class="flags"><span class="flg on">一覧に出る</span><span class="flg on">ページが開く</span><span class="flg off">買える</span></div>
+      </div>
+      <div class="st">
+        <div class="name">discontinued</div>
+        <div class="desc">販売終了。一覧・検索から消えるが、<strong>URL を直接開けば見える</strong>（既存のリンクやブックマークを死なせないため）。</div>
+        <div class="flags"><span class="flg off">一覧に出る</span><span class="flg on">ページが開く</span><span class="flg off">買える</span></div>
+      </div>
+      <div class="st">
+        <div class="name">archived</div>
+        <div class="desc">アーカイブ。店頭から完全に消える。管理画面の「削除」ボタンが実際に行うのはこれ。</div>
+        <div class="flags"><span class="flg off">一覧に出る</span><span class="flg off">ページが開く</span><span class="flg off">買える</span></div>
+      </div>
+    </div>
+
+    <div class="note">
+      <div class="lbl">遷移の制約は無い</div>
+      <p>どの状態からどの状態へでも移せる。<code>archived</code> から <code>on_sale</code> へ一足飛びに戻すこともできる（ただしフォームから <code>archived</code> は選べない。2.6 を参照）。順序を守らせる仕組みは無いので、<strong>正しい順序は運用側で担保する</strong>。</p>
+    </div>
+
+    <h3><span class="num">2.2</span>商品を登録して公開する</h3>
+    <ol class="steps">
+      <li><code>/admin/products</code> を開き、右上の「新規作成」を押す</li>
+      <li>モーダルに入力する。<strong>必須は 商品名・価格・在庫数・販売状態 の 4 つ</strong>だけで、他はすべて任意（項目の詳細は 2.3）</li>
+      <li>販売状態は <strong>「下書き」のまま保存する</strong>。ここで「公開中」を選ぶと、保存した瞬間に店頭の一覧へ並び、購入もできてしまう</li>
+      <li>「保存する」を押す。エラーがあればモーダル内に赤字で出て、モーダルは閉じない（入力は失われない）</li>
+      <li>一覧に行が増えたことを確認する。並び順は登録順なので、<strong>新しい商品は一覧のいちばん下</strong>に付く</li>
+      <li>内容を確認したら「編集」を開き、販売状態を「公開中」（または「近日発売」）に変えて保存する。これが公開の操作にあたる</li>
+      <li>店頭（<code>http://localhost:3000/products</code>）に並んだことを目視で確認する</li>
+    </ol>
+
+    <div class="note warn">
+      <div class="lbl">商品コード（SKU）が重複すると原因の分からないエラーになる</div>
+      <p>SKU は全商品で一意でなければならないが、<strong>重複を事前に知らせる仕組みが無い</strong>。既にある SKU を入力して保存すると、画面には「サーバーエラーが発生しました。しばらくしてから再度お試しください。」としか出ず、SKU が原因だとは分からない。<br>
+      加えて SKU は前後の空白が取り除かれないため、<code>ABC</code> と <code>ABC&nbsp;</code>（末尾に空白）は<strong>別の商品コードとして両方登録できてしまう</strong>。採番は手作業なので、登録前に一覧で重複を確認すること。</p>
+    </div>
+
+    <h3><span class="num">2.3</span>登録・編集フォームの項目</h3>
+    <p>新規作成と編集は同じモーダルを使う。項目別の個別編集画面は無い。</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:11em">項目</th><th>必須</th><th>入力方法と注意</th></tr></thead>
+        <tbody>
+          <tr><td>商品名</td><td>必須</td><td>自由入力。文字数の制限は無い。空白だけでも通ってしまうので注意</td></tr>
+          <tr><td>商品コード（SKU）</td><td>任意</td><td>自由入力・自動採番なし。全商品で一意。空にすると未設定になる。<strong>重複と前後の空白に注意</strong>（2.2 の警告）</td></tr>
+          <tr><td>説明</td><td>任意</td><td>複数行のテキスト。店頭の商品ページに出るほか、<strong>検索用のベクトルにも取り込まれる</strong>ので、素材や用途を書くと検索に乗りやすくなる</td></tr>
+          <tr><td>カテゴリ</td><td>任意</td><td>既存カテゴリから選ぶ。「未分類」を選ぶと所属なし。<strong>このモーダルからカテゴリは作れない</strong>ので、先にカテゴリ管理で作っておく</td></tr>
+          <tr><td>価格（円）</td><td>必須</td><td>整数・0 以上。定価にあたる</td></tr>
+          <tr><td>在庫数</td><td>必須</td><td>整数・0 以上。<strong>増減ではなく絶対値の上書き</strong>（詳細は <a href="03-inventory-price.html">03 章</a>）</td></tr>
+          <tr><td>セール価格（円）</td><td>任意</td><td>入れるとこちらが実売価格になる。空にすると定価に戻る。<strong>定価より高い額も 0 円も入力できてしまう</strong>（<a href="03-inventory-price.html">03 章</a>の警告）</td></tr>
+          <tr><td>販売状態</td><td>必須</td><td>下書き / 近日発売 / 公開中 / 一時停止 / 販売終了 の 5 択。<strong>アーカイブはここから選べない</strong></td></tr>
+          <tr><td>メイン画像URL</td><td>任意</td><td>URL の手入力のみ。<strong>アップロード機能は無い</strong>。同梱の絵を使うなら <code>/products/&lt;名前&gt;.svg</code> の形。一覧のサムネイルに使われるのはこの 1 枚だけ</td></tr>
+          <tr><td>追加画像URL</td><td>任意</td><td>1 つのテキスト欄に <strong>1 行 1 URL</strong> で並べる。表示順は行の順。空行は無視される。並べ替えは行を書き直す以外にない</td></tr>
+          <tr><td>仕様</td><td>任意</td><td>「仕様を追加」で行が増え、各行に 項目名 / 値 を入れる（例: 重量 / 約 350g）。行の削除はできるが<strong>並べ替えはできない</strong>。どちらかが空の行は保存時に捨てられる</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <div class="lbl">仕様欄に在庫・価格・販売状態を書かない</div>
+      <p>仕様は「モノの事実」（サイズ・重量・素材・保証など）だけを書く欄である。在庫や価格は状態であって仕様ではなく、ここに書くと商品ページに同じ数字が二度並ぶ。項目名はカテゴリを跨いで使い回すこと（重量・素材・本体サイズ・保証期間 など）。値は単位まで含んだ表示用の文字列でよい。</p>
+    </div>
+
+    <div class="note">
+      <div class="lbl">画像 URL は間違えても保存できてしまう</div>
+      <p>URL の形式チェックも到達確認も無い。打ち間違えた画像は店頭で「画像なし」のプレースホルダに差し替わって表示されるだけで、<strong>管理画面には何のエラーも出ない</strong>。保存後に店頭の商品ページを開いて絵が出ているか目視すること。</p>
+    </div>
+
+    <h3><span class="num">2.4</span>商品情報を直す</h3>
+    <ol class="steps">
+      <li>一覧の「編集」を押すと、現在の値が入った状態でモーダルが開く</li>
+      <li>直したい項目だけ書き換えて「保存する」を押す</li>
+      <li>保存の裏で、その商品 1 件の検索用ベクトルが自動的に貼り直される（<a href="07-quality.html">07 章</a>）。<strong>成功したかどうかは画面に出ない</strong></li>
+    </ol>
+
+    <div class="note warn">
+      <div class="lbl">画像と仕様は「差分更新」ではなく「まるごと置き換え」</div>
+      <p>保存を押すと、フォームに表示されている画像 URL と仕様の内容が<strong>そのまま既存の内容を置き換える</strong>。追加画像欄の行をうっかり消したまま保存すれば、その商品のギャラリーは消える。編集前の状態を控えておく仕組みは無い（変更履歴が残らないため復元もできない）。</p>
+    </div>
+
+    <h3><span class="num">2.5</span>売るのをやめる</h3>
+    <p>「やめ方」は 3 段階あり、どこまで消したいかで選ぶ。</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:10em">やりたいこと</th><th>操作</th><th>結果</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>一時的に売るのを止める<br><small>（入荷待ち・調査中など）</small></td>
+            <td>編集 → 販売状態を「一時停止」</td>
+            <td>棚には残る。商品ページも開く。購入パネルの代わりに「販売停止中」と、カテゴリの棚へ戻る導線が出る</td>
+          </tr>
+          <tr>
+            <td>取り扱いを終える<br><small>（後継品に入れ替えるなど）</small></td>
+            <td>編集 → 販売状態を「販売終了」</td>
+            <td>一覧・検索から消える。<strong>URL を知っている人はページを開ける</strong>ので、過去の購入者やブックマークからは引き続き見える</td>
+          </tr>
+          <tr>
+            <td>棚から完全に下げる</td>
+            <td>一覧の「削除」ボタン</td>
+            <td>アーカイブ状態になる。店頭からは完全に消える（一覧にも出ず、ページも開かない）。<strong>管理画面の一覧からは消えない</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">2.6</span>「削除」ボタンの正体と、アーカイブからの復活</h3>
+    <p>商品は決して物理削除されない。過去の注文明細が注文時点の商品名と価格を保持しているとはいえ、商品そのものが消えると履歴の追跡ができなくなるためである。</p>
+
+    <ol class="steps">
+      <li>一覧の「削除」を押すと、ブラウザの確認ダイアログに「『商品名』を削除しますか？」と出る</li>
+      <li>OK を押すと、その商品の販売状態が <strong>アーカイブに変わるだけ</strong>で、行は一覧に残り続ける（状態バッジが「アーカイブ」になる）</li>
+      <li>店頭からは完全に消える。一覧にも検索にも出ず、商品ページも開けなくなる</li>
+    </ol>
+
+    <div class="note warn">
+      <div class="lbl">確認ダイアログの文言が実際の挙動と食い違っている</div>
+      <p>ダイアログは「削除しますか？」としか言わないが、実際に起きるのはアーカイブである。<strong>行が消えないことに驚いて何度も押さないこと</strong>（何度押しても同じ結果になるだけで害は無い）。商品を管理画面の一覧から本当に消す手段は存在しない。商品数が増えるほど、アーカイブ済みの行が一覧に溜まっていく。</p>
+    </div>
+
+    <h4>アーカイブから戻す</h4>
+    <ol class="steps">
+      <li>一覧でアーカイブ状態の行を見つけ、「編集」を押す</li>
+      <li>モーダルの販売状態は <strong>自動的に「下書き」に置き換わっている</strong>（アーカイブが選択肢に無いため）</li>
+      <li>そのまま「保存する」を押すと、商品は下書きに戻る。これが唯一の復活手段である</li>
+      <li>再び売るなら、続けて販売状態を「公開中」に変えて保存する</li>
+    </ol>
+
+    <div class="note">
+      <div class="lbl">裏返すと</div>
+      <p>アーカイブ済みの商品を「中身を確認するだけ」のつもりで編集モーダルから保存すると、<strong>意図せずアーカイブが解除されて下書きに戻る</strong>。見るだけならモーダルは「キャンセル」で閉じること。</p>
+    </div>
+
+    <h3><span class="num">2.7</span>カテゴリを管理する</h3>
+    <p><code>/admin/categories</code>。入力項目は <strong>カテゴリ名</strong> と <strong>スラッグ</strong> の 2 つで、どちらも必須。</p>
+
+    <ol class="steps">
+      <li>「新規作成」でモーダルを開き、カテゴリ名（例: キッチン家電）とスラッグ（例: kitchen）を入れて保存する</li>
+      <li>スラッグが既存と重複すると「このスラッグは既に使用されています。」と出る。<strong>カテゴリ名の重複は素通しになる</strong>ので、同名カテゴリを作らないよう一覧で確認する</li>
+      <li>作成・改名・削除のあと、商品フォームのカテゴリ選択肢は自動で更新される。ただし<strong>別タブで開きっぱなしの管理画面には反映されない</strong>ので、そちらは再読み込みする</li>
+    </ol>
+
+    <div class="note">
+      <div class="lbl">スラッグは入力を求められるが、現在どこにも使われていない</div>
+      <p>店頭のカテゴリページの URL は ID を使う（<code>/categories/3</code> のような形）ため、スラッグは管理画面の一覧に表示されるだけである。形式チェックも無く、日本語や空白を含む値も登録できる。将来使われる可能性を考えると、英小文字とハイフンで揃えておくのが無難。</p>
+    </div>
+
+    <div class="note warn">
+      <div class="lbl">カテゴリの削除は取り消せず、影響件数も表示されない</div>
+      <p>カテゴリは商品と違って<strong>本当に削除される</strong>。所属していた商品は消えず「未分類」に落ちるが、その商品はカテゴリの棚から辿れなくなり、商品ページのパンくずからもカテゴリが消える。確認ダイアログは「該当商品のカテゴリ設定は解除されます」と言うだけで、<strong>何件が未分類になるかは表示されない</strong>。削除前に、そのカテゴリに何が属しているかを店頭のカテゴリページで確認すること。<br>
+      さらに、未分類に落ちた商品の<strong>検索用ベクトルは古いカテゴリ名を含んだまま残る</strong>（カテゴリ削除では貼り直されない）。気になる場合は該当商品を開いて保存し直すか、全件の再構築を行う（<a href="07-quality.html">07 章</a>）。</p>
+    </div>
+
+    <h3><span class="num">2.8</span>根拠</h3>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>記述</th><th>実装</th></tr></thead>
+        <tbody>
+          <tr><td>6 状態の定義と、一覧・ページ・購入可否の判定</td><td><code>backend/app/models.py:61-73, 119-149</code> / <code>backend/app/routers/products.py:49, 260-261</code></td></tr>
+          <tr><td>状態ごとの管理ラベル・店頭ラベル</td><td><code>frontend/lib/productStatus.ts:55-79</code></td></tr>
+          <tr><td>遷移の制約が無いこと</td><td><code>backend/app/routers/admin.py:117-141</code>（状態を素通しで代入）</td></tr>
+          <tr><td>登録・編集フォームの項目</td><td><code>frontend/components/ProductFormModal.tsx:137-359</code></td></tr>
+          <tr><td>サーバー側の入力検証</td><td><code>backend/app/schemas.py:159-188</code></td></tr>
+          <tr><td>SKU の一意制約と、重複チェックの不在</td><td><code>backend/app/models.py:82</code> / <code>backend/app/routers/admin.py:98-141</code></td></tr>
+          <tr><td>画像・仕様のまるごと置き換え</td><td><code>backend/app/routers/admin.py:63-95, 131-135</code></td></tr>
+          <tr><td>「削除」＝ <code>status="archived"</code></td><td><code>backend/app/routers/admin.py:144-154</code></td></tr>
+          <tr><td>編集で開くとアーカイブが下書きに寄る</td><td><code>frontend/components/ProductFormModal.tsx:56-57</code></td></tr>
+          <tr><td>管理一覧はアーカイブ含む全件・登録順</td><td><code>backend/app/routers/admin.py:58-60</code></td></tr>
+          <tr><td>カテゴリ削除で商品を未分類に切り離す</td><td><code>backend/app/routers/admin.py:258-271</code></td></tr>
+          <tr><td>スラッグがフロントで未使用（URL は ID）</td><td><code>frontend/app/products/[id]/page.tsx:284, 334</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="01-overview.html">← <span class="n">01</span> 運用の全体像</a>
+    <a class="next" href="03-inventory-price.html"><span class="n">03</span> 在庫と価格 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC 運用フロー書 — 07 カタログ品質と顧客接点</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 運用フロー</a><small>運用手順書 / 2026-08-09</small></div>
+    <ol>
+      <li><a href="01-overview.html">運用の全体像</a></li>
+      <li><a href="02-product.html">商品ライフサイクル</a></li>
+      <li><a href="03-inventory-price.html">在庫と価格</a></li>
+      <li><a href="04-order.html">受注〜出荷〜完了</a></li>
+      <li><a href="05-coupon.html">クーポン運用</a></li>
+      <li><a href="06-experiment.html">A/Bテスト運用</a></li>
+      <li><a href="07-quality.html" class="active">カタログ品質と顧客接点</a></li>
+      <li><a href="08-gaps.html">画面が無い作業と落とし穴</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s7">
+    <h2><span class="num">07</span>カタログ品質と顧客接点</h2>
+    <p class="lead">検索とレコメンドの土台、そして購入者との接点（レビュー・商品 Q&amp;A・アシスタント）。<strong>この領域には管理画面がほとんど無く、運用の大半は「書いた内容が自動でどう使われるか」を理解しておくことに尽きる。</strong></p>
+
+    <h3><span class="num">7.1</span>商品の文章が検索精度を決める</h3>
+    <p>検索とおすすめは、商品ごとに作られる「意味のベクトル」に基づいて動く。このベクトルの元になる文章は、次の内容をつないで自動的に組み立てられる。</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:9em">元になる項目</th><th>運用上の意味</th></tr></thead>
+        <tbody>
+          <tr><td>商品名</td><td>最も強く効く。略称だけでなく一般名詞を含めておくと拾われやすい</td></tr>
+          <tr><td>カテゴリ名</td><td>未分類の商品は「その他」として扱われる</td></tr>
+          <tr><td>説明</td><td>用途・シーン・特徴を書くほど、曖昧な言い回しの検索に当たるようになる</td></tr>
+          <tr><td>価格帯</td><td>金額から自動で決まる。入力項目ではない</td></tr>
+          <tr><td>仕様</td><td><strong>素材・容量などが説明文の書きぶりに左右されずに検索へ乗る</strong>ようにするため、仕様行もベクトルに含まれる。仕様を埋めるほど検索に強くなる</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <div class="lbl">運用としてやること</div>
+      <p>特別な操作は無い。<strong>商品を丁寧に書くことがそのまま検索対策になる</strong>。とくに仕様欄は、商品ページの見栄えのためだけでなく検索のためにも効く。逆に、説明が 1 行しかない商品は検索に出にくい。</p>
+    </div>
+
+    <h3><span class="num">7.2</span>商品を保存すると裏で起きること</h3>
+    <ol class="steps">
+      <li>商品の作成・編集を保存すると、<strong>商品自体の変更は確実に保存される</strong>（ここが失敗することはない）</li>
+      <li>その直後、裏でその 1 商品のベクトルが作り直される</li>
+      <li>続けて、全商品の内部的な分類 ID が振り直される</li>
+    </ol>
+
+    <div class="note warn">
+      <div class="lbl">ベクトルの更新に失敗しても、画面には何も出ない</div>
+      <p>ベクトルを作るには <strong>ホスト側で Ollama が動いていて、対象のモデルが取得済みである</strong>必要がある。落ちていれば更新は失敗するが、<strong>管理画面には成功も失敗も表示されない</strong>。商品の保存だけが済んで、検索用のベクトルは古いまま残る。</p>
+      <p>確認する唯一の方法は <code>make logs-backend</code> でバックエンドのログを見ること。失敗していれば「ホストの Ollama が起動しているか、対象モデルが pull 済みか確認してください」という趣旨の警告が出ている。<strong>説明文を大きく書き換えたときは、保存後にログを一度見ておく</strong>と取りこぼしに気づける。</p>
+    </div>
+
+    <h3><span class="num">7.3</span>全商品のベクトルを貼り直す</h3>
+    <p>Ollama が止まっていた間に何件も編集してしまった場合など、まとめて作り直したいことがある。手段は 3 つ。</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:9em">手段</th><th>範囲</th><th>やり方</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>バックエンドの再起動</td>
+            <td><strong>差分のみ</strong>（文章が変わった商品・まだベクトルが無い商品だけ）</td>
+            <td><code>make restart</code>。起動時に自動で走る。取りこぼしの回収はこれで足りることが多い</td>
+          </tr>
+          <tr>
+            <td>API を直接叩く</td>
+            <td><strong>全件を強制</strong></td>
+            <td><code>POST /api/admin/recommendations/rebuild</code>。手順は <a href="08-gaps.html">08 章</a></td>
+          </tr>
+          <tr>
+            <td>1 商品ずつ保存し直す</td>
+            <td>その商品のみ</td>
+            <td>編集モーダルを開いて何も変えずに保存する</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <div class="lbl">全件再構築のボタンは管理画面に無い</div>
+      <p>API は用意されているのに、<strong>それを呼ぶ導線が管理画面のどこにも無い</strong>。実行するには API ドキュメント（<code>http://localhost:8000/docs</code>）か <code>curl</code> を使う必要がある。日常運用では使わないが、Ollama のモデルを入れ替えたときなどには必要になる。</p>
+    </div>
+
+    <div class="note">
+      <div class="lbl">Ollama が使えない環境では</div>
+      <p>検索は通常のキーワード検索に、おすすめは人気順に、それぞれ自動的に切り替わる。<strong>アプリが落ちることはない</strong>ので、AI 機能を使わない構成でも運用自体は成立する。商品 Q&amp;A も定型の文言を返す。</p>
+    </div>
+
+    <h3><span class="num">7.4</span>レビュー</h3>
+    <p>購入者が商品ページから投稿する。運営の操作は無い。</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:9em">項目</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><td>投稿できる人</td><td>ログイン済みで、<strong>その商品を買ったことがある人</strong>。キャンセル以外の注文に含まれていればよく、まだ入金前（未処理）の注文でも投稿できる</td></tr>
+          <tr><td>回数</td><td>1 商品につき 1 人 1 回。書き直しはできない</td></tr>
+          <tr><td>内容</td><td>星 1〜5（必須）とコメント（任意）</td></tr>
+          <tr><td>閲覧</td><td>未ログインでも読める</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <div class="lbl">不適切なレビューを管理画面から消す手段は無い</div>
+      <p>レビューの削除・非表示・返信のいずれも、管理画面にも API にも存在しない。投稿した本人ですら消せない。<strong>対処は DB を直接操作するしかない</strong>（手順は <a href="08-gaps.html">08 章</a>）。</p>
+    </div>
+
+    <div class="note">
+      <div class="lbl">レビューは全件がまとめて読み込まれる</div>
+      <p>星の分布（★5 が何件、★4 が何件…）は、取得したレビューを画面側で数えて出している。ページングは無いため、<strong>1 商品のレビューが数百件を超えると商品ページが重くなる</strong>。そこまで増える見込みが出たら、運用でしのぐのではなく実装を見直す段階にある。</p>
+    </div>
+
+    <h3><span class="num">7.5</span>商品 Q&amp;A</h3>
+    <ol class="steps">
+      <li>ログイン済みの購入検討者が、商品ページから質問を書く（300 文字まで）</li>
+      <li><strong>その場で AI が回答を生成し、すぐに公開される</strong>。根拠にするのはその商品の説明文とレビューだけで、他の商品の情報は混ざらない</li>
+      <li>回答には「根拠を持って答えられたか」の判定が付き、情報が足りない場合はその旨が示される</li>
+      <li>Ollama が動いていない場合は、定型の案内文が回答として保存される</li>
+    </ol>
+
+    <div class="note warn">
+      <div class="lbl">AI の回答に人が手を出せない</div>
+      <p>商品 Q&amp;A には管理画面が無い。<strong>質問の一覧を見ることも、AI の回答を直すことも、消すことも、人が代わりに答えることもできない</strong>。誤った回答が公開されても、そのまま商品ページに残り続ける。</p>
+      <p>現状これに対処する運用は 2 つしかない。</p>
+      <ul>
+        <li><strong>予防</strong>：商品の説明文と仕様を充実させ、AI が根拠にできる情報を増やしておく（回答の質はほぼこれで決まる）</li>
+        <li><strong>事後</strong>：DB を直接見て、問題のある回答を削除する（<a href="08-gaps.html">08 章</a>）</li>
+      </ul>
+    </div>
+
+    <h3><span class="num">7.6</span>AI アシスタント（店員 AI）</h3>
+    <p>店頭の全ページに常駐するチャット。商品を提案する役割で、提案できるのは<strong>実在する商品だけ</strong>に制限されている（候補に無い商品を勝手に作り出さない仕組みが入っている）。運営の操作は無い。</p>
+
+    <div class="note warn">
+      <div class="lbl">会話ログを管理画面から読めない</div>
+      <p>会話は保存されているが、<strong>一覧を取得する手段が用意されていない</strong>（自分の会話しか読めない仕組みのため）。「利用者が AI に何を聞いているか」を知るには DB を直接見るしかない。<br>
+      なお、管理画面ではアシスタントのボタン自体が表示されない。</p>
+    </div>
+
+    <h3><span class="num">7.7</span>ホームのおすすめ</h3>
+    <p>ログイン中の利用者には、閲覧・購入・お気に入りの履歴から作られたおすすめが出る。生成は裏で自動的に走り、出来上がるまでは人気順が表示される。<strong>運営が起動したり止めたりする操作は無い。</strong></p>
+    <div class="note">
+      <div class="lbl">おすすめに出したくない商品があるとき</div>
+      <p>おすすめから個別に除外する設定は無い。おすすめは<strong>店頭に並んでいる商品（＝一覧に出る状態の商品）からしか選ばれない</strong>ので、出したくなければ販売状態を変えるしかない。</p>
+    </div>
+
+    <h3><span class="num">7.8</span>ユーザー管理</h3>
+    <p><code>/admin/users</code> は <strong>ID・名前・メールアドレス・権限</strong> の 4 列を並べるだけの画面で、ボタンもリンクも 1 つも無い。</p>
+    <div class="note warn">
+      <div class="lbl">ユーザーに対してできることは何も無い</div>
+      <p>権限の変更、退会・凍結、パスワードのリセット、そのユーザーの注文履歴を見ること、検索——すべて実装されていない。<strong>管理者を増やす操作を含め、必要なら DB を直接触ることになる</strong>（<a href="08-gaps.html">08 章</a>）。登録日時はサーバーからは返っているが画面には出ていない。</p>
+    </div>
+
+    <h3><span class="num">7.9</span>根拠</h3>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>記述</th><th>実装</th></tr></thead>
+        <tbody>
+          <tr><td>ベクトルの元になる文章の組み立て</td><td><code>backend/app/services/embedding.py:35</code></td></tr>
+          <tr><td>商品保存時の自動更新と分類 ID の振り直し</td><td><code>backend/app/routers/admin.py:34-43, 113, 140</code> / <code>backend/app/services/embedding.py:232-266</code></td></tr>
+          <tr><td>失敗を握りつぶしてログだけ残すこと</td><td><code>backend/app/services/embedding.py:246-253</code></td></tr>
+          <tr><td>起動時の差分同期</td><td><code>backend/app/main.py:134-172</code></td></tr>
+          <tr><td>全件強制再構築の API</td><td><code>backend/app/routers/admin.py:160-167</code></td></tr>
+          <tr><td>Ollama 不在時のフォールバック</td><td><code>backend/app/main.py:112-131</code> / <code>backend/app/services/assistant.py:375-436</code></td></tr>
+          <tr><td>レビューの投稿条件と重複禁止</td><td><code>backend/app/routers/products.py:366-408</code></td></tr>
+          <tr><td>レビューの削除・非表示が存在しないこと</td><td><code>backend/app/models.py:196-213</code>（フラグ列が無い）</td></tr>
+          <tr><td>商品 Q&amp;A の同期回答と即時公開</td><td><code>backend/app/routers/product_qa.py:65-94</code> / <code>backend/app/services/product_qa.py:129</code></td></tr>
+          <tr><td>アシスタントの会話ログに一覧 API が無いこと</td><td><code>backend/app/routers/assistant.py</code>（エンドポイントは 2 つのみ）</td></tr>
+          <tr><td>管理画面でアシスタントを隠す</td><td><code>frontend/components/assistant/AssistantWidget.tsx:29</code></td></tr>
+          <tr><td>おすすめの生成とフォールバック</td><td><code>backend/app/routers/recommendations.py:70-115</code></td></tr>
+          <tr><td>ユーザー管理が閲覧のみ</td><td><code>frontend/app/admin/users/page.tsx:15-60</code> / <code>backend/app/routers/admin.py:204-206</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="06-experiment.html">← <span class="n">06</span> A/Bテスト運用</a>
+    <a class="next" href="08-gaps.html"><span class="n">08</span> 画面が無い作業と落とし穴 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>

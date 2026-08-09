@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC 運用フロー書 — 05 クーポン運用</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 運用フロー</a><small>運用手順書 / 2026-08-09</small></div>
+    <ol>
+      <li><a href="01-overview.html">運用の全体像</a></li>
+      <li><a href="02-product.html">商品ライフサイクル</a></li>
+      <li><a href="03-inventory-price.html">在庫と価格</a></li>
+      <li><a href="04-order.html">受注〜出荷〜完了</a></li>
+      <li><a href="05-coupon.html" class="active">クーポン運用</a></li>
+      <li><a href="06-experiment.html">A/Bテスト運用</a></li>
+      <li><a href="07-quality.html">カタログ品質と顧客接点</a></li>
+      <li><a href="08-gaps.html">画面が無い作業と落とし穴</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s5">
+    <h2><span class="num">05</span>クーポン運用</h2>
+    <p class="lead"><code>/admin/coupons</code> でコードを発行し、購入者がカートで入力する。<strong>1 注文に使えるのは 1 枚だけ</strong>で、割引は商品代金の小計にのみ効く（送料という概念自体が無い）。</p>
+
+    <h3><span class="num">5.1</span>クーポンを発行する</h3>
+    <ol class="steps">
+      <li><code>/admin/coupons</code> の「新規作成」を押す</li>
+      <li>クーポンコードを入力する。<strong>打つそばから自動的に大文字に変換される</strong>（照合は完全一致なので、小文字で配布したコードは使えない）</li>
+      <li>割引種別（％ / 円）と割引値を入れる</li>
+      <li>必要なら最低注文金額と有効期限を入れる。どちらも空でよい（空＝制限なし / 無期限）</li>
+      <li>「有効にする」にチェックが入っていることを確認して保存する。<strong>保存した瞬間から使える状態になる</strong></li>
+      <li>一覧に行が増えたことを確認し、コードを配布する</li>
+    </ol>
+
+    <h3><span class="num">5.2</span>入力項目</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:9em">項目</th><th>必須</th><th>意味と注意</th></tr></thead>
+        <tbody>
+          <tr><td>クーポンコード</td><td>必須</td><td>購入者が打ち込む文字列。全クーポンで一意（重複すると「このクーポンコードは既に使用されています。」と出る）。<strong>入力時に大文字化される</strong></td></tr>
+          <tr><td>割引種別</td><td>必須</td><td><strong>％（定率）</strong> か <strong>円（定額）</strong> の 2 択</td></tr>
+          <tr><td>割引値</td><td>必須</td><td>％なら割引率、円なら割引額。0 以上であること以外の制限は無い（<strong>100 を超える％も入力できてしまう</strong>）</td></tr>
+          <tr><td>最低注文金額</td><td>任意（既定 0）</td><td>小計がこの額未満だと使えない。0 なら制限なし</td></tr>
+          <tr><td>有効期限</td><td>任意</td><td>日時で指定する。<strong>空にすると無期限</strong>。入力した日時はそのままの時刻で失効する</td></tr>
+          <tr><td>有効にする</td><td>—</td><td>チェックを外すと即座に使えなくなる。<strong>クーポンを止める通常の手段はこれ</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">5.3</span>割引額の計算規則</h3>
+    <ul>
+      <li>対象は<strong>商品代金の小計</strong>（各商品の実売価格 × 数量の合計）</li>
+      <li>％の場合、<strong>1 円未満は切り捨て</strong>られる。小計 1,055 円の 10% は 105 円（105.5 円ではない）</li>
+      <li>定額の場合はその額をそのまま引く</li>
+      <li>いずれも<strong>割引額の上限は小計そのもの</strong>。小計を超える割引を設定しても、支払額がマイナスになることはなく 0 円で止まる</li>
+    </ul>
+
+    <div class="note warn">
+      <div class="lbl">割引率に上限が無い</div>
+      <p>％に <code>100</code> 以上を入れても保存でき、その場合<strong>常に全額無料のクーポン</strong>になる（割引額が小計で頭打ちになるため）。桁を打ち間違えても警告は出ない。<strong>保存後に一覧の「割引」列を必ず読み返すこと。</strong></p>
+    </div>
+
+    <h3><span class="num">5.4</span>購入者から見た使い方</h3>
+    <ol class="steps">
+      <li>カートページの「クーポンをお持ちの方」という折りたたみパネルを開く。<strong>このパネルはログイン中にしか表示されない</strong>（未ログインのまま購入手続きに進む導線では使えない）</li>
+      <li>コードを入力して適用を押すと、その場で検証され「クーポンを適用しました」と出る</li>
+      <li>カートの数量を変えたり商品を消したりすると、<strong>自動で再検証される</strong>。最低注文金額を割ると「カート内容が変わったためクーポンを解除しました」と表示され、自動的に外れる</li>
+      <li>注文確定時にもう一度サーバー側で検証される。ここで無効なら<strong>注文そのものが失敗する</strong></li>
+    </ol>
+
+    <div class="note">
+      <div class="lbl">エラー文言の癖</div>
+      <p><strong>存在しないコードと、無効化されたコードは同じ「無効なクーポンコードです。」になる</strong>。購入者から「使えない」と問い合わせが来たとき、コードの打ち間違いなのか運営が止めたのかは、管理画面の一覧を見て判断する。<br>
+      また、最低注文金額に届かないときのメッセージは <code>Minimum order amount is ...</code> と<strong>英語のまま表示される</strong>。日本語化されているのは固定の文言だけで、金額が埋め込まれるこの文言は表に載っていないためである。</p>
+    </div>
+
+    <h3><span class="num">5.5</span>クーポンを止める・終わらせる</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:9em">やりたいこと</th><th>操作</th><th>結果</th></tr></thead>
+        <tbody>
+          <tr><td>いますぐ使えなくする</td><td>編集 →「有効にする」のチェックを外して保存</td><td>即座に使えなくなる。一覧では「無効」バッジになる。あとで戻せる</td></tr>
+          <tr><td>期限で自然に終わらせる</td><td>有効期限を設定しておく</td><td>その日時を過ぎると使えなくなる</td></tr>
+          <tr><td>記録ごと消す</td><td>一覧の「削除」</td><td>クーポンが本当に消える。<strong>過去の注文に残ったコードの記録は壊れない</strong>（注文側は文字列として保持しているため）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <div class="lbl">期限切れのクーポンは一覧で「有効」のまま並ぶ</div>
+      <p>有効期限を過ぎても、<code>is_active</code> は自動では落ちない。一覧の状態列は「有効」バッジのままで、<strong>有効期限の列を目視しないと失効済みだと分からない</strong>。使えなくなっていること自体は保証されているので実害は無いが、「いま生きているクーポンはどれか」を一覧から一目で把握することはできない。定期的に棚卸しして、終わったものはチェックを外すか削除しておくと読みやすくなる。</p>
+    </div>
+
+    <h3><span class="num">5.6</span>使用回数を制限できない</h3>
+    <div class="note warn">
+      <div class="lbl">同じコードは、同じ人が何度でも使える</div>
+      <p>「先着 100 名」「お 1 人様 1 回」といった制限を設定する項目が無く、使用実績を記録する仕組みも無い。<strong>一度配ったコードは、止めるまで無制限に使われ続ける</strong>。運用としては次のいずれかで対処する。</p>
+      <ul>
+        <li>有効期限を短く切り、期間で絞る</li>
+        <li>配布先ごとに<strong>別々のコードを発行</strong>し、使われたことを確認したら個別に無効化する</li>
+        <li>大きな割引率のクーポンは、有効期限と最低注文金額を必ず併用する</li>
+      </ul>
+      <p>なお「このクーポンが何回使われたか」を管理画面から知る手段も無い。過去の注文に記録されたクーポンコードを DB から数えるしかない（<a href="08-gaps.html">08 章</a>）。</p>
+    </div>
+
+    <div class="note">
+      <div class="lbl">対象を絞ることもできない</div>
+      <p>特定の商品・カテゴリ・初回購入者だけに効かせる設定は無い。クーポンは<strong>常にカート全体の小計</strong>に対して効く。</p>
+    </div>
+
+    <h3><span class="num">5.7</span>根拠</h3>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>記述</th><th>実装</th></tr></thead>
+        <tbody>
+          <tr><td>入力項目とコードの自動大文字化</td><td><code>frontend/app/admin/coupons/page.tsx:14-21, 108</code></td></tr>
+          <tr><td>サーバー側の検証（割引率の上限が無い）</td><td><code>backend/app/schemas.py:280-296</code></td></tr>
+          <tr><td>割引額の計算（切り捨て・小計で頭打ち）</td><td><code>backend/app/routers/coupons.py:18-23</code></td></tr>
+          <tr><td>検証の順序とエラー文言</td><td><code>backend/app/routers/coupons.py:26-37</code> / <code>frontend/lib/api.ts:36-60</code></td></tr>
+          <tr><td>カートでの入力とログイン限定の表示</td><td><code>frontend/app/cart/page.tsx:591-613</code></td></tr>
+          <tr><td>カート変更時の自動再検証と自動解除</td><td><code>frontend/app/cart/page.tsx:212-237</code></td></tr>
+          <tr><td>注文確定時の再検証</td><td><code>backend/app/routers/orders.py:113-118</code></td></tr>
+          <tr><td>1 注文 1 枚（単数のコード）</td><td><code>backend/app/schemas.py:410</code> / <code>backend/app/models.py:288</code></td></tr>
+          <tr><td>使用回数を記録する列が無いこと</td><td><code>backend/app/models.py:251-265</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="04-order.html">← <span class="n">04</span> 受注〜出荷〜完了</a>
+    <a class="next" href="06-experiment.html"><span class="n">06</span> A/Bテスト運用 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC 運用フロー書 — 03 在庫と価格</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 運用フロー</a><small>運用手順書 / 2026-08-09</small></div>
+    <ol>
+      <li><a href="01-overview.html">運用の全体像</a></li>
+      <li><a href="02-product.html">商品ライフサイクル</a></li>
+      <li><a href="03-inventory-price.html" class="active">在庫と価格</a></li>
+      <li><a href="04-order.html">受注〜出荷〜完了</a></li>
+      <li><a href="05-coupon.html">クーポン運用</a></li>
+      <li><a href="06-experiment.html">A/Bテスト運用</a></li>
+      <li><a href="07-quality.html">カタログ品質と顧客接点</a></li>
+      <li><a href="08-gaps.html">画面が無い作業と落とし穴</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s3">
+    <h2><span class="num">03</span>在庫と価格</h2>
+    <p class="lead">在庫にも価格にも専用の画面は無い。どちらも商品編集モーダルの 1 項目として、直接書き換える。</p>
+
+    <h3><span class="num">3.1</span>在庫が動く 3 つの経路</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:9em">きっかけ</th><th>動き</th><th>誰が</th></tr></thead>
+        <tbody>
+          <tr><td>注文が確定した</td><td>注文された数だけ<strong>減る</strong></td><td>購入者（自動）</td></tr>
+          <tr><td>購入者が自分で注文をキャンセルした</td><td>その注文の数量が<strong>戻る</strong></td><td>購入者（自動）</td></tr>
+          <tr><td>商品編集フォームで在庫数を保存した</td><td>入力した数値で<strong>上書きされる</strong></td><td>運営担当（手動）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <div class="lbl">カートに入っている数量は在庫を押さえない</div>
+      <p>在庫が引き当てられるのは<strong>注文が確定した瞬間の 1 回だけ</strong>である。何人がカートに入れていようと在庫は減らず、先に注文を確定した人が取る。カートに残ったまま在庫が尽きた商品は、注文確定の時点で「在庫が不足しています」と弾かれる。</p>
+    </div>
+
+    <div class="note warn">
+      <div class="lbl">管理画面からのキャンセルでは在庫が戻らない</div>
+      <p>注文管理でステータスを「キャンセル」に変えても、<strong>在庫は 1 つも戻らない</strong>。戻るのは購入者本人がマイページからキャンセルしたときだけである。運営側でキャンセルしたら、続けて商品編集で在庫を手で足す必要がある（手順は <a href="04-order.html">04 章</a>）。</p>
+    </div>
+
+    <h3><span class="num">3.2</span>在庫数を直す</h3>
+    <ol class="steps">
+      <li><code>/admin/products</code> で対象商品の「編集」を押す</li>
+      <li>「在庫数」の欄を、<strong>入荷後のあるべき総数</strong>に書き換える（増減の入力欄ではない。10 個入荷したなら現在値 3 に対して 13 と打つ）</li>
+      <li>「保存する」を押す。一覧の在庫列が変わったことを確認する</li>
+    </ol>
+
+    <div class="note warn">
+      <div class="lbl">在庫の更新は「その瞬間の値で上書き」される</div>
+      <p>モーダルを開いてから保存するまでの間に注文が入っていた場合、その注文で減った分は<strong>保存によって取り消される</strong>（モーダルが開いた時点の古い値を書き戻すため）。<br>
+      在庫を直すときは、<strong>開いたらすぐ保存する</strong>こと。モーダルを開いたまま長時間放置しない。心配なときは保存後に一覧の在庫列を見て、想定と合っているかを確認する。</p>
+    </div>
+
+    <div class="note">
+      <div class="lbl">在庫まわりで用意されていないもの</div>
+      <p>在庫調整の専用画面、入荷登録、増減の履歴、在庫が少ない商品の絞り込み、閾値を割ったときの通知——いずれも存在しない。<strong>在庫の把握は管理画面の外（実際の倉庫や台帳）で行い、その結果をこのフォームに書き写す</strong>という運用になる。</p>
+    </div>
+
+    <h3><span class="num">3.3</span>在庫の少なさが店頭に出る条件</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th>在庫数</th><th>店頭の表示</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td>「在庫切れ」バッジ。図版が薄くなり、カートに追加ボタンが押せなくなる（文言も「在庫切れ」）。<strong>一覧からは消えない</strong></td></tr>
+          <tr><td>1〜5</td><td>「残り N 点」。買い急ぎを促す表示</td></tr>
+          <tr><td>6 以上</td><td>「在庫 N 点」。ふつうの表記</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <div class="lbl">これらが出るのは「公開中」の商品だけ</div>
+      <p>「在庫切れ」も「残り N 点」も、販売状態が <code>on_sale</code> のときにしか表示されない。一時停止中の商品は在庫が 0 でも「販売停止中」としか出ない。<strong>つまり在庫の状況を店頭で伝えたいなら、公開中のままにしておく必要がある。</strong></p>
+    </div>
+
+    <h3><span class="num">3.4</span>欠品したときの選択</h3>
+    <p>在庫が 0 になっても商品は自動では止まらない。どう見せるかは運営が選ぶ。</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:10em">方針</th><th>操作</th><th>店頭の見え方</th></tr></thead>
+        <tbody>
+          <tr><td>すぐ再入荷する</td><td>何もしない（公開中のまま）</td><td>一覧に残り「在庫切れ」バッジ。ページは開けるが買えない。入荷したら在庫数を打ち直すだけで復帰する</td></tr>
+          <tr><td>再入荷の目処が立たない</td><td>販売状態を「一時停止」に</td><td>一覧に残るが「販売停止中」。在庫切れであることは伝わらなくなる</td></tr>
+          <tr><td>もう仕入れない</td><td>販売状態を「販売終了」に</td><td>一覧から消える。URL を知っている人だけがページを見られる</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">3.5</span>価格の考え方</h3>
+    <div class="price-demo">
+      <div class="pd">
+        <div class="t">セール価格なし</div>
+        <div><span class="eff">¥12,800</span></div>
+        <div><small>定価がそのまま実売価格になる</small></div>
+      </div>
+      <div class="pd">
+        <div class="t">セール価格あり</div>
+        <div><span class="strike">¥12,800</span> <span class="eff">¥9,800</span><span class="off">23%OFF</span></div>
+        <div><small>セール価格が実売価格になり、定価に打ち消し線が付く</small></div>
+      </div>
+    </div>
+
+    <p>入力する価格は 2 つだけ。</p>
+    <ul>
+      <li><strong>価格</strong>（定価）— 常に必須。セール中は打ち消し線付きで並記される</li>
+      <li><strong>セール価格</strong>（任意）— 入っていれば<strong>こちらが実売価格</strong>になる。空にすれば定価に戻る</li>
+    </ul>
+    <p>カートの小計も、注文金額も、クーポンの最低注文金額の判定も、すべて実売価格で計算される。</p>
+
+    <h3><span class="num">3.6</span>セールを始める・終える</h3>
+    <ol class="steps">
+      <li>対象商品の「編集」を開き、「セール価格（円）」に売価を入れて保存する。<strong>保存した瞬間からセールが始まる</strong></li>
+      <li>店頭で、打ち消し線付きの定価と割引率バッジが出ていることを確認する</li>
+      <li>セールを終えるときは、同じ欄を<strong>空にして</strong>保存する。これで定価に戻る</li>
+    </ol>
+
+    <div class="note warn">
+      <div class="lbl">セールは自動では終わらない</div>
+      <p>開始日時・終了日時を持つ項目が無い。<strong>始めるのも終わらせるのも手作業</strong>で、消し忘れればセール価格のまま売れ続ける。複数商品をまとめてセールにする手段も無いため、1 商品ずつ編集モーダルを開いて入力する。終了予定は管理画面の外（カレンダー等）で管理し、当日に手で戻すこと。</p>
+    </div>
+
+    <div class="note warn">
+      <div class="lbl">定価より高いセール価格が、警告なしで通る</div>
+      <p>セール価格には「定価以下」の制限が無い。定価 10,000 円の商品にセール価格 12,000 円を入れて保存すると、<strong>実売価格は 12,000 円になる</strong>。しかもセール表示の判定は「セール価格が定価より安いこと」なので、打ち消し線も割引率バッジも出ない——<strong>店頭にも管理画面にも異常の手掛かりが一切出ない</strong>まま、高い方の値段で売れる。桁を間違えたときに最も危険なのがこの欄である。<br>
+      同様に <code>0</code> も通る（＝ 0 円で売れる）。保存後は必ず店頭の価格表示を目視すること。</p>
+    </div>
+
+    <div class="note">
+      <div class="lbl">価格を変えても過去の注文は変わらない</div>
+      <p>注文明細は注文時点の商品名と価格を写し取って保持している。後から価格を直しても<strong>過去の注文金額が動くことはない</strong>ので、価格改定を過去の売上を気にせず行える。<br>
+      ただし逆に、<strong>変更前の価格を管理画面から知る方法は無い</strong>（価格の履歴が残らない）。元に戻す可能性がある変更は、変更前の値を手元に控えてから行うこと。</p>
+    </div>
+
+    <h3><span class="num">3.7</span>根拠</h3>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>記述</th><th>実装</th></tr></thead>
+        <tbody>
+          <tr><td>注文確定時の在庫引き当て（行ロックで売り越し防止）</td><td><code>backend/app/routers/orders.py:61-134</code></td></tr>
+          <tr><td>購入者キャンセルでの在庫戻し</td><td><code>backend/app/routers/orders.py:233-275</code></td></tr>
+          <tr><td>管理側のステータス変更が在庫に触れないこと</td><td><code>backend/app/routers/admin.py:184-198</code></td></tr>
+          <tr><td>カートは在庫を引き当てない</td><td><code>backend/app/services/cart.py:165</code></td></tr>
+          <tr><td>在庫の表示閾値（0 / 1〜5 / 6 以上）</td><td><code>frontend/lib/productStatus.ts:10-25</code> / <code>frontend/components/StockLabel.tsx:22-42</code></td></tr>
+          <tr><td>実売価格の決まり方</td><td><code>backend/app/models.py:119-125</code></td></tr>
+          <tr><td>セール表示・割引率の判定</td><td><code>frontend/components/ProductPrice.tsx:25-29, 68</code></td></tr>
+          <tr><td>価格の検証が 0 以上のみであること</td><td><code>backend/app/schemas.py:163-164, 179-181</code></td></tr>
+          <tr><td>注文明細が価格を写し取ること</td><td><code>backend/app/models.py:304-312</code> / <code>backend/app/routers/orders.py:99-108</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="02-product.html">← <span class="n">02</span> 商品ライフサイクル</a>
+    <a class="next" href="04-order.html"><span class="n">04</span> 受注〜出荷〜完了 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>
