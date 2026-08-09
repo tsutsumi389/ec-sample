@@ -34,6 +34,24 @@ Hibino EC（Next.js 14 + FastAPI + PostgreSQL 16）のドキュメント一覧�
 
 スタイル・スクリプトは system-design と共通の `system-design/assets/` を参照する。
 
+## operations/ — 運用フロー書（HTML）
+
+管理者が実際に手を動かしている運用手順を、実装から読み取って書き起こした現状（As-Is）の記録。全 8 章。ブラウザで [`operations/index.html`](operations/index.html) を開くと目次から各章へ辿れる。改善提案は含まない。
+
+| 章 | ドキュメント | 内容 |
+| --- | --- | --- |
+| — | [index.html](operations/index.html) | 表紙と全章の目次 |
+| 01 | [01-overview.html](operations/01-overview.html) | 登場人物と権限、管理画面の地図、できること・できないことの総覧 |
+| 02 | [02-product.html](operations/02-product.html) | 商品ライフサイクル（6 状態・登録フォーム・削除＝アーカイブ・カテゴリ） |
+| 03 | [03-inventory-price.html](operations/03-inventory-price.html) | 在庫と価格（在庫更新の唯一の経路・欠品対応・セールの開始と終了） |
+| 04 | [04-order.html](operations/04-order.html) | 受注〜出荷〜完了（ステータス運用・キャンセル 2 経路と在庫戻し） |
+| 05 | [05-coupon.html](operations/05-coupon.html) | クーポン運用（発行・割引計算・停止と失効・回数制限の不在） |
+| 06 | [06-experiment.html](operations/06-experiment.html) | A/Bテスト運用（企画→開始→監視→判定→終了、結果の読み方） |
+| 07 | [07-quality.html](operations/07-quality.html) | カタログ品質と顧客接点（埋め込み更新・レビュー・Q&A・ユーザー管理） |
+| 08 | [08-gaps.html](operations/08-gaps.html) | 画面が無い作業（DB 直操作・API 直叩き）と落とし穴の一覧 |
+
+スタイル・スクリプトは system-design と共通の `system-design/assets/` を参照する。
+
 ## api/ — API 仕様
 
 - [api/new-features.md](api/new-features.md) — 追加機能で新設したバックエンド API の一覧・認可・入出力仕様。

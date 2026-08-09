@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC 運用フロー書 — 06 A/Bテスト運用</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 運用フロー</a><small>運用手順書 / 2026-08-09</small></div>
+    <ol>
+      <li><a href="01-overview.html">運用の全体像</a></li>
+      <li><a href="02-product.html">商品ライフサイクル</a></li>
+      <li><a href="03-inventory-price.html">在庫と価格</a></li>
+      <li><a href="04-order.html">受注〜出荷〜完了</a></li>
+      <li><a href="05-coupon.html">クーポン運用</a></li>
+      <li><a href="06-experiment.html" class="active">A/Bテスト運用</a></li>
+      <li><a href="07-quality.html">カタログ品質と顧客接点</a></li>
+      <li><a href="08-gaps.html">画面が無い作業と落とし穴</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s6">
+    <h2><span class="num">06</span>A/Bテスト運用</h2>
+    <p class="lead"><code>/admin/experiments</code> で実験を作り、開始し、結果を読んで終わらせる。<strong>作成後に内容を直す画面が無い</strong>ため、作る前にどこまで決めておくかがこの運用の要になる。</p>
+
+    <h3><span class="num">6.1</span>いま実際に試せること</h3>
+    <div class="note warn">
+      <div class="lbl">画面が変わる実験キーは 2 つだけ</div>
+      <p>管理画面から実験はいくつでも作れるが、<strong>店頭の見た目が実際に変わるのは、フロントがそのキーを読んでいる場合だけ</strong>である。現在読まれているのは次の 2 つのキーのみ。これ以外の名前で実験を作っても、割り当てと計測は動くが<strong>画面は何も変わらない</strong>（＝ A も B も同じ画面を見る意味のない実験になる）。</p>
+    </div>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:11em">実験キー</th><th>変わるもの</th><th>枝の設定値（config）の書き方</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>pdp_section_order</code></td>
+            <td>商品ページ下部のセクションの<strong>並び順</strong></td>
+            <td><code>{"sections": ["reviews", "qa", "recommendations", "related", "recently"]}</code><br>
+            使えるキーは <code>recommendations</code>（おすすめ）/ <code>related</code>（関連商品）/ <code>reviews</code>（レビュー）/ <code>qa</code>（商品 Q&amp;A）/ <code>recently</code>（最近見た商品）。知らない名前は黙って無視されるため、打ち間違えても画面は壊れない（そのセクションが消えるだけ）</td>
+          </tr>
+          <tr>
+            <td><code>pdp_cta_copy</code></td>
+            <td>カートに追加ボタンの<strong>文言</strong>（PC の購入パネルとスマホの固定バーの両方）</td>
+            <td><code>{"label": "いますぐカートに入れる"}</code><br>
+            省略すると既定の「カートに追加」になる</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <div class="lbl">最初から 2 件入っている</div>
+      <p>初期データとして <code>pdp_section_order</code> が<strong>配信中</strong>（おすすめ先行 vs レビュー・Q&amp;A 先行、50:50）、<code>pdp_cta_copy</code> が<strong>下書き</strong>（「開始する」を押す流れを試せるように）で登録されている。まずはこの 2 件で操作を確認するとよい。</p>
+    </div>
+
+    <h3><span class="num">6.2</span>実験の 4 つの状態</h3>
+    <div class="sm">
+      <div class="st">
+        <div class="name">draft</div>
+        <div class="desc">下書き。作成直後は必ずこの状態。まだ誰にも配信されていない。</div>
+        <div class="flags"><span class="flg off">配信中</span><span class="flg on">枝を編集できる</span><span class="flg on">削除できる</span></div>
+      </div>
+      <div class="st">
+        <div class="name">running</div>
+        <div class="desc">配信中。訪問者に枝が割り当てられ、曝露と成果が記録される。</div>
+        <div class="flags"><span class="flg on">配信中</span><span class="flg off">枝を編集できる</span><span class="flg off">削除できる</span></div>
+      </div>
+      <div class="st">
+        <div class="name">paused</div>
+        <div class="desc">一時停止。配信は止まるが、それまでのデータは残る。再開できる。</div>
+        <div class="flags"><span class="flg off">配信中</span><span class="flg off">枝を編集できる</span><span class="flg off">削除できる</span></div>
+      </div>
+      <div class="st">
+        <div class="name">completed</div>
+        <div class="desc">終了。<strong>この状態からは二度と戻せない</strong>。結果レポートは引き続き読める。</div>
+        <div class="flags"><span class="flg off">配信中</span><span class="flg off">枝を編集できる</span><span class="flg off">削除できる</span></div>
+      </div>
+    </div>
+
+    <p>遷移できる向きは決まっている（商品や注文と違い、ここは厳密に検査される）。</p>
+    <ul>
+      <li>下書き → 開始する（<code>running</code>）</li>
+      <li>配信中 → 一時停止（<code>paused</code>）／ 終了する（<code>completed</code>）</li>
+      <li>一時停止 → 再開する（<code>running</code>）／ 終了する（<code>completed</code>）</li>
+      <li>終了 → <strong>どこにも移せない</strong></li>
+    </ul>
+
+    <div class="note">
+      <div class="lbl">終了から戻せない理由</div>
+      <p>中断を挟んで再開すると、季節性や他のキャンペーンといった外部要因が異なる期間のデータが 1 つの実験に混ざり、結果を正しく読めなくなるため。<strong>「終了する」は不可逆な操作</strong>だと理解して押すこと。</p>
+    </div>
+
+    <h3><span class="num">6.3</span>実験を作る</h3>
+    <ol class="steps">
+      <li>試したいことを 1 文の仮説にする（例:「レビューと Q&amp;A を先に見せた方が、購入まで進む人が増えるのではないか」）</li>
+      <li><strong>始める前に、必要な期間と曝露数を決めておく</strong>（6.6 の警告を参照）。ここを決めずに始めると結果を読めない</li>
+      <li><code>/admin/experiments</code> の「新規作成」を押す</li>
+      <li>実験キーに <code>pdp_section_order</code> または <code>pdp_cta_copy</code> を入れる。<strong>既存のキーは使えない</strong>ので、同じ場所を再度試すなら <code>pdp_section_order_v2</code> のような別名にする——ただしその名前ではフロントが読まないため画面は変わらない。<span class="tag">重要</span> 現状、同じ場所で 2 回目の実験を回すことはできない（6.7）</li>
+      <li>実験名と仮説を書き、対象にする訪問者の割合（％）と主要指標を決める</li>
+      <li>枝を 2 つ以上作る。<strong>対照群はちょうど 1 つ</strong>選ぶ。片方の設定値（config）は空のまま＝現行の挙動、もう片方に変更後の JSON を書く、という組み方が読みやすい</li>
+      <li>「下書きとして作成」を押す。<strong>この時点ではまだ誰にも配信されない</strong></li>
+      <li>一覧で内容を確認する。間違いがあれば<strong>削除して作り直す</strong>（下書きのうちなら削除できる。ただし削除ボタンが管理画面に無いため、実際には <a href="08-gaps.html">08 章</a>の手順が必要）</li>
+    </ol>
+
+    <h3><span class="num">6.4</span>作成フォームの項目</h3>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:10em">項目</th><th>意味と制約</th></tr></thead>
+        <tbody>
+          <tr><td>実験キー</td><td>コードから参照される識別子。1〜64 文字、全実験で一意。<strong>後から変更できない</strong></td></tr>
+          <tr><td>実験名</td><td>一覧に出る表示名。1〜128 文字</td></tr>
+          <tr><td>仮説</td><td>任意。結果を読むときの前提になるので、必ず書いておく</td></tr>
+          <tr><td>対象にする訪問者の割合</td><td>1〜100（％）。100 なら全員が実験に入る</td></tr>
+          <tr><td>主要指標</td><td>成果として数えるイベント名。既定は <code>purchase</code>。候補（<code>purchase</code> / <code>add_to_cart</code> / <code>begin_checkout</code> / <code>click</code> / <code>impression</code>）が出るが<strong>自由入力</strong>なので、打ち間違えると成果が 0 のまま集計される</td></tr>
+          <tr><td>枝（バリアント）</td><td><strong>2〜6 個</strong>。それぞれ キー / 表示名 / 重み / 対照群かどうか / 設定値（JSON）を持つ</td></tr>
+          <tr><td>└ 重み（weight）</td><td>0〜1000 の整数。<strong>合計が 100 である必要はない</strong>（比率として使われる。50:50 も 1:1 も同じ）</td></tr>
+          <tr><td>└ 対照群</td><td>ラジオボタンで<strong>ちょうど 1 つ</strong>。リフト（改善率）を測る基準になる</td></tr>
+          <tr><td>└ 設定値（config）</td><td>JSON をそのまま手入力する。オブジェクト以外（配列・数値・文字列）は保存時に弾かれる。書き方は 6.1 の表</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">6.5</span>開始する・監視する</h3>
+    <ol class="steps">
+      <li>一覧の「開始する」を押す。押した瞬間から配信が始まり、開始日時が記録される</li>
+      <li>店頭で自分の目でも確認する。<strong>ブラウザのシークレットウィンドウで開くと別の訪問者として扱われる</strong>ので、両方の枝を見比べられる</li>
+      <li>実験名または「結果」から結果レポートを開き、<strong>まず SRM 警告が出ていないかを見る</strong>（6.6）</li>
+      <li>あらかじめ決めた期間・曝露数に達するまで待つ。<strong>途中で結果を見て止めない</strong></li>
+    </ol>
+
+    <div class="note">
+      <div class="lbl">割り当てのしくみ（知っておくと問い合わせに答えられる）</div>
+      <p>どの枝に入るかは、端末ごとの匿名 ID から毎回計算される。同じ端末なら<strong>常に同じ枝</strong>になる（ログインの有無に関わらず）。さらに一度でも実際に画面を見た訪問者は、その時の枝が記録され、以後はそちらが優先される。<br>
+      曝露が記録されるのは<strong>対象の画面が実際に描画された瞬間</strong>で、ページを開いただけでは記録されない。したがって「対象 100％」でも、商品ページを見ていない人は曝露に数えられない。</p>
+    </div>
+
+    <h3><span class="num">6.6</span>結果を読む</h3>
+    <p>結果レポートは上から <strong>①SRM 警告 → ②枝ごとの成果 → ③ファネル</strong> の順に並んでいる。この順で読む。</p>
+
+    <h4>① SRM 警告（出ていたら他は読まない）</h4>
+    <p>設計した配分（重み）と、実際に曝露した人数の比がずれていないかの検定。<strong>赤い警告が出ていたら、割り当てか計測に不具合がある可能性が高い</strong>。この場合 CVR の差は信用せず、原因を特定してから実験をやり直す。</p>
+    <ul>
+      <li>警告が出るのは、ずれが偶然では説明しづらい水準（p &lt; 0.001）のときだけ。通常より厳しくして誤警告を減らしている</li>
+      <li><strong>総曝露が 20 未満のときは判定しない</strong>（データが少なすぎて検定が成り立たないため）。「警告が出ていない＝正常」とは言えない期間がある</li>
+    </ul>
+
+    <h4>② 枝ごとの成果</h4>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:8em">列</th><th>意味</th></tr></thead>
+        <tbody>
+          <tr><td>曝露</td><td>その枝の画面を実際に見た<strong>訪問者の人数</strong>（イベント数ではない）。すべての率の分母になる</td></tr>
+          <tr><td>成果</td><td>主要指標のイベントを<strong>1 回以上起こした訪問者の人数</strong>。曝露した時刻より後のイベントだけを数える</td></tr>
+          <tr><td>達成率</td><td>成果 ÷ 曝露。いわゆる CVR</td></tr>
+          <tr><td>リフト（95% 信頼区間）</td><td>対照群に対する達成率の改善率（％）。<strong>区間が 0 をまたいでいるうちは「差があるとは言えない」</strong>。有意なときだけ色が付く</td></tr>
+          <tr><td>p値</td><td>対照群との差が偶然で起きる確率の目安。<strong>0.05 未満で「有意」</strong>として扱う。データが足りないときは「—」になる</td></tr>
+          <tr><td>指標値の合計</td><td>イベントに付いた数値の合計。購入なら<strong>売上金額</strong>にあたる</td></tr>
+          <tr><td>1人あたり</td><td>指標値の合計 ÷ 曝露。購入なら訪問者 1 人あたりの売上</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note warn">
+      <div class="lbl">「有意になったら止める」をやらない</div>
+      <p>p 値が 0.05 を下回っても、それは「偶然ではなさそう」を意味するだけで、採用の可否を決めるものではない。<strong>毎日結果を覗いて有意になった時点で止めると、本当は差が無い変更でも高い確率で有意に見えてしまう</strong>。開始前に必要な曝露数と期間を決め、そこまで回してから読むこと（結果画面にも同じ注意書きが出ている）。</p>
+    </div>
+
+    <h4>③ ファネル</h4>
+    <p>ページ閲覧 → 商品ページ閲覧 → カート投入 → カート閲覧 → 注文手続き開始 → 購入 の 6 段について、各段に到達した人数と、曝露に対する到達率を並べる。どこで人が減っているかの見当をつけるために使う。</p>
+    <div class="note">
+      <div class="lbl">ファネルは簡易版</div>
+      <p>各段に到達した人数を並べているだけで、<strong>その順序どおりに通過したかは見ていない</strong>。前の段より後の段の人数が多くなることもありうる。厳密な経路分析には使えない。</p>
+    </div>
+
+    <h3><span class="num">6.7</span>終わらせる・やり直す</h3>
+    <ol class="steps">
+      <li>あらかじめ決めた期間・曝露数に達したら結果を読む</li>
+      <li>採用する枝を決めたら、一覧の「終了する」を押す。終了日時が記録され、配信が止まる</li>
+      <li><strong>勝った枝の内容を実際の画面に反映する作業は、実験機能の外で行う</strong>。実験を終了しても店頭は自動的に勝者の見た目にはならず、全員が既定（＝対照群と同じ）の画面に戻る</li>
+    </ol>
+
+    <div class="note warn">
+      <div class="lbl">配信を始めたあとに枝の内容は直せない</div>
+      <p>枝のキー・表示名・重み・設定値（JSON）を変更できるのは<strong>下書きのときだけ</strong>である。配信を始めてから「並び順を少し変えたい」となった場合、その実験を<strong>終了させて、別のキーで作り直す</strong>しかない。<br>
+      しかし画面が変わるキーは <code>pdp_section_order</code> と <code>pdp_cta_copy</code> の 2 つだけで、キーは全実験で一意である。したがって<strong>同じ場所で 2 回目の実験を行うことは、現状できない</strong>（1 回目の実験レコードを消す必要があるが、配信済みの実験は削除できない）。実験を始める前に、設定値を店頭で必ず目視確認すること。</p>
+    </div>
+
+    <h3><span class="num">6.8</span>やってはいけない操作</h3>
+    <div class="note warn">
+      <div class="lbl">配信中の重み（weight）を変えない</div>
+      <p>枝の割り当ては重みから計算されるため、<strong>途中で重みを変えると割り当ての境界が動き、配分が設計とずれる</strong>。すでに曝露した人は元の枝のままなので、新しく入る人だけが別の比率で割り振られ、結果として SRM 警告の原因になる。<br>
+      管理画面には編集フォームが無いので通常は起こらないが、API を直接叩けば変更できてしまう。<strong>配分を変えたいときは下書きのうちに行うこと。</strong></p>
+    </div>
+    <div class="note warn">
+      <div class="lbl">配信済みの実験を消さない</div>
+      <p>一度でも配信した実験は「終了」にする。削除できるのは下書きだけであり、これは意図的な制約である（曝露と成果の記録が孤立するのを防ぐため）。</p>
+    </div>
+
+    <h3><span class="num">6.9</span>根拠</h3>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>記述</th><th>実装</th></tr></thead>
+        <tbody>
+          <tr><td>画面が変わる 2 キーと config の読み取り</td><td><code>frontend/app/products/[id]/page.tsx:45-55, 89-90, 293-297, 329</code></td></tr>
+          <tr><td>初期データの 2 実験（running / draft）</td><td><code>backend/app/seed.py:1162-1219</code></td></tr>
+          <tr><td>状態遷移の制約と副作用（開始・終了日時）</td><td><code>backend/app/routers/admin_experiments.py:34-39, 146-189</code></td></tr>
+          <tr><td>作成は必ず draft・キーの一意性・salt の自動採番</td><td><code>backend/app/routers/admin_experiments.py:113-139</code></td></tr>
+          <tr><td>枝の検証（対照群ちょうど 1・重みの合計）</td><td><code>backend/app/routers/admin_experiments.py:54-68</code></td></tr>
+          <tr><td>枝の編集は draft のみ</td><td><code>backend/app/routers/admin_experiments.py:165-175</code></td></tr>
+          <tr><td>割り当ての決定論的ハッシュと sticky 動作</td><td><code>backend/app/services/experiment.py:30-40, 100-166</code></td></tr>
+          <tr><td>曝露は描画時に記録</td><td><code>frontend/lib/experiment-context.tsx:160-168</code></td></tr>
+          <tr><td>SRM 検定（p &lt; 0.001・20 曝露未満は判定しない）</td><td><code>backend/app/services/experiment_report.py:36, 157-188</code></td></tr>
+          <tr><td>成果の集計と有意水準 0.05</td><td><code>backend/app/services/experiment_report.py:31, 50-154, 228</code></td></tr>
+          <tr><td>ファネル 6 段と、順序を見ていないこと</td><td><code>backend/app/services/analytics.py:42-49</code> / <code>backend/app/services/experiment_report.py:78-84</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="05-coupon.html">← <span class="n">05</span> クーポン運用</a>
+    <a class="next" href="07-quality.html"><span class="n">07</span> カタログ品質と顧客接点 →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>

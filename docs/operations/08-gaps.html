@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibino EC 運用フロー書 — 08 画面が無い作業と落とし穴</title>
+<link rel="stylesheet" href="../system-design/assets/design.css">
+</head>
+<body>
+<button class="menu-toggle" id="menuBtn" aria-label="目次を開閉">☰ 目次</button>
+<div class="scrim" id="scrim"></div>
+<div class="layout">
+  <nav class="toc" id="toc" aria-label="目次">
+    <div class="brand"><a href="index.html">Hibino EC 運用フロー</a><small>運用手順書 / 2026-08-09</small></div>
+    <ol>
+      <li><a href="01-overview.html">運用の全体像</a></li>
+      <li><a href="02-product.html">商品ライフサイクル</a></li>
+      <li><a href="03-inventory-price.html">在庫と価格</a></li>
+      <li><a href="04-order.html">受注〜出荷〜完了</a></li>
+      <li><a href="05-coupon.html">クーポン運用</a></li>
+      <li><a href="06-experiment.html">A/Bテスト運用</a></li>
+      <li><a href="07-quality.html">カタログ品質と顧客接点</a></li>
+      <li><a href="08-gaps.html" class="active">画面が無い作業と落とし穴</a></li>
+    </ol>
+  </nav>
+
+  <main>
+  <div class="content">
+
+  <section id="s8">
+    <h2><span class="num">08</span>画面が無い作業と落とし穴</h2>
+    <p class="lead">管理画面に用意されていないが、運用していれば必ず必要になる作業の手順。そして、各章で警告した「直感に反する挙動」を 1 枚にまとめた一覧。</p>
+
+    <div class="note warn">
+      <div class="lbl">この章の作業に共通する注意</div>
+      <p>ここに書かれた操作は<strong>管理画面の外側から直接データを書き換える</strong>ものである。次の 3 点は常に成り立つ。</p>
+      <ul>
+        <li><strong>取り消しができない</strong>——UNDO も確認ダイアログも無い</li>
+        <li><strong>履歴が残らない</strong>——誰がいつ実行したか追跡できない</li>
+        <li><strong>アプリ側の整合性チェックを通らない</strong>——画面経由なら弾かれる値も書き込めてしまう</li>
+      </ul>
+      <p>したがって、<strong>更新・削除の前には必ず同じ条件の <code>SELECT</code> を実行して対象を目視する</strong>こと。<code>WHERE</code> を書き忘れた <code>UPDATE</code> / <code>DELETE</code> は全行に効く。</p>
+    </div>
+
+    <h3><span class="num">8.1</span>DB を直接操作する</h3>
+    <p>接続は Makefile のターゲット 1 つで済む。</p>
+<pre class="codeblock">make db-shell
+# 実体は docker compose exec db psql -U ec -d ecdb
+# 抜けるときは \q</pre>
+
+    <h4>管理者を増やす（<a href="01-overview.html">01 章</a>）</h4>
+    <p>会員登録で作ったアカウントを管理者に昇格させる。これが 2 人目以降の管理者を作る唯一の方法。</p>
+<pre class="codeblock">-- 1. 対象を確認する
+SELECT id, email, name, role FROM users WHERE email = 'someone@example.com';
+
+-- 2. 昇格する
+UPDATE users SET role = 'admin' WHERE email = 'someone@example.com';
+
+-- 3. 反映を確認する
+SELECT id, email, role FROM users WHERE role = 'admin';</pre>
+    <div class="note">
+      <div class="lbl">昇格したら入り直す</div>
+      <p>ブラウザ側はログイン時に取得した権限を保持しているため、<strong>昇格した本人は一度ログアウトして入り直す</strong>と管理画面のリンクが出る。降格させたいときは同じ要領で <code>role = 'user'</code> に戻す。</p>
+    </div>
+
+    <h4>不適切なレビューを消す（<a href="07-quality.html">07 章</a>）</h4>
+<pre class="codeblock">-- 1. 対象商品のレビューを新しい順に見る（product_id は商品の ID）
+SELECT r.id, r.rating, r.comment, u.email, r.created_at
+  FROM reviews r JOIN users u ON u.id = r.user_id
+ WHERE r.product_id = 12
+ ORDER BY r.created_at DESC;
+
+-- 2. 消したい行の id を指定して削除する
+DELETE FROM reviews WHERE id = 345;</pre>
+    <div class="note">
+      <div class="lbl">削除すると再投稿できるようになる</div>
+      <p>「1 商品につき 1 人 1 回」の制限は既存のレビュー行で担保されている。削除すると、その利用者はもう一度投稿できる状態に戻る。</p>
+    </div>
+
+    <h4>商品 Q&amp;A の誤った回答を消す（<a href="07-quality.html">07 章</a>）</h4>
+<pre class="codeblock">-- 1. 対象商品の Q&amp;A を新しい順に見る
+SELECT id, question, answer, source, answerable, created_at
+  FROM product_questions
+ WHERE product_id = 12
+ ORDER BY created_at DESC;
+
+-- 2. 消したい行の id（UUID 文字列）を指定して削除する
+DELETE FROM product_questions WHERE id = '...';
+
+-- 参考: AI が根拠を持てなかった回答だけを洗い出す
+SELECT product_id, question, created_at
+  FROM product_questions
+ WHERE answerable = false
+ ORDER BY created_at DESC;</pre>
+    <div class="note">
+      <div class="lbl">最後の SELECT は商品の説明不足を見つけるのに使える</div>
+      <p><code>answerable = false</code> が同じ商品に溜まっているなら、その商品の説明文か仕様に情報が足りていない。回答を消すより、<strong>商品側を書き足す方が根本の対処になる</strong>。</p>
+    </div>
+
+    <h4>注文の明細と配送先を調べる（<a href="04-order.html">04 章</a>）</h4>
+    <p>出荷作業に必要な情報は管理画面に出ないため、ここで引く。</p>
+<pre class="codeblock">-- 未処理・支払い済みの注文を、配送先つきで一覧する
+SELECT o.id, o.status, o.total_amount, o.discount_amount, o.coupon_code,
+       u.name, u.email, o.shipping_address, o.created_at
+  FROM orders o JOIN users u ON u.id = o.user_id
+ WHERE o.status IN ('pending', 'paid')
+ ORDER BY o.created_at;
+
+-- 1 件の注文の明細（注文時点の商品名と価格が入っている）
+SELECT product_id, product_name, price, quantity
+  FROM order_items
+ WHERE order_id = 1001
+ ORDER BY id;</pre>
+
+    <h4>クーポンが何回使われたかを数える（<a href="05-coupon.html">05 章</a>）</h4>
+<pre class="codeblock">-- コード別の利用件数（キャンセル分を除く）
+SELECT coupon_code, COUNT(*) AS uses, SUM(discount_amount) AS discounted
+  FROM orders
+ WHERE coupon_code IS NOT NULL AND status &lt;&gt; 'cancelled'
+ GROUP BY coupon_code
+ ORDER BY uses DESC;</pre>
+
+    <h3><span class="num">8.2</span>API を直接叩く</h3>
+    <p>API ドキュメント（<code>http://localhost:8000/docs</code>）をブラウザで開けば、画面から実行できる。ここではコマンドの形も示す。</p>
+
+    <h4>管理者トークンを取る</h4>
+<pre class="codeblock">curl -s -X POST http://localhost:8000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"admin123"}'
+# => {"access_token":"eyJ...","token_type":"bearer"}</pre>
+    <p>以降のコマンドでは、取得した値を <code>TOKEN</code> として使う。</p>
+<pre class="codeblock">TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"admin123"}' \
+  | sed -E 's/.*"access_token":"([^"]+)".*/\1/')</pre>
+
+    <h4>全商品のベクトルを貼り直す（<a href="07-quality.html">07 章</a>）</h4>
+<pre class="codeblock">curl -X POST http://localhost:8000/api/admin/recommendations/rebuild \
+  -H "Authorization: Bearer $TOKEN"
+# 即座に 202 が返り、処理は裏で進む。
+# 進み具合と成否は make logs-backend で確認する。</pre>
+
+    <h4>注文の全項目を取る（明細・配送先を含む）</h4>
+<pre class="codeblock">curl -s http://localhost:8000/api/admin/orders \
+  -H "Authorization: Bearer $TOKEN"</pre>
+
+    <h4>下書きの実験を削除する（<a href="06-experiment.html">06 章</a>）</h4>
+    <p>作成をやり直したいときに使う。<strong>下書き以外は削除できない</strong>（400 が返る）。</p>
+<pre class="codeblock">curl -s http://localhost:8000/api/admin/experiments \
+  -H "Authorization: Bearer $TOKEN"          # id と status を確認
+
+curl -X DELETE http://localhost:8000/api/admin/experiments/3 \
+  -H "Authorization: Bearer $TOKEN"</pre>
+
+    <h4>実験の名前・仮説・対象割合を直す（<a href="06-experiment.html">06 章</a>）</h4>
+<pre class="codeblock">curl -X PUT http://localhost:8000/api/admin/experiments/3 \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"商品ページのセクション順","description":"レビュー先行の方が購入まで進むのではないか"}'</pre>
+    <div class="note warn">
+      <div class="lbl">配信中に重み（weight）を変えない</div>
+      <p>枝の内容は下書きのときしか変更できないが、<strong>対象割合（traffic_allocation）は配信中でも API から変えられてしまう</strong>。配信中に配分をいじると割り当ての境界が動き、結果が設計とずれる。実施中の実験に対してこの API を使うのは、名前と仮説の書き直しに留めること。</p>
+    </div>
+
+    <h3><span class="num">8.3</span>落とし穴の一覧</h3>
+    <p>各章で警告した内容の索引。<strong>いずれも実装どおりの挙動であって不具合ではない</strong>が、知らずに操作すると事故になる。</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th style="min-width:8em">領域</th><th>起きること</th><th>対処</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><a href="02-product.html">商品</a></td>
+            <td>「削除」ボタンはアーカイブであり、管理一覧から行は消えない</td>
+            <td>そういうものとして扱う。物理削除の手段は無い</td>
+          </tr>
+          <tr>
+            <td><a href="02-product.html">商品</a></td>
+            <td>アーカイブ済みの商品を編集モーダルから保存すると、下書きに戻る</td>
+            <td>見るだけならキャンセルで閉じる。復活させたいときは意図してこれを使う</td>
+          </tr>
+          <tr>
+            <td><a href="02-product.html">商品</a></td>
+            <td>商品コード（SKU）が重複すると「サーバーエラー」としか出ない</td>
+            <td>登録前に一覧で重複を確認する。前後の空白も別物として通る</td>
+          </tr>
+          <tr>
+            <td><a href="02-product.html">商品</a></td>
+            <td>画像 URL と仕様は保存のたびに<strong>まるごと置き換え</strong>られる</td>
+            <td>編集時、意図せず行を消していないか保存前に確認する</td>
+          </tr>
+          <tr>
+            <td><a href="02-product.html">商品</a></td>
+            <td>画像 URL を打ち間違えても保存でき、店頭ではプレースホルダが出るだけ</td>
+            <td>保存後に店頭の商品ページを目視する</td>
+          </tr>
+          <tr>
+            <td><a href="03-inventory-price.html">価格</a></td>
+            <td>定価より高いセール価格が通り、<strong>どこにも異常の手掛かりが出ないまま高い方で売れる</strong></td>
+            <td>桁を確認して保存し、店頭の価格表示を必ず目視する</td>
+          </tr>
+          <tr>
+            <td><a href="03-inventory-price.html">価格</a></td>
+            <td>セールは自動で終わらない（期間の項目が無い）</td>
+            <td>終了日を管理画面の外で管理し、当日に手でセール価格を空にする</td>
+          </tr>
+          <tr>
+            <td><a href="03-inventory-price.html">在庫</a></td>
+            <td>在庫は絶対値の上書き。モーダルを開いている間に入った注文の減算を打ち消す</td>
+            <td>開いたらすぐ保存する。保存後に在庫列を確認する</td>
+          </tr>
+          <tr>
+            <td><a href="04-order.html">注文</a></td>
+            <td><strong>管理側のキャンセルでは在庫が戻らない</strong>（購入者本人のキャンセルでは戻る）</td>
+            <td>キャンセル前に明細を控え、商品編集で在庫を手で足す</td>
+          </tr>
+          <tr>
+            <td><a href="04-order.html">注文</a></td>
+            <td>ステータスのプルダウンは確認なしで即確定し、順序も検査されない</td>
+            <td>行と注文番号を確認してから選ぶ。誤ったら選び直す（履歴は残らない）</td>
+          </tr>
+          <tr>
+            <td><a href="04-order.html">注文</a></td>
+            <td>明細と配送先が画面に出ないため、出荷作業が管理画面だけで完結しない</td>
+            <td>8.1 の SQL か 8.2 の API で引く</td>
+          </tr>
+          <tr>
+            <td><a href="05-coupon.html">クーポン</a></td>
+            <td>使用回数を制限できず、同じ人が何度でも使える</td>
+            <td>期限を短く切る、配布先ごとに別コードを発行する、大きな割引には最低注文金額を併用する</td>
+          </tr>
+          <tr>
+            <td><a href="05-coupon.html">クーポン</a></td>
+            <td>割引率に上限が無く、100% 超も保存できる（＝常に全額無料）</td>
+            <td>保存後に一覧の「割引」列を読み返す</td>
+          </tr>
+          <tr>
+            <td><a href="05-coupon.html">クーポン</a></td>
+            <td>期限切れでも一覧では「有効」バッジのまま</td>
+            <td>有効期限の列を見る。定期的に棚卸しして無効化する</td>
+          </tr>
+          <tr>
+            <td><a href="06-experiment.html">A/Bテスト</a></td>
+            <td>配信を始めると枝の内容を直せず、同じキーで作り直すこともできない</td>
+            <td>開始前に設定値を店頭で目視確認する。「終了する」は不可逆</td>
+          </tr>
+          <tr>
+            <td><a href="06-experiment.html">A/Bテスト</a></td>
+            <td>フロントが読まないキーで実験を作っても、画面は何も変わらない</td>
+            <td>使えるキーは <code>pdp_section_order</code> と <code>pdp_cta_copy</code> の 2 つだけ</td>
+          </tr>
+          <tr>
+            <td><a href="07-quality.html">検索</a></td>
+            <td>Ollama が止まっているとベクトル更新に失敗するが、画面には何も出ない</td>
+            <td>大きく書き換えたあとは <code>make logs-backend</code> を見る。まとめて直すなら 8.2 の再構築</td>
+          </tr>
+          <tr>
+            <td><a href="02-product.html">カテゴリ</a></td>
+            <td>カテゴリを削除しても、所属していた商品の検索用ベクトルには旧カテゴリ名が残る</td>
+            <td>該当商品を開いて保存し直すか、全件を再構築する</td>
+          </tr>
+          <tr>
+            <td><a href="07-quality.html">Q&amp;A</a></td>
+            <td>AI の回答が誤っていても、管理画面から直すことも消すこともできない</td>
+            <td>商品の説明・仕様を充実させて予防する。事後対処は 8.1 の SQL</td>
+          </tr>
+          <tr>
+            <td><a href="07-quality.html">レビュー</a></td>
+            <td>管理画面から削除も非表示もできない</td>
+            <td>8.1 の SQL で削除する</td>
+          </tr>
+          <tr>
+            <td><a href="01-overview.html">全体</a></td>
+            <td>変更履歴・監査ログが一切残らない</td>
+            <td>戻す可能性のある変更は、変更前の値を手元に控えてから行う</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="num">8.4</span>根拠</h3>
+    <div class="tw">
+      <table class="col-mono">
+        <thead><tr><th>記述</th><th>実装</th></tr></thead>
+        <tbody>
+          <tr><td><code>make db-shell</code> の中身</td><td><code>Makefile</code>（<code>docker compose exec db psql -U ec -d ecdb</code>）</td></tr>
+          <tr><td>ログイン API の入出力</td><td><code>backend/app/schemas.py:18-20</code> / <code>backend/app/routers/auth.py:41-50</code></td></tr>
+          <tr><td>管理者判定が <code>role == "admin"</code> であること</td><td><code>backend/app/auth.py:164-170</code></td></tr>
+          <tr><td>レビュー・Q&amp;A のテーブル定義</td><td><code>backend/app/models.py:196-213, 515-541</code></td></tr>
+          <tr><td>注文と明細のテーブル定義</td><td><code>backend/app/models.py:281-312</code></td></tr>
+          <tr><td>全件再構築 API（即 202・裏で実行）</td><td><code>backend/app/routers/admin.py:160-167</code></td></tr>
+          <tr><td>実験の削除は下書きのみ</td><td><code>backend/app/routers/admin_experiments.py:191-206</code></td></tr>
+          <tr><td>実験の更新（枝は draft のみ・他は常時可）</td><td><code>backend/app/routers/admin_experiments.py:146-189</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <footer class="docfoot">
+      Hibino EC 運用フロー書 / 本書は現状（As-Is）の記録であり、改善提案は含まない。実装が変わったときは本書も更新すること。
+    </footer>
+  </section>
+
+  <nav class="pager">
+    <a class="prev" href="07-quality.html">← <span class="n">07</span> カタログ品質と顧客接点</a>
+    <a class="next" href="index.html">目次へ →</a>
+  </nav>
+
+  </div>
+  </main>
+</div>
+
+<script src="../system-design/assets/design.js"></script>
+</body>
+</html>
