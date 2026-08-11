@@ -16,3 +16,14 @@ scikit-learn>=1.4,<2.0
 # 既に入るが、間接依存に頼らず明示しておく。
 scipy>=1.11,<2.0
 pytest>=8,<9
+# MCP サーバー（/mcp に同居させる）。
+# 1.x の `mcp.server.fastmcp.FastMCP` は 2.0 で `mcp.server.mcpserver.MCPServer` に
+# 改称されており、メジャーを跨いだ解決を許すと import が黙って壊れる。マイナーも許さず
+# 厳密固定にしてあるのは、fastapi / uvicorn / psycopg2 と同じ規律に揃えるため——
+# ここだけ範囲指定にすると、誰かが再ビルドした日に SDK が上がって /mcp が起動しなくなる
+# （上げるときは server.py の SDK 依存箇所を実機で確認してから上げること）。
+mcp==2.0.0
+# fastapi 0.115.6 は starlette<0.42 を要求する。mcp は sse-starlette>=3.0 を要求するが、
+# sse-starlette 3.1+ は starlette>=0.49.1 を要求して解決不能になる。3.0.x は starlette を
+# examples extra でしか要求しないのでここだけ固定する。fastapi を上げるときに外してよい。
+sse-starlette>=3.0,<3.1

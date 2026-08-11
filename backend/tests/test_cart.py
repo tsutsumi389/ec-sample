@@ -67,3 +67,42 @@ class TestUnavailableReason:
         # 販売停止かつ在庫切れなら、理由は在庫ではなく状態を優先して伝える
         # （在庫を足せば買えるように読めてしまうため）。
         assert cart.unavailable_reason(make_product(status="suspended", stock=0)) == "現在購入できません"
+
+
+class TestOrderBlockerForStatus:
+    """ORM を持たない呼び出し側（MCP のツール）が使う入り口。
+
+    ここが文言の実装そのもので、上の unavailable_reason / 下の order_blocker は
+    Product から status と在庫を渡すだけの皮。draft は Product 経由では現れない
+    （一覧・商品ページとも非表示）ため、status 直指定のここでだけ固定できる。
+    """
+
+    def test_draft_is_not_viewable(self):
+        assert cart.order_blocker_for_status("draft", 3, 1) == "お取り扱いが終了しました"
+
+    def test_stock_shortage(self):
+        assert cart.order_blocker_for_status("on_sale", 2, 3) == "在庫が不足しています"
+
+    def test_none_when_enough_stock(self):
+        assert cart.order_blocker_for_status("on_sale", 3, 3) is None
+
+
+class TestOrderBlocker:
+    """決済直前の下見と create_order が共有する、状態＋在庫の判定。"""
+
+    def test_none_when_purchasable_and_enough_stock(self):
+        assert cart.order_blocker(make_product(stock=5), 3) is None
+
+    def test_state_reason_wins_over_stock(self):
+        # 販売停止かつ在庫不足。理由は状態を優先する（在庫を足しても買えない）。
+        assert cart.order_blocker(make_product(status="suspended", stock=1), 3) == "現在購入できません"
+
+    def test_stock_shortage(self):
+        assert cart.order_blocker(make_product(stock=2), 3) == "在庫が不足しています"
+
+    def test_exact_stock_is_ok(self):
+        # 在庫ちょうどは買える（境界で 1 点余らせない）。
+        assert cart.order_blocker(make_product(stock=3), 3) is None
+
+    def test_missing_product(self):
+        assert cart.order_blocker(None, 1) == "お取り扱いが終了しました"

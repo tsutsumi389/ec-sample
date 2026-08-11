@@ -73,6 +73,22 @@ LISTED_STATUSES = ("coming_soon", "on_sale", "suspended")
 VIEWABLE_STATUSES = ("coming_soon", "on_sale", "suspended", "discontinued")
 
 
+# 下の Product.is_viewable / is_on_sale を、ORM を持たない呼び出し側からも使えるように
+# 関数として出しておく。ProductOut（Pydantic）しか持っていない層——MCP のツールなど——が
+# `status in VIEWABLE_STATUSES` を書き写すと、販売可能な状態を 1 つ足した日に商品ページの
+# 購入ボタンとその層の判定が割れる。**status → 可否の変換はここ以外に書かないこと。**
+
+
+def is_viewable_status(status: str) -> bool:
+    """商品ページを直接開いて閲覧してよい状態か。"""
+    return status in VIEWABLE_STATUSES
+
+
+def is_on_sale_status(status: str) -> bool:
+    """販売中の状態か（在庫は見ない）。"""
+    return status == "on_sale"
+
+
 class Product(Base):
     __tablename__ = "products"
 
@@ -132,7 +148,7 @@ class Product(Base):
     @property
     def is_viewable(self) -> bool:
         """商品ページを直接開いて閲覧してよいか。"""
-        return self.status in VIEWABLE_STATUSES
+        return is_viewable_status(self.status)
 
     @property
     def is_on_sale(self) -> bool:
@@ -141,7 +157,7 @@ class Product(Base):
         在庫込みの購入可否は purchasable。買えない理由を「販売していない」と「在庫が無い」に
         書き分ける必要がある場所（カートの見送り理由など）がこちらを使う。
         """
-        return self.status == "on_sale"
+        return is_on_sale_status(self.status)
 
     @property
     def purchasable(self) -> bool:

@@ -15,7 +15,7 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from app.models import CartItem, Product
+from app.models import CartItem, Product, is_on_sale_status, is_viewable_status
 from app.schemas import CartLineResultOut, GuestCartItemOut, GuestCartOut, ProductOut
 
 
@@ -43,23 +43,72 @@ def shortage_reason(added: int, requested: int) -> str | None:
     return f"在庫が不足するため{added}点のみ追加しました"
 
 
-def unavailable_reason(product: Product | None) -> str | None:
-    """その商品をいまカートに入れられない理由。入れられる場合は None。
+# ---- 買えない理由の文言 ---------------------------------------------------------------
+#
+# 実装は下の 2 本（status を取る版）だけ。ORM の Product を持っている呼び出し側には皮を
+# 被せて渡す。ProductOut（Pydantic）しか持たない層——MCP のツール——が
+# `status in VIEWABLE_STATUSES` を書き写すと、販売可能な状態を 1 つ足した日に商品ページの
+# 購入ボタン（ProductOut.purchasable = models 由来）とその層の判定が割れるため、
+# status を取る版を入り口として公開している。
+# status → 可否の変換そのものは models.py の is_viewable_status / is_on_sale_status が
+# 唯一の源で、ここが持つのは文言だけ。
 
-    可否そのものは models.py の is_viewable / is_on_sale が唯一の源で、ここが持つのは
-    文言だけ。status を直接比較し直さないこと——販売可能な状態を 1 つ増やしたときに、
-    商品ページの購入ボタン（ProductOut.purchasable）とカートの判定がずれる。
+_GONE = "お取り扱いが終了しました"
+
+
+def availability_reason_for_status(status: str, stock: int) -> str | None:
+    """status と在庫から「いま買えない理由」の文言を引く。買えるなら None。
 
     状態は在庫より先に見る。販売停止かつ在庫切れのときに「在庫切れ」と言うと、在庫を
     足せば買えるように読めてしまうため。
     """
-    if product is None or not product.is_viewable:
-        return "お取り扱いが終了しました"
-    if not product.is_on_sale:
+    if not is_viewable_status(status):
+        return _GONE
+    if not is_on_sale_status(status):
         return "現在購入できません"
-    if product.stock <= 0:
+    if stock <= 0:
         return "在庫切れです"
     return None
+
+
+def order_blocker_for_status(status: str, stock: int, quantity: int) -> str | None:
+    """status と在庫から「その数量で注文できない理由」を引く。注文できるなら None。"""
+    reason = availability_reason_for_status(status, stock)
+    if reason is not None:
+        return reason
+    return "在庫が不足しています" if stock < quantity else None
+
+
+def unavailable_reason(product: Product | None) -> str | None:
+    """その商品をいまカートに入れられない理由。入れられる場合は None。"""
+    if product is None:
+        return _GONE
+    return availability_reason_for_status(product.status, product.stock)
+
+
+def order_blocker(product: Product | None, quantity: int) -> str | None:
+    """購入可否の判定に「要求数 vs 在庫」を足したもの。注文できるなら None。
+
+    決済直前の確認と、実際に確定する create_order が同じ規則を見るために 1 つだけ置く。
+    売り越しに直結する判定を経路ごとに書くと、「下見では買えたのに確定で落ちる」が起きる。
+    """
+    if product is None:
+        return _GONE
+    return order_blocker_for_status(product.status, product.stock, quantity)
+
+
+def find_cart_item_id(db: Session, user_id: int, product_id: int) -> int | None:
+    """その人のカートにある明細の id を引く。無ければ None。
+
+    商品IDしか持たない呼び出し側（MCP のツール）が明細 id を得るための最短経路。
+    カート全体を組んで id を 1 つ取り出すと、明細ごとの商品・画像・仕様まで読んで捨てる
+    ことになるため、id だけを引く。**必ず user_id で絞る**（明細の所有はここで決まる）。
+    """
+    return (
+        db.query(CartItem.id)
+        .filter(CartItem.user_id == user_id, CartItem.product_id == product_id)
+        .scalar()
+    )
 
 
 def _display_name(line: CartLineRequest, product: Product | None) -> str:

@@ -14,10 +14,10 @@ Hibino EC（Next.js 14 + FastAPI + PostgreSQL 16）のドキュメント一覧�
 | 03 | [03-tech-stack.html](system-design/03-tech-stack.html) | 採用技術スタックと選定理由 |
 | 04 | [04-architecture.html](system-design/04-architecture.html) | 3 層 + Ollama 連携のアーキテクチャ全体像 |
 | 05 | [05-data-model.html](system-design/05-data-model.html) | エンティティ・テーブル定義・状態遷移 |
-| 06 | [06-api.html](system-design/06-api.html) | `/api` 配下の全エンドポイントと認可レベル |
+| 06 | [06-api.html](system-design/06-api.html) | `/api` 配下の全エンドポイントと認可レベル、MCP サーバー `/mcp` のツール一覧 |
 | 07 | [07-flows.html](system-design/07-flows.html) | 検索・カート・注文など主要処理フロー |
 | 08 | [08-ai.html](system-design/08-ai.html) | 埋め込み生成・ハイブリッド検索・商品 Q&A の設計 |
-| 09 | [09-auth.html](system-design/09-auth.html) | JWT 認証とロールベースの認可設計 |
+| 09 | [09-auth.html](system-design/09-auth.html) | JWT 認証とロールベースの認可設計、MCP サーバーの認証と確認トークン |
 | 10 | [10-frontend.html](system-design/10-frontend.html) | App Router 構成・コンポーネント分割・状態管理 |
 | 11 | [11-decisions.html](system-design/11-decisions.html) | 設計上の決定と、コードに現れない運用ルール |
 

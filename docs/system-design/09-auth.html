@@ -60,6 +60,17 @@
       <li>認可は role 文字列で判定（user / admin）。細粒度の権限は無い</li>
       <li>リフレッシュトークンの仕組みは無い（有効期限 24h 固定）</li>
     </ul>
+
+    <h3><span class="num">9.4</span>MCP サーバー（<code>/mcp</code>）の認証</h3>
+    <p>MCP ツール（§6.7）も同じ JWT を使う。OAuth 2.1 は実装せず、MCP 側に login ツールも置かない（会話ログにパスワードを載せないため）。トークンは <code>POST /api/auth/login</code> で取得したものを MCP クライアントの <code>Authorization: Bearer</code> ヘッダに設定する。</p>
+    <ul>
+      <li>ヘッダは <code>Context</code> から読み、<b>必ず <code>_resolve_user_from_token</code> を通す</b>（jwt.decode を自前で書くと iat / password_changed_at の失効判定が効かなくなる）</li>
+      <li>身元はツール呼び出しのたびにヘッダから引き直す。<b>ユーザーをモジュール変数やセッションにキャッシュしない</b>（最初の呼び出し時点の身元に固定され、以後の全操作がその人として動く）</li>
+      <li>認証必須ツールは fail closed（<code>require_user</code>）。無効・期限切れのトークンを匿名へフォールバックさせない。任意認証は <code>search_products</code> だけで（<code>optional_user</code>）、こちらは無効トークンを匿名に落とす</li>
+      <li><code>visitor_id</code>（<code>X-Visitor-Id</code>）は読まない。計測専用の端末 ID であり認証には使わない</li>
+      <li>Host / Origin の検査（DNS リバインディング防護）は<b>アクセス制御ではない</b>。どちらもクライアントが自由に書けるヘッダで、curl のような非ブラウザには効かない。<code>/mcp</code> の露出面の防御は各ツールの認証が担い、既存の <code>/api</code> と同等になる</li>
+    </ul>
+    <div class="note"><span class="lbl">確認トークン</span><p style="margin:.3em 0 0"><code>preview_checkout</code> が発行し <code>place_order</code> だけが受け取る <code>confirm_token</code> は、テーブルを増やさないためのステートレスな署名トークン。鍵は環境変数を 2 本目に増やさず、<b>同じ <code>SECRET_KEY</code> から HMAC-SHA256 で用途専用の鍵を派生させて</b>使う（2 本目を用意すると fail closed の検査・<code>make secret</code> の生成・compose の受け渡し・ローテーション手順がすべて二重になり、忘れたときに「無ければ <code>SECRET_KEY</code> にフォールバック」と書きたくなる＝既定値そのもの）。分離は運用ではなく暗号で取る——派生鍵から <code>SECRET_KEY</code> は復元できないため、JWT の署名鍵と計算上独立になる。加えて署名対象の先頭に用途文字列を、トークン本体に <code>hbc1_</code> の接頭辞を置き、JWT（<code>aaa.bbb.ccc</code>）と一目で見分けがつくようにしてある（ログや会話に現れたときに「これはセッショントークンではない」と分かること自体が防御になる）。<br><code>SECRET_KEY</code> をローテーションすると発行済みの <code>confirm_token</code> も一斉に無効になる（下見からやり直しになるだけで、注文には影響しない）。</p></div>
     <div class="note"><span class="lbl">署名鍵</span><p style="margin:.3em 0 0">JWT 署名鍵 <code>SECRET_KEY</code> は環境変数からのみ取得し、既定値へのフォールバックは持たない。未設定・32文字未満・既知の弱い値（<code>dev-secret</code> 等の前方一致）のいずれかなら <code>app/auth.py</code> の <code>_load_secret_key()</code> が起動時に <code>RuntimeError</code> を投げて落とす（fail closed）。鍵は <code>make secret</code> がデプロイごとに <code>openssl rand -hex 32</code> で <code>.env</code> に生成し、compose がそこから読む。<code>make up</code> / <code>make up-d</code> / <code>make reset</code> は未生成時のみ自動で走る。<br>HS256 は対称鍵なので、鍵の共有は管理者トークンの発行権限の共有と同義。しかも漏洩時はパスワード変更で締め出せない——失効判定は <code>iat</code> と <code>password_changed_at</code> の比較であり <code>iat</code> は発行側が選べるため、復旧手段は鍵のローテーションだけになる。</p></div>
   </section>
 

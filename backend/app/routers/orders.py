@@ -14,16 +14,9 @@ from app.schemas import (
 )
 from app.services import analytics
 from app.services import cart as cart_service
+from app.services.shipping import format_shipping_address
 
 router = APIRouter(prefix="/orders", tags=["orders"])
-
-
-def _format_shipping_address(address: Address) -> str:
-    return (
-        f"{address.recipient_name}\n"
-        f"〒{address.postal_code} {address.prefecture}{address.city}{address.address_line}\n"
-        f"TEL: {address.phone}"
-    )
 
 
 @router.post("", response_model=OrderDetailOut, status_code=status.HTTP_201_CREATED)
@@ -33,6 +26,11 @@ def create_order(
     visitor_id: str | None = Depends(get_visitor_id),
     db: Session = Depends(get_db),
 ) -> Order:
+    # 既知の未対策: カート明細をロックせずに読むため、ブラウザのダブルサブミット（同じ
+    # カートで注文が 2 回走る）は塞がっていない。塞ぐならここを with_for_update() にするが、
+    # そのときは services/cart.merge_lines と同じ「商品行 → カート行」の順を守ること
+    # （順序が交差するとデッドロックする）。MCP 経由は mcp_server/checkout.py が users 行を
+    # 掴んで自衛しているので、ここを直したらあちらのロックも一緒に外すこと。
     cart_items = (
         db.query(CartItem)
         .filter(CartItem.user_id == current_user.id)
@@ -51,7 +49,7 @@ def create_order(
         )
         if address is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Address not found")
-        shipping_address = _format_shipping_address(address)
+        shipping_address = format_shipping_address(address)
 
     if not shipping_address:
         raise HTTPException(
@@ -81,18 +79,14 @@ def create_order(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"商品が見つかりません: {cart_item.product_id}",
                 )
-            # 購入可否は services/cart.py の判定を通す（カート投入と決済で規則がずれると、
-            # 「カートには入るが買えない」商品が生まれる）。在庫は要求数との比較なので別に見る。
-            reason = cart_service.unavailable_reason(product)
+            # 購入可否と在庫の判定は services/cart.py の 1 か所に置く（カート投入・決済前の
+            # 下見・確定で規則がずれると、「カートには入るが買えない」「下見では買えたのに
+            # 確定で落ちる」商品が生まれる）。
+            reason = cart_service.order_blocker(product, cart_item.quantity)
             if reason is not None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"{reason}: {product.name}",
-                )
-            if product.stock < cart_item.quantity:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"在庫が不足しています: {product.name}",
                 )
 
             # 実売価格を採用し、注文時点の価格として OrderItem にスナップショットする。

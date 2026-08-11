@@ -32,7 +32,7 @@
 
   <section id="s6">
     <h2><span class="num">06</span>API 設計</h2>
-    <p>バックエンドの全ルートは <code>/api</code> プレフィックス配下に一括登録される（<code>main.py</code>）。認証要件は <span class="badge a-none">none</span> 認証不要 / <span class="badge a-user">user</span> ログイン必須 / <span class="badge a-admin">admin</span> 管理者のみ、で示す。</p>
+    <p>REST ルートはすべて <code>/api</code> プレフィックス配下に一括登録される（<code>main.py</code>）。認証要件は <span class="badge a-none">none</span> 認証不要 / <span class="badge a-user">user</span> ログイン必須 / <span class="badge a-admin">admin</span> 管理者のみ、で示す。唯一の例外が MCP サーバー <code>/mcp</code>（§6.7）で、REST ではないため <code>/api</code> の外に置かれる。</p>
 
     <h3><span class="num">6.1</span>認証（<code>/api/auth</code>）</h3>
     <div class="tw"><table>
@@ -130,6 +130,25 @@
       </tbody>
     </table></div>
     <div class="note"><span class="lbl">認可</span><p style="margin:.3em 0 0">ログインユーザーの会話（<code>user_id</code> あり）は本人のみアクセス可、それ以外には存在を秘匿して 404。ゲスト会話（<code>user_id</code> NULL）は UUID を知っていることが認可（サンプルとして許容、詳細は §11）。ゲスト会話中にログインすると <code>chat</code> 側で <code>user_id</code> を紐付けて引き継ぐ。</p></div>
+
+    <h3><span class="num">6.7</span>MCP サーバー（<code>/mcp</code>）</h3>
+    <p>Claude Code などの MCP クライアント向けのツール群（<code>backend/app/mcp_server/</code>）。JSON-RPC を POST し Streamable HTTP（SSE）で応答する。<b><code>/api</code> 配下ではない唯一のルート</b>で、REST ではないため <code>include_router</code> ではなく <code>main.py</code> が厳密パスの <code>Route("/mcp")</code> としてルーターへ直接ぶら下げる（OpenAPI にも載らない＝「<code>/api</code> 配下は REST だけ」の整理を保つ）。<code>stateless_http=True</code> なので <code>--reload</code> でセッションが切れず、認証はリクエストごとの <code>Authorization</code> ヘッダで完結する（§9.4）。<code>mcp.session_manager.run()</code> は <code>main.py</code> の lifespan が包む（子 ASGI アプリの lifespan は誰も呼ばないため、忘れると初回リクエストが「Task group is not initialized」で落ちる）。</p>
+    <p>別プロセスに切らずバックエンドへ同居させたのは、<b>在庫・価格・購入可否の判定を HTTP 越しに二重実装しないため</b>。ツール層は判定を 1 つも持たず、<code>app/routers/</code>（products / cart / addresses / orders / coupons）と <code>app/services/cart.py</code> の関数を直接呼んで結果を詰め替えるだけになっている。MCP の読み込みに失敗しても <code>main.py</code> は例外を握って REST だけで起動する（付随機能で店を止めない。マイグレーション <code>0001</code>/<code>0002</code> の分離と同じ規律）。</p>
+    <div class="tw"><table>
+      <thead><tr><th>ツール</th><th>認証</th><th>概要 / 委譲先</th></tr></thead>
+      <tbody>
+        <tr><td><code>search_products</code></td><td><span class="badge a-none">任意</span></td><td>キーワード・カテゴリ名・価格帯・並び順・ページング。<code>products.list_products</code> へ委譲。カテゴリは LLM が id を知らないため名前（またはスラグ）で受け、外れたら空返しではなく利用可能な一覧を <code>note</code> に添えて返す。価格帯と price 系ソートが定価基準である既存挙動も <code>note</code> で申し送る</td></tr>
+        <tr><td><code>get_product</code></td><td><span class="badge a-none">none</span></td><td>説明（300 字で切る）・仕様・実売価格・在庫・購入可否。<code>products.get_product</code> へ委譲（viewable でなければ 404）</td></tr>
+        <tr><td><code>get_cart</code></td><td><span class="badge a-user">user</span></td><td><code>cart.get_cart</code> へ委譲。明細ごとの <code>purchasable</code> は<b>数量まで見る</b>（状態だけで判定すると、在庫 2・数量 3 のカートで「購入できます」と答えた直後に <code>preview_checkout</code> が在庫不足で止まり、LLM に矛盾した情報が渡る）</td></tr>
+        <tr><td><code>add_to_cart</code> / <code>update_cart_item</code> / <code>remove_cart_item</code></td><td><span class="badge a-user">user</span></td><td><code>cart.add_cart_item</code> / <code>update_cart_item</code> / <code>delete_cart_item</code> へ委譲。引数は <code>product_id</code> に統一し（LLM に 2 種類の ID を持たせない）、明細 id は取得済みのカートから引き当てる</td></tr>
+        <tr><td><code>list_addresses</code></td><td><span class="badge a-user">user</span></td><td><code>addresses.list_addresses</code> へ委譲。一覧は選択に要る最小限（<code>〒郵便番号 都道府県市区町村</code>）のみで番地は出さない。<b>配送先の新規登録手段は持たない</b></td></tr>
+        <tr><td><code>preview_checkout</code></td><td><span class="badge a-user">user</span></td><td>注文内容の下見と <code>confirm_token</code> の発行。<b>DB に一切書かない</b>（<code>readOnlyHint=true</code> と整合させるため。<code>begin_checkout</code> の計測もしない——下見のたびにファネルが膨らむ）。金額は <code>cart._get_cart</code>（= <code>effective_price</code>）と <code>coupons.evaluate_coupon</code> にだけ作らせる。進めない事情は例外ではなく <code>blockers[]</code> で返す（例外にすると LLM が下見をやり直すループに入るだけ）</td></tr>
+        <tr><td><code>place_order</code></td><td><span class="badge a-user">user</span></td><td><b>引数は <code>confirm_token</code> ただ 1 つ</b>。<code>orders.create_order</code> へ委譲し、請求額は従来どおり <code>create_order</code> が <code>effective_price</code> から計算する（トークンの金額は照合値であって指示値ではない）。同一ユーザーの同時実行は <code>users</code> の自行の <code>FOR UPDATE</code> で直列化する（商品行・カート行のロック階層に参加しない行を選ぶことで、ブラウザ側の注文とデッドロックしない）</td></tr>
+        <tr><td><code>list_orders</code> / <code>get_order</code></td><td><span class="badge a-user">user</span></td><td><code>orders.list_orders</code> / <code>get_order</code> へ委譲。一覧は件数を切るだけで REST 側にページングは足さない。他人の注文は 404</td></tr>
+      </tbody>
+    </table></div>
+    <div class="note"><span class="lbl">購入の 2 段階</span><p style="margin:.3em 0 0"><code>preview_checkout</code> が発行する <code>confirm_token</code> は、<code>SECRET_KEY</code> から HMAC-SHA256 で派生させた専用鍵で署名するステートレストークン（テーブルを増やさないため DB に持たない。詳細は §9.4）。<code>place_order</code> が金額・配送先・クーポンを引数に持たないことが安全弁の本体で、署名はそれを成立させる手段にすぎない。トークンはカート指紋（<code>cart_item_id</code> / <code>product_id</code> / 数量 / <code>effective_price</code>）・支払額・配送先文字列の指紋・クーポンコード・<b>直近の注文 id</b> に紐づき、いずれかが動けば無効になる。注文が 1 件でも確定すると未使用のトークンがすべて死ぬため、同じトークンの二度打ちが二重注文にならない。<br><b>この仕組みが保証するのは整合性だけで、ユーザーの同意ではない。</b> 人間が挟まるのは MCP ホスト側のツール承認 UI であり、<code>place_order</code> を許可リストに入れればその関門は消える。</p></div>
+    <div class="note warn"><span class="lbl">計測しない</span><p style="margin:.3em 0 0">MCP 経由の操作は <code>analytics_events</code> に記録しない（既存ルーターへ <code>visitor_id=None</code> を明示的に渡す）。MCP クライアントは端末の匿名 ID を持たず、合成 ID を作れば曝露 0 件の訪問者の <code>purchase</code>／<code>add_to_cart</code> がログに混ざってファネルの到達率と CV 総数を歪めるため。A/B の CV から MCP 経由の購入が抜けるのは意図的な欠測。</p></div>
   </section>
 
   <nav class="pager">
