@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from pathlib import Path
 
 from alembic import command
@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
+from starlette.routing import Route
 
 from app.database import SessionLocal, engine
 from app.routers import (
@@ -38,9 +39,32 @@ from app.seed import seed_data
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    # force=True は必須。MCP SDK の MCPServer() は生成時に configure_logging() を呼び、
+    # root ロガーに handler を 1 本付ける（mcp/server/mcpserver/server.py）。basicConfig は
+    # 既に handler があると **黙って何もしない** ので、force を外すとこの format が捨てられ、
+    # 以後アプリのログから時刻もレベルもロガー名も消える。`make logs-backend` で起動エラーを
+    # 目視する運用手順が、まさにこのログを読む手順なので効かないと痛い。
+    # （import 順の入れ替えで避けるのは不可。isort / ruff が並べ直した瞬間に再発する。）
+    force=True,
 )
 
 logger = logging.getLogger(__name__)
+
+# MCP サーバー。**この import は失敗しても店を止めない。**
+# 付随機能の失敗で本体を落とさないのは、このリポジトリが既に持っている設計判断
+# （マイグレーション 0001 / 0002 を分けて、pgvector が無い DB でも 0001 までで起動できる
+# ようにしてあるのと同じ規律）。MCP は「あると便利な追加口」であって、店が開くための必須
+# 部品ではない。ここを素の import にすると、SDK の API 改称・依存の入れ忘れ（再ビルド前の
+# `make restart` など）だけで商品一覧からチェックアウトまで全部止まる。
+#
+# 例外は握るが黙らせない。logger.exception で起動ログにスタックトレースが残るので、
+# CLAUDE.md が next/font で嫌っている「無言でフォールバックに落ちる」にはならない。
+try:
+    from app.mcp_server.server import mcp, mcp_asgi_app
+except Exception:  # noqa: BLE001 - MCP が読めなくても REST は生かす
+    logger.exception("MCP サーバーを読み込めませんでした。/mcp は無効のまま起動します")
+    mcp = None
+    mcp_asgi_app = None
 
 
 # backend/ 直下（alembic.ini と alembic/ がある場所）。
@@ -169,7 +193,16 @@ async def lifespan(app: FastAPI):
         db.close()
     # 埋め込み同期は起動をブロックしないよう別スレッドで走らせる。
     threading.Thread(target=_startup_embedding_sync, daemon=True).start()
-    yield
+
+    # MCP のストリーミング HTTP は、リクエストを捌くタスクグループをこの async CM の中で
+    # 開く。/mcp は Route として直接ぶら下げており、子 ASGI アプリの lifespan は誰も
+    # 呼ばないため、ここで明示的に起動する。忘れると /mcp への最初のリクエストが
+    # 「Task group is not initialized」で落ちる（stateless でも同じ。検査が先に来る）。
+    # MCP が読めていればセッションマネージャを開く（読めていなければ何もしない）。
+    # 分岐は式に閉じること——ここで early return すると、以後 lifespan に足した起動処理が
+    # 「MCP が落ちている環境でだけ走らない」という、誰も日常的に踏まない無言の欠落になる。
+    async with (mcp.session_manager.run() if mcp is not None else nullcontext()):
+        yield
 
 
 app = FastAPI(title="EC Sample API", lifespan=lifespan)
@@ -204,3 +237,16 @@ app.include_router(assistant.router, prefix="/api")
 app.include_router(home.router, prefix="/api")
 app.include_router(experiments.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
+
+# MCP サーバー。REST ではないので include_router を使わず、厳密パスの Route として
+# ルーターへ直接足す（OpenAPI スキーマにも載らない＝「/api 配下は REST だけ」という
+# 整理を保つ）。
+#
+# mcp.streamable_http_app() が返す Starlette アプリを mount してはいけない。あれは内側で
+# もう一度 "/mcp" に Route を張るので実効パスが /mcp/mcp になる。内側を "/" にして mount
+# すると今度は POST /mcp が 307 で /mcp/ へ飛び、リダイレクトを追わないクライアントが壊れる。
+#
+# **/mcp にネットワーク的なアクセス制御は掛かっていない**（理由は server.py に書いてある）。
+# 認証は各ツールの require_user（= 既存の JWT）が担い、露出面は既存の /api と同等になる。
+if mcp_asgi_app is not None:
+    app.router.routes.append(Route("/mcp", endpoint=mcp_asgi_app))

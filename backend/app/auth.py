@@ -87,13 +87,14 @@ def _resolve_user_from_token(token: str, db: Session) -> User:
     """JWT を検証して対応する User を返す。無効なら 401 を投げる共通ロジック。"""
     payload = decode_access_token(token)
     user_id = payload.get("sub")
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    user = db.get(User, int(user_id))
+    # sub が数値でないトークンもここで 401 にする。int() の ValueError を素通しさせると、
+    # 任意認証（get_current_user_optional / MCP の optional_user）が「HTTPException だけを
+    # 握って匿名に落とす」約束から外れ、そこだけ 500 になる。無効なトークンは経路を問わず
+    # 同じ扱いにする。
+    try:
+        user = db.get(User, int(user_id)) if user_id is not None else None
+    except (TypeError, ValueError):
+        user = None
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

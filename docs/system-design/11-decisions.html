@@ -51,7 +51,12 @@
         <tr><td>注文明細はスナップショット</td><td>OrderItem は注文時点の product_name / price を保持。Order も coupon_code を文字列で、discount_amount / total_amount を確定値で持つ。商品マスタを再参照しない</td></tr>
         <tr><td>在庫整合性</td><td>注文確定・キャンセルとも対象商品行を <code>with_for_update</code> で行ロックしてから在庫を増減し、同時実行による超過販売を防止</td></tr>
         <tr><td>リソース所有権の限定</td><td>カート・注文・住所の各操作は必ず <code>user_id == current_user.id</code> でフィルタし、他人のリソースは 404 で隠蔽</td></tr>
-        <tr><td>API プレフィックス</td><td>全ルートは <code>/api</code> 配下（main.py で一括登録）。admin ルーターは実効パス <code>/api/admin/...</code></td></tr>
+        <tr><td>API プレフィックス</td><td>REST ルートは全て <code>/api</code> 配下（main.py で一括登録）。admin ルーターは実効パス <code>/api/admin/...</code>。例外は MCP サーバー <code>/mcp</code> の 1 本だけ（下記）</td></tr>
+        <tr><td><code>/mcp</code> は <code>/api</code> 配下に置かない</td><td>MCP は REST ではなく JSON-RPC over Streamable HTTP なので、<code>include_router</code> ではなく厳密パスの <code>Route("/mcp")</code> としてぶら下げ、OpenAPI にも載せない（「<code>/api</code> 配下は REST だけ」という整理を保つため）。<code>mcp.streamable_http_app()</code> の返り値を <code>mount</code> してはならない——内側でもう一度 <code>/mcp</code> に Route を張るので実効パスが <code>/mcp/mcp</code> になり、内側を <code>/</code> にすると今度は <code>POST /mcp</code> が 307 で <code>/mcp/</code> へ飛んでリダイレクトを追わないクライアントが壊れる。§6.7</td></tr>
+        <tr><td>MCP ツールは判定を持たない</td><td>在庫・価格・購入可否・所有権の判定を MCP 層に書き写さず、<code>app/routers/</code> と <code>app/services/cart.py</code> の関数を直接呼んで結果を詰め替えるだけにする（別プロセスに切らずバックエンドへ同居させたのはこのため）。既存ルーター関数は<b>全引数をキーワードで明示的に渡す</b>——省略すると既定値の <code>Query</code>/<code>Depends</code> オブジェクトが流れ込み、特に <code>visitor_id</code> の省略は truthy なオブジェクトとして計測を無言で壊す。MCP 層で <code>db.get(Product, id)</code> のような素のクエリを書かないこと（外から任意の商品 ID を渡せる入り口であり、status を添え忘れると未公開商品が外へ出る）</td></tr>
+        <tr><td>購入は 2 段階＋ステートレスな確認トークン</td><td><code>preview_checkout</code>（下見・DB に書かない）→ <code>place_order</code>（引数は <code>confirm_token</code> のみ）。<b>金額・配送先・クーポンを <code>place_order</code> の引数にしないことが安全弁の本体</b>で、署名はそれを成立させる手段にすぎない。トークンは <code>SECRET_KEY</code> 由来の派生鍵で署名し、DB テーブルを増やさない。保証するのは「下見の内容と確定する内容の同一性」だけで、ユーザーの同意は MCP ホストの承認 UI 依存。§6.7 / §9.4</td></tr>
+        <tr><td>MCP 経由の操作は計測しない</td><td>ツールは既存ルーターへ <code>visitor_id=None</code> を明示的に渡し、<code>analytics_events</code> に行を作らない。MCP クライアントは端末の匿名 ID を持たず、合成 ID を作れば曝露 0 件の訪問者のイベントが混ざってファネルと CV を歪める（計測を汚す方が欠測より悪い）。A/B の CV から MCP 経由の購入が抜けるのは意図的</td></tr>
+        <tr><td>MCP が読めなくても店は開く</td><td><code>main.py</code> は <code>app.mcp_server</code> の import 失敗を握って REST だけで起動する（<code>/mcp</code> の Route と lifespan の <code>session_manager.run()</code> も同時に外れる）。SDK の API 改称や依存の入れ忘れだけで商品一覧からチェックアウトまで止めないため。ただし黙らせず <code>logger.exception</code> でスタックトレースを起動ログに残す</td></tr>
         <tr><td>CORS</td><td>許可オリジンは <code>http://localhost:3000</code> のみ（allow_credentials=True、methods/headers は全許可）</td></tr>
         <tr><td>耐障害起動</td><td>pgvector 拡張が使えない環境では product_embeddings を作成除外。Ollama が使えなくても埋め込み同期をスキップし警告ログのみで起動継続</td></tr>
         <tr><td>非同期処理</td><td>商品作成/更新後の埋め込み更新、LLM レコメンド生成は BackgroundTasks で非同期実行し、失敗を本体処理に影響させない</td></tr>
@@ -72,7 +77,7 @@
     </table></div>
 
     <footer class="docfoot">
-      Hibino EC システム設計書 — 更新日 2026-07-30 ／ 本書はコードベースの構造化分析（7 サブシステム）に基づく統合設計書である。
+      Hibino EC システム設計書 — 更新日 2026-08-11 ／ 本書はコードベースの構造化分析（7 サブシステム）に基づく統合設計書である。
       <div style="margin-top:8px"><a href="#">▲ ページ先頭へ戻る</a></div>
     </footer>
   </section>

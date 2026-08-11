@@ -3,7 +3,7 @@ COMPOSE := docker compose
 
 .PHONY: help up up-d build down stop restart logs logs-backend logs-frontend ps \
         backend-shell frontend-shell db-shell lint reset clean fonts secret \
-        migrate migrate-new migrate-down migrate-status
+        migrate migrate-new migrate-down migrate-status mcp-check
 
 help: ## このヘルプを表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -86,6 +86,21 @@ migrate-down: ## マイグレーションを1つ戻す（alembic downgrade -1）
 migrate-status: ## 適用済みリビジョンと履歴を表示
 	$(COMPOSE) exec backend alembic current
 	$(COMPOSE) exec backend alembic history
+
+## --- MCP サーバー ------------------------------------------------
+# /mcp は REST ではないので Swagger（/docs）に載らず、画面から壊れたことに気づけない。
+# MCP 用の依存（mcp / sse-starlette）を足した直後は再ビルドが要り、`make restart` では
+# ModuleNotFoundError のまま直らない——その取り違えをここで検出する。
+# ホストから叩くこと。transport security の allowed_hosts に compose のサービス名
+# （backend:8000）は入れていないので、コンテナ内から叩くと 421 になる。
+mcp-check: ## MCP サーバー(/mcp)の疎通確認（ツール一覧を表示）
+	@curl -sS -X POST http://localhost:8000/mcp \
+		-H 'Content-Type: application/json' \
+		-H 'Accept: application/json, text/event-stream' \
+		-d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+		| sed -n 's/^data: //p' \
+		| python3 -c 'import json,sys; t=json.load(sys.stdin)["result"]["tools"]; print(f"{len(t)} tools:"); [print("  -", x["name"]) for x in t]' \
+		|| { echo '--- /mcp のツール一覧を取得できませんでした。上のエラーが原因です。まず make logs-backend に MCP の読み込みエラーが出ていないか、依存を足したあと make up-d でイメージを作り直したかを確認してください'; exit 1; }
 
 ## --- 開発補助 ----------------------------------------------------
 lint: ## フロントエンドの Lint を実行
