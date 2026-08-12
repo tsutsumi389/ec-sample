@@ -112,6 +112,8 @@ make up-d      # --build 付きで起動（イメージを作り直す）
 make mcp-check # /mcp が応答し、ツールが 11 本見えることを確認
 ```
 
+`search_products` は MCP Apps 対応のホスト（例: Claude Code）で使うと、検索結果をカード一覧（画像・価格・評価・在庫状況）で表示できます。表示にはクライアント側の UI SDK が要るため、`make mcp-app-sdk` を一度実行して `backend/app/mcp_server/ui/vendor/mcp-app-sdk.js` を取得してください（`.gitignore` 済みなのでリポジトリには含まれません）。未取得のままでも `/mcp` は起動し、ツールは 11 本とも従来どおりテキストの `structuredContent` で動作します（カード UI だけが付きません）。
+
 カート操作と購入にはログインが必要です。トークンは REST の `POST /api/auth/login` で取得します（MCP 側に login ツールはありません。会話ログにパスワードを残さないためです）。
 
 ```bash

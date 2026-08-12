@@ -18,6 +18,7 @@ found" / "Address not found" / "Shipping address is required"）。SDK が前置
 影響するのでこの PR のスコープ外）。
 
 app.auth を import しないこと（backend/tests/ を DB / SECRET_KEY 非依存に保つため）。
+app.config は環境変数にも DB にも触れない定数モジュールなので import してよい。
 """
 
 import logging
@@ -25,6 +26,7 @@ from contextlib import contextmanager
 
 from fastapi import HTTPException
 
+from app.config import FRONTEND_ORIGIN
 from app.mcp_server.confirm import ConfirmTokenError
 
 logger = logging.getLogger(__name__)
@@ -51,7 +53,7 @@ MSG_EMPTY_CART = (
 )
 MSG_NO_ADDRESS = (
     "配送先が登録されていません。shipping_address に「宛名 / 郵便番号 / 住所 / 電話番号」を"
-    "含む文字列を渡すか、ブラウザで http://localhost:3000 にログインしてマイページから"
+    f"含む文字列を渡すか、ブラウザで {FRONTEND_ORIGIN} にログインしてマイページから"
     "配送先を登録してください（MCP からは配送先を作成できません）。"
 )
 # 「他人の住所」も同じ文言にする（存在の有無を教えない）。

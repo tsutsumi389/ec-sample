@@ -7,6 +7,9 @@ npm-debug.log*
 frontend/public/fonts/
 frontend/app/fonts.css
 
+# MCP App SDK の vendor バンドル（300KB超）。`make mcp-app-sdk` で生成する。
+backend/app/mcp_server/ui/vendor/
+
 # Python
 __pycache__/
 *.pyc

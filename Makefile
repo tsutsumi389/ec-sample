@@ -3,7 +3,7 @@ COMPOSE := docker compose
 
 .PHONY: help up up-d build down stop restart logs logs-backend logs-frontend ps \
         backend-shell frontend-shell db-shell lint reset clean fonts secret \
-        migrate migrate-new migrate-down migrate-status mcp-check
+        migrate migrate-new migrate-down migrate-status mcp-check mcp-app-sdk
 
 help: ## このヘルプを表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -17,6 +17,18 @@ fonts: frontend/app/fonts.css ## Webフォントを取得（未取得のとき�
 
 frontend/app/fonts.css:
 	node frontend/scripts/fetch-fonts.mjs
+
+## --- MCP App SDK（vendor） -----------------------------------------
+# search_products の検索結果をカード一覧で描く View（MCP Apps）が使うクライアント側 SDK
+# （@modelcontextprotocol/ext-apps の app-with-deps.js を変換したもの）をホスト側で
+# 1回だけ取得する。詳細は backend/scripts/fetch-mcp-app-sdk.mjs。
+# **up / up-d の前提条件には入れていない**（fonts / secret とは違う）。取得しなくても
+# /mcp は起動できる——vendor が無ければ search_products は UI 無しの素のツールとして
+# 登録される（backend/app/mcp_server/apps_ui.py 参照）。取得すれば次の起動から UI が付く。
+mcp-app-sdk: backend/app/mcp_server/ui/vendor/mcp-app-sdk.js ## MCP App SDK（vendor JS）を取得（未取得のときだけ走る）
+
+backend/app/mcp_server/ui/vendor/mcp-app-sdk.js:
+	node backend/scripts/fetch-mcp-app-sdk.mjs
 
 ## --- シークレット ------------------------------------------------
 # JWT の署名鍵はデプロイごとに違う乱数でなければならない。HS256（対称鍵）なので、
@@ -93,7 +105,7 @@ migrate-status: ## 適用済みリビジョンと履歴を表示
 # ModuleNotFoundError のまま直らない——その取り違えをここで検出する。
 # ホストから叩くこと。transport security の allowed_hosts に compose のサービス名
 # （backend:8000）は入れていないので、コンテナ内から叩くと 421 になる。
-mcp-check: ## MCP サーバー(/mcp)の疎通確認（ツール一覧を表示）
+mcp-check: ## MCP サーバー(/mcp)の疎通確認（ツール一覧・UIリソースの有無を表示）
 	@curl -sS -X POST http://localhost:8000/mcp \
 		-H 'Content-Type: application/json' \
 		-H 'Accept: application/json, text/event-stream' \
@@ -101,6 +113,17 @@ mcp-check: ## MCP サーバー(/mcp)の疎通確認（ツール一覧を表示�
 		| sed -n 's/^data: //p' \
 		| python3 -c 'import json,sys; t=json.load(sys.stdin)["result"]["tools"]; print(f"{len(t)} tools:"); [print("  -", x["name"]) for x in t]' \
 		|| { echo '--- /mcp のツール一覧を取得できませんでした。上のエラーが原因です。まず make logs-backend に MCP の読み込みエラーが出ていないか、依存を足したあと make up-d でイメージを作り直したかを確認してください'; exit 1; }
+	@echo
+	@# search_products は vendor JS（make mcp-app-sdk）が取得済みのときだけ UI 付きで
+	@# 登録され、text/html;profile=mcp-app の ui:// リソースが resources/list に載る。
+	@# 未取得のときは apps_ui.py が素のツール登録にフォールバックする正常な状態なので、
+	@# ここは「なし」を表示するだけで exit 1 にはしない（mcp-check 自体を失敗させない）。
+	@curl -sS -X POST http://localhost:8000/mcp \
+		-H 'Content-Type: application/json' \
+		-H 'Accept: application/json, text/event-stream' \
+		-d '{"jsonrpc":"2.0","id":2,"method":"resources/list"}' \
+		| sed -n 's/^data: //p' \
+		| python3 -c 'import json,sys; r=json.load(sys.stdin)["result"]["resources"]; ui=[x["uri"] for x in r if x.get("mimeType")=="text/html;profile=mcp-app"]; print("UIリソース:", ", ".join(ui) if ui else "なし（make mcp-app-sdk で取得できます）")'
 
 ## --- 開発補助 ----------------------------------------------------
 lint: ## フロントエンドの Lint を実行
