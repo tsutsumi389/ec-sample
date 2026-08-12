@@ -44,6 +44,7 @@ from app.schemas import (
     CategoryOut,
     OrderDetailOut,
     OrderSummaryOut,
+    ProductOut,
 )
 from app.services import cart as cart_service
 
@@ -99,7 +100,7 @@ def _resolve_item_id(db: Session, user_id: int, product_id: int) -> int:
 # ---- 商品 ---------------------------------------------------------------------
 
 
-def search_products(
+def search_products_with_raw_items(
     query: Annotated[str, Field(max_length=100)] | None = None,
     category: Annotated[str, Field(max_length=64)] | None = None,
     min_price: Annotated[int, Field(ge=0)] | None = None,
@@ -109,7 +110,23 @@ def search_products(
     limit: Annotated[int, Field(ge=1, le=30)] = 10,
     *,
     ctx: Context,
-) -> views.ProductSearchResult:
+) -> tuple[views.ProductSearchResult, list[ProductOut]]:
+    """search_products の本体。戻り値は (LLM に返す結果, 変換前の商品列) のタプル。
+
+    第2要素の ProductOut は image_url を持つが、views.ProductBrief には持ち出さない
+    （views.py の「重いものは一覧に出さない・画像は詳細ツールだけ」規律）。この関数を
+    分けているのは、apps_ui.py の UI 付き登録が商品カードの画像 URL を組み立てるのに
+    同じ商品列を必要とするため——list_products をもう一度呼んで賄うと、最初のクエリより
+    先に embed_query（Ollama への同期 HTTP、最大 60 秒）を二重に払うことになる（下記の
+    「list_products より前に DB を引かないこと」と同じ理由の裏返し）。1 回のクエリ結果を
+    search_products 本体（LLM 向け）と apps_ui.py（UI 向け）の両方で使い回すことで、
+    検索 1 回につき list_products は必ず 1 回しか呼ばれないようにしてある。
+
+    公開される MCP ツールとしての引数・戻り値の契約は search_products が持つ（この関数
+    ではない）。apps_ui.py の UI 付き版は functools.wraps(tools.search_products) で
+    search_products の signature をそのまま借りるので、引数リストの唯一の源は
+    search_products 側に置くこと。
+    """
     with tool_session() as db:
         # 検索は未ログインでも使える。トークンがあれば sort="recommended" が
         # その人向けの並びになるので、任意認証で読む（無効でも匿名に落とす）。
@@ -127,15 +144,18 @@ def search_products(
             category_id = _find_category_id(categories, category)
             if category_id is None:
                 available = "、".join(row.name for row in categories)
-                return views.ProductSearchResult(
-                    items=[],
-                    total=0,
-                    page=page,
-                    limit=limit,
-                    note=(
-                        f"カテゴリ「{category}」は存在しません。"
-                        f"利用できるカテゴリ: {available or 'なし'}"
+                return (
+                    views.ProductSearchResult(
+                        items=[],
+                        total=0,
+                        page=page,
+                        limit=limit,
+                        note=(
+                            f"カテゴリ「{category}」は存在しません。"
+                            f"利用できるカテゴリ: {available or 'なし'}"
+                        ),
                     ),
+                    [],
                 )
 
         result = products_router.list_products(
@@ -155,16 +175,43 @@ def search_products(
         uses_list_price = (
             min_price is not None or max_price is not None or sort in ("price_asc", "price_desc")
         )
-        return views.ProductSearchResult(
-            items=[
-                views.to_product_brief(item, names.get(item.category_id))
-                for item in result.items
-            ],
-            total=result.total,
-            page=page,
-            limit=limit,
-            note=PRICE_BASIS_NOTE if uses_list_price else None,
+        return (
+            views.ProductSearchResult(
+                items=[
+                    views.to_product_brief(item, names.get(item.category_id))
+                    for item in result.items
+                ],
+                total=result.total,
+                page=page,
+                limit=limit,
+                note=PRICE_BASIS_NOTE if uses_list_price else None,
+            ),
+            result.items,
         )
+
+
+def search_products(
+    query: Annotated[str, Field(max_length=100)] | None = None,
+    category: Annotated[str, Field(max_length=64)] | None = None,
+    min_price: Annotated[int, Field(ge=0)] | None = None,
+    max_price: Annotated[int, Field(ge=0)] | None = None,
+    sort: SortKey | None = None,
+    page: Annotated[int, Field(ge=1)] = 1,
+    limit: Annotated[int, Field(ge=1, le=30)] = 10,
+    *,
+    ctx: Context,
+) -> views.ProductSearchResult:
+    result, _raw_items = search_products_with_raw_items(
+        query=query,
+        category=category,
+        min_price=min_price,
+        max_price=max_price,
+        sort=sort,
+        page=page,
+        limit=limit,
+        ctx=ctx,
+    )
+    return result
 
 
 def get_product(product_id: Annotated[int, Field(ge=1)]) -> views.ProductDetail:
@@ -293,16 +340,25 @@ def hints(title: str, **overrides) -> ToolAnnotations:
     return ToolAnnotations(title=title, **{**defaults, **overrides})
 
 
+# search_products の登録メタ（description / annotations）。UI 付き登録（apps_ui.py の
+# apps.tool()）と、UI が使えないときの素登録（apps_ui.register_fallback、下の register()
+# からは意図的に外してある）が同じ文言を共有するための定数。写しを2箇所に持つと、
+# UI が付くかどうかで tools/list の説明文が変わってしまう。
+SEARCH_PRODUCTS_DESCRIPTION = (
+    "ひびの商店の商品を検索します。キーワード（商品名の部分一致と意味的な近さの"
+    "両方で探します）・カテゴリ名・価格帯・並び順で絞り込めます。ログイン不要。\n"
+    + PRICE_BASIS_NOTE
+)
+SEARCH_PRODUCTS_ANNOTATIONS = hints("商品を検索する")
+
+
 def register(mcp: MCPServer) -> None:
-    mcp.add_tool(
-        search_products,
-        description=(
-            "ひびの商店の商品を検索します。キーワード（商品名の部分一致と意味的な近さの"
-            "両方で探します）・カテゴリ名・価格帯・並び順で絞り込めます。ログイン不要。\n"
-            + PRICE_BASIS_NOTE
-        ),
-        annotations=hints("商品を検索する"),
-    )
+    # search_products はここでは登録しない。apps_ui.py が
+    # SEARCH_PRODUCTS_DESCRIPTION / SEARCH_PRODUCTS_ANNOTATIONS を使って UI 付きで登録する
+    # （vendor JS が無ければ apps_ui.register_fallback() が同じ定数で素登録する）。
+    # ここで add_tool すると、ToolManager.add_tool() は同名ツールの再登録を
+    # 「先勝ち＋警告ログのみ」で処理するため、後から来る apps_ui.py 側の UI 付き登録が
+    # 黙って捨てられ、UI が一生付かない（例外もログも出ないので気づけない）。
     mcp.add_tool(
         get_product,
         description=(

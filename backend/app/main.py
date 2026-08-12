@@ -12,6 +12,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 from starlette.routing import Route
 
+from app.config import FRONTEND_ORIGIN
 from app.database import SessionLocal, engine
 from app.routers import (
     addresses,
@@ -209,7 +210,7 @@ app = FastAPI(title="EC Sample API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[FRONTEND_ORIGIN],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

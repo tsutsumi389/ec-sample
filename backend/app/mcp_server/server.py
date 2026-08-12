@@ -12,7 +12,14 @@
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
-from app.mcp_server import checkout, tools
+# apps_ui の import 自体が、Apps() への UI 付きツール登録（apps.tool() /
+# add_html_resource()）を完了させる副作用を持つ。この import 文は
+# MCPServer(extensions=[apps_ui.apps]) より**前**に実行されている必要がある——
+# Apps インスタンスは MCPServer のコンストラクタ内で同期的に一度だけ
+# apps.tools()/apps.resources() を読み出すため（mcp/server/mcpserver/server.py の
+# _apply_extension）。構築後に apps.tool() を呼んでも例外もログも無く静かに無視される
+# ので、この import を MCPServer(...) の後ろへ動かさないこと。詳細は apps_ui.py。
+from app.mcp_server import apps_ui, checkout, tools
 
 INSTRUCTIONS = """\
 ひびの商店（家庭用品のECサイト）のカタログ・カート・注文を操作するツール群です。
@@ -30,10 +37,15 @@ mcp = MCPServer(
     title="ひびの商店",
     version="0.1.0",
     instructions=INSTRUCTIONS,
+    extensions=[apps_ui.apps],
 )
 
 tools.register(mcp)
 checkout.register(mcp)
+# apps_ui.apps が search_products を UI 付きで登録できていれば（= vendor JS が
+# 取得済みで import 時点の登録が成功していれば）ここは何もしない。登録できていなければ
+# 従来どおり素のツールとして登録する（CLAUDE.md の「付随機能の失敗で店を止めない」規律）。
+apps_ui.register_fallback(mcp)
 
 # streamable_http_app() は「Starlette アプリを作って返す」関数だが、副作用として
 # session_manager を構成して保持する。ここで欲しいのは後者だけなので返り値は捨て、

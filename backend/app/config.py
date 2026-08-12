@@ -32,3 +32,11 @@ SEMANTIC_SEARCH_MARGIN = float(os.environ.get("SEMANTIC_SEARCH_MARGIN", "0.08"))
 # 意味的ヒットとして採用する最大候補数。しきい値だけだと語彙の広いクエリで大量に
 # ヒットし得るため、距離が近い順に上限件数で打ち切って検索結果の質を保つ。
 SEMANTIC_SEARCH_CANDIDATES = int(os.environ.get("SEMANTIC_SEARCH_CANDIDATES", "50"))
+
+# フロントエンド（Next.js）の既定オリジン。main.py の CORS 許可、mcp_server/errors.py の
+# 案内文、mcp_server/ui_assets.py の画像URL・商品ページURLの組み立てが、この1箇所を
+# 参照する（値を変えたいときはここだけ直せばよく、揃え忘れを防ぐ）。
+# 環境変数化していないのは、値を変えたいだけの理由で SECRET_KEY のような fail closed
+# 検査・.env の管理・compose の受け渡しをもう1本増やす必要が無いため（CLAUDE.md の
+# 「環境変数を2本目に増やすとフォールバックを書きたくなる」規律と同じ理由）。
+FRONTEND_ORIGIN = "http://localhost:3000"
