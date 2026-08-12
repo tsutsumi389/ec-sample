@@ -340,10 +340,10 @@ def hints(title: str, **overrides) -> ToolAnnotations:
     return ToolAnnotations(title=title, **{**defaults, **overrides})
 
 
-# search_products の登録メタ（description / annotations）。UI 付き登録（apps_ui.py の
-# apps.tool()）と、UI が使えないときの素登録（apps_ui.register_fallback、下の register()
-# からは意図的に外してある）が同じ文言を共有するための定数。写しを2箇所に持つと、
-# UI が付くかどうかで tools/list の説明文が変わってしまう。
+# search_products / get_product の登録メタ（description / annotations）。UI 付き登録
+# （apps_ui.py の apps.tool()）と、UI が使えないときの素登録（apps_ui.register_fallback、
+# 下の register() からは意図的に外してある）が同じ文言を共有するための定数。写しを2箇所に
+# 持つと、UI が付くかどうかで tools/list の説明文が変わってしまう。
 SEARCH_PRODUCTS_DESCRIPTION = (
     "ひびの商店の商品を検索します。キーワード（商品名の部分一致と意味的な近さの"
     "両方で探します）・カテゴリ名・価格帯・並び順で絞り込めます。ログイン不要。\n"
@@ -351,22 +351,21 @@ SEARCH_PRODUCTS_DESCRIPTION = (
 )
 SEARCH_PRODUCTS_ANNOTATIONS = hints("商品を検索する")
 
+GET_PRODUCT_DESCRIPTION = (
+    "商品 1 件の詳細（説明・仕様・実売価格・在庫・購入可否）を返します。"
+    "product_id は search_products の結果に含まれます。ログイン不要。"
+)
+GET_PRODUCT_ANNOTATIONS = hints("商品の詳細を見る")
+
 
 def register(mcp: MCPServer) -> None:
-    # search_products はここでは登録しない。apps_ui.py が
-    # SEARCH_PRODUCTS_DESCRIPTION / SEARCH_PRODUCTS_ANNOTATIONS を使って UI 付きで登録する
-    # （vendor JS が無ければ apps_ui.register_fallback() が同じ定数で素登録する）。
-    # ここで add_tool すると、ToolManager.add_tool() は同名ツールの再登録を
-    # 「先勝ち＋警告ログのみ」で処理するため、後から来る apps_ui.py 側の UI 付き登録が
-    # 黙って捨てられ、UI が一生付かない（例外もログも出ないので気づけない）。
-    mcp.add_tool(
-        get_product,
-        description=(
-            "商品 1 件の詳細（説明・仕様・実売価格・在庫・購入可否）を返します。"
-            "product_id は search_products の結果に含まれます。ログイン不要。"
-        ),
-        annotations=hints("商品の詳細を見る"),
-    )
+    # search_products と get_product はここでは登録しない。apps_ui.py が
+    # SEARCH_PRODUCTS_DESCRIPTION/ANNOTATIONS・GET_PRODUCT_DESCRIPTION/ANNOTATIONS を
+    # 使って UI 付きで登録する（vendor JS が無ければ apps_ui.register_fallback() が
+    # 同じ定数で素登録する）。ここで add_tool すると、ToolManager.add_tool() は
+    # 同名ツールの再登録を「先勝ち＋警告ログのみ」で処理するため、後から来る
+    # apps_ui.py 側の UI 付き登録が黙って捨てられ、UI が一生付かない（例外もログも
+    # 出ないので気づけない）。
     mcp.add_tool(
         get_cart,
         description="ログイン中のユーザーのカートの中身と合計金額を返します。",
