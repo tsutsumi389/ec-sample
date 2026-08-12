@@ -1,11 +1,11 @@
 """MCP Apps 拡張（`io.modelcontextprotocol/ui`）への配線。
 
 **このモジュールがやること・やらないこと**
-  - やる: search_products を UI 付きツールとして登録し、tools/list に
-    `_meta.ui.resourceUri` を、tools/call の戻り値に `_meta.ui`（カード描画用データ）を
-    付ける。
-  - やらない: 在庫・価格・購入可否の判定。すべて tools.search_products_with_raw_items
-    （= 既存ルーターへの委譲）に任せ、ここでは呼んで結果を包み直すだけ。
+  - やる: search_products と get_product を UI 付きツールとして登録し、tools/list に
+    `_meta.ui.resourceUri` を、tools/call の戻り値に `_meta.ui`（カード・パネル描画用
+    データ）を付ける。
+  - やらない: 在庫・価格・購入可否の判定。すべて tools.search_products_with_raw_items /
+    tools.get_product（= 既存ルーターへの委譲）に任せ、ここでは呼んで結果を包み直すだけ。
 
 **登録は import 時点で完了させる。** `Apps()` インスタンスは
 `MCPServer(extensions=[apps])` のコンストラクタ内で **同期的に一度だけ**
@@ -18,18 +18,23 @@
 
 **同名ツールを両方の経路から登録しないこと。** `ToolManager.add_tool()` は同名の
 再登録を「先勝ち＋警告ログのみ」で処理し、後から来た description/annotations を黙って
-捨てる。そのため tools.py の `register()` から search_products の `mcp.add_tool()` を
-外してあり（tools.py 側にもコメントを残してある）、UI 付き登録は必ずここだけが行う。
+捨てる。そのため tools.py の `register()` から search_products / get_product の
+`mcp.add_tool()` を外してあり（tools.py 側にもコメントを残してある）、UI 付き登録は
+必ずここだけが行う。
 
-**vendor JS（MCP App SDK）が無ければ UI を諦める。** `ui_assets.load_search_app_html()`
-が None を返す（テンプレートまたは vendor JS が読めない）場合、`apps` には何も登録しない
-（＝ `Apps()` は空のまま。`MCPServer(extensions=[apps])` の構築は成功する——
+**vendor JS（MCP App SDK）が無ければ UI を諦める。** `ui_assets.load_search_app_html()` /
+`load_product_app_html()` が None を返す（テンプレートまたは vendor JS が読めない）場合、
+その 1 ツールぶんは `apps` に何も登録しない（＝もう片方が登録済みでも `Apps()` の状態は
+そのツールについてだけ空のまま。`MCPServer(extensions=[apps])` の構築は成功する——
 `apps.tools()` の ValueError は「ツールだけ登録してリソースを登録しなかった」ときにしか
 出ない。ツールを1つも登録しなければ空リストを返すだけで済む）。その代わり
-`register_fallback()` が `mcp.add_tool(tools.search_products, ...)` で従来どおり素の
-ツールとして登録する。これは CLAUDE.md の「付随機能の失敗で店を止めない」規律
-（マイグレーション 0001/0002 を分けてあるのと同じ）を Apps 拡張にも適用したもの。
-`make mcp-app-sdk` で vendor JS を取得すれば、次回の起動から UI が付く。
+`register_fallback()` が `mcp.add_tool(tools.search_products, ...)` /
+`mcp.add_tool(tools.get_product, ...)` で従来どおり素のツールとして登録する。これは
+CLAUDE.md の「付随機能の失敗で店を止めない」規律（マイグレーション 0001/0002 を分けて
+あるのと同じ）を Apps 拡張にも適用したもの。2 ツールの成否は独立している——片方の UI
+登録だけ失敗しても、もう片方の UI 登録・フォールバック登録には影響しない（後述の
+`_ui_registered_tools` 参照）。`make mcp-app-sdk` で vendor JS を取得すれば、次回の
+起動から両方に UI が付く。
 
 **client_supports_apps で分岐しないこと。** このサーバーの構成（stateless_http=True）
 では常に False を返す（initialize で送られる ClientCapabilities が、リクエストごとに
@@ -37,9 +42,14 @@
 判断はホスト側に委ね、content / structuredContent は「UI が描画されない場合」を前提に
 した形（= Apps 対応前と同じ形）を常に返す。
 
-**画像URLは _meta.ui にだけ載せ、structuredContent には足さない。** views.py の
-「重いものは一覧に出さない（画像は詳細ツールだけ）」規律を破らないため。カードの画像は
-LLM の会話ログではなく、iframe だけが読む _meta.ui.items[].image_url から取る。
+**検索結果カードの画像URLは _meta.ui にだけ載せ、structuredContent には足さない。**
+views.py の「重いものは一覧に出さない（画像は詳細ツールだけ）」規律を破らないため
+（search の ProductBrief は画像を持たない）。カードの画像は LLM の会話ログではなく、
+iframe だけが読む _meta.ui.items[].image_url から取る。商品詳細はこの規律の裏側に
+あたる——views.ProductDetail は既に image_url を（相対パスのまま）structuredContent に
+持つ。get_product の _meta.ui にも image_url を載せるが、これは絶対URL化した別物
+（iframe の <img src> にそのまま使える値）であって、重複ではなく役割の違い。
+structuredContent に対応が無いのは _meta.ui.page_url だけ。
 """
 
 from __future__ import annotations
@@ -60,12 +70,20 @@ from app.mcp_server import tools, ui_assets
 # 落ちる（「設定ミスで /mcp 全体が死ぬ」障害モードそのもの）。定数化してタイプミスの
 # 余地を消す。
 SEARCH_RESOURCE_URI = "ui://hibino/search-products.html"
+PRODUCT_RESOURCE_URI = "ui://hibino/product-detail.html"
 
 apps = Apps()
 
-# apps.add_html_resource() が実際に呼ばれ、UI 付きで search_products が登録できたか。
-# register_fallback() が「もう登録済みなら何もしない」を判定するのに使う。
-_ui_registered = False
+# apps.add_html_resource() が実際に呼ばれ、UI 付きで登録できたツール名の集合。
+# register_fallback() が「そのツールはもう登録済みだから何もしない」をツールごとに
+# 独立して判定するのに使う。単一のブール値にしないのは、2ツール以上になった時点で
+# 「(search: UI or fallback) × (product: UI or fallback)」という独立な状態を1ビットへ
+# 潰してしまうため——例えば search が UI 登録に成功し product が失敗した場合、単一の
+# ブールだと「もう登録済み」の判定に search の成功が使われ、product が UI 登録もされず
+# フォールバックも打たれず、例外もログも無く tools/list から丸ごと消えるという事故が
+# 起きる（気づけない静かな消失）。ツール名をキーにして独立に持てば、この事故は
+# 構造的に起こらない。
+_ui_registered_tools: set[str] = set()
 
 
 # search_products の UI 付き版。判定は一切持たない——tools.search_products_with_raw_items
@@ -131,20 +149,79 @@ if _html is not None:
         description=tools.SEARCH_PRODUCTS_DESCRIPTION,
         annotations=tools.SEARCH_PRODUCTS_ANNOTATIONS,
     )(_search_products_with_ui)
-    _ui_registered = True
+    _ui_registered_tools.add("search_products")
+
+
+# get_product の UI 付き版。search と違い判定を持たないだけでなく、生商品列を別途
+# 取り直す分割（search_products_with_raw_items 相当）も要らない——
+# views.ProductDetail は既に image_url を（相対パスのまま）structuredContent に
+# 持っているので、tools.get_product() を 1 回呼んだ戻り値をそのまま
+# ui_assets.build_product_ui_item() にも渡せる（views.py の「詳細ツールは画像を
+# 出してよい」規律の裏側）。
+#
+# functools.wraps(tools.get_product) の理由は _search_products_with_ui と同じ
+# （上のコメント参照）。tools.get_product は ctx を取らない（product_id だけ）ので、
+# SDK が読む signature もそれだけになる。
+@functools.wraps(tools.get_product)
+def _get_product_with_ui(**kwargs: Any) -> CallToolResult:
+    result = tools.get_product(**kwargs)
+
+    # content は Apps 対応前と完全に同じ形にする（_search_products_with_ui と同じ理由）。
+    content = [
+        TextContent(
+            type="text",
+            text=pydantic_core.to_json(result, fallback=str, indent=2).decode(),
+        )
+    ]
+    structured_content = result.model_dump(mode="json", by_alias=True)
+
+    return CallToolResult(
+        content=content,
+        structured_content=structured_content,
+        meta={"ui": ui_assets.build_product_ui_item(result)},
+    )
+
+
+_product_html = ui_assets.load_product_app_html()
+if _product_html is not None:
+    apps.add_html_resource(
+        PRODUCT_RESOURCE_URI,
+        _product_html,
+        title="商品詳細",
+        description="get_product の結果を商品詳細パネルで表示します。",
+        # search と同じ理由（商品画像が frontend 配信のため）で resourceDomains が要る。
+        csp=ResourceCsp(resource_domains=[FRONTEND_ORIGIN]),
+    )
+    # add_html_resource が失敗したときに apps.tool() まで実行してしまうと、リソースの
+    # 無いツールが1つ登録された不完全な状態になる（search と同じ理由で if ブロックの
+    # 中に両方を収めてある）。
+    apps.tool(
+        resource_uri=PRODUCT_RESOURCE_URI,
+        visibility=["model", "app"],
+        description=tools.GET_PRODUCT_DESCRIPTION,
+        annotations=tools.GET_PRODUCT_ANNOTATIONS,
+    )(_get_product_with_ui)
+    _ui_registered_tools.add("get_product")
 
 
 def register_fallback(mcp: MCPServer) -> None:
-    """apps 経由で UI 付き登録ができなかった場合だけ、素の search_products を足す。
+    """apps 経由で UI 付き登録ができなかったツールだけ、素の形で足す。
 
-    server.py から MCPServer 構築の**後**に呼ぶこと。UI 登録に成功していれば何もしない
-    （二重登録すると ToolManager.add_tool() が「先勝ち＋警告ログのみ」で処理し、
-    tools/list の説明が意図しない方に固定される）。
+    server.py から MCPServer 構築の**後**に呼ぶこと。ツールごとに独立して判定する
+    （_ui_registered_tools 参照）——search_products と get_product の一方だけ UI 登録に
+    成功していても、もう一方はここでフォールバック登録される。UI 登録済みのツールを
+    二重登録すると ToolManager.add_tool() が「先勝ち＋警告ログのみ」で処理し、
+    tools/list の説明が意図しない方に固定される。
     """
-    if _ui_registered:
-        return
-    mcp.add_tool(
-        tools.search_products,
-        description=tools.SEARCH_PRODUCTS_DESCRIPTION,
-        annotations=tools.SEARCH_PRODUCTS_ANNOTATIONS,
-    )
+    if "search_products" not in _ui_registered_tools:
+        mcp.add_tool(
+            tools.search_products,
+            description=tools.SEARCH_PRODUCTS_DESCRIPTION,
+            annotations=tools.SEARCH_PRODUCTS_ANNOTATIONS,
+        )
+    if "get_product" not in _ui_registered_tools:
+        mcp.add_tool(
+            tools.get_product,
+            description=tools.GET_PRODUCT_DESCRIPTION,
+            annotations=tools.GET_PRODUCT_ANNOTATIONS,
+        )

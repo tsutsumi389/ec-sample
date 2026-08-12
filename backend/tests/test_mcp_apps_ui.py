@@ -121,6 +121,64 @@ class TestLoadSearchAppHtml:
         assert html == "<script>globalThis.__McpAppSdk = {};</script>"
 
 
+class TestLoadProductAppHtml:
+    """load_product_app_html() が load_search_app_html() と同じ壊れ方（ファイル欠落・
+    プレースホルダ異常）を同じ規律で吸収することの回帰テスト。
+
+    ロジック本体は共有ヘルパー _load_app_html に集約されているため（TestLoadSearchAppHtml
+    が既に「ファイル欠落」「</script 混入」「プレースホルダ数不一致」「正常系」の4パターンを
+    固定している）、ここでは商品詳細側のパス（PRODUCT_TEMPLATE_PATH）を差し替えても同じ
+    挙動になることだけを確認する。
+    """
+
+    def test_returns_none_when_files_missing(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(ui_assets, "PRODUCT_TEMPLATE_PATH", tmp_path / "missing.html")
+        monkeypatch.setattr(ui_assets, "VENDOR_SDK_PATH", tmp_path / "missing.js")
+
+        assert ui_assets.load_product_app_html() is None
+
+    def test_returns_none_without_raising_when_placeholder_count_is_wrong(
+        self, monkeypatch, tmp_path
+    ):
+        template_path = tmp_path / "product.html"
+        vendor_path = tmp_path / "mcp-app-sdk.js"
+        # プレースホルダが0個（誤って消された想定）。
+        template_path.write_text("<script>no placeholder here</script>", encoding="utf-8")
+        vendor_path.write_text("globalThis.__McpAppSdk = {};", encoding="utf-8")
+        monkeypatch.setattr(ui_assets, "PRODUCT_TEMPLATE_PATH", template_path)
+        monkeypatch.setattr(ui_assets, "VENDOR_SDK_PATH", vendor_path)
+
+        assert ui_assets.load_product_app_html() is None
+
+    def test_returns_html_when_files_are_valid(self, monkeypatch, tmp_path):
+        template_path = tmp_path / "product.html"
+        vendor_path = tmp_path / "mcp-app-sdk.js"
+        template_path.write_text(
+            f"<script>{ui_assets.PLACEHOLDER}</script>", encoding="utf-8"
+        )
+        vendor_path.write_text("globalThis.__McpAppSdk = {};", encoding="utf-8")
+        monkeypatch.setattr(ui_assets, "PRODUCT_TEMPLATE_PATH", template_path)
+        monkeypatch.setattr(ui_assets, "VENDOR_SDK_PATH", vendor_path)
+
+        html = ui_assets.load_product_app_html()
+
+        assert html == "<script>globalThis.__McpAppSdk = {};</script>"
+
+
+class TestProductTemplateFile:
+    """product.html（静的資産そのもの）にちょうど1個のプレースホルダがあることの固定。
+
+    search.html と同じ契約を新しいテンプレートにも要求しないと、build_app_html が本番の
+    起動時にだけ ValueError を出し、load_product_app_html() がそれを飲み込んで
+    「vendor JS が無いときと同じ」フォールバックへ静かに落ちる（気づきにくい劣化）。
+    """
+
+    def test_has_exactly_one_placeholder(self):
+        template = ui_assets.PRODUCT_TEMPLATE_PATH.read_text(encoding="utf-8")
+
+        assert template.count(ui_assets.PLACEHOLDER) == 1
+
+
 class TestBuildSearchUiItems:
     def test_absolute_urls_are_built_from_frontend_origin(self):
         items = [_FakeProduct(id=1, image_url="/products/kettle.svg")]
@@ -155,6 +213,30 @@ class TestBuildSearchUiItems:
 
     def test_empty_list_returns_empty_list(self):
         assert ui_assets.build_search_ui_items([]) == []
+
+
+class TestBuildProductUiItem:
+    """build_search_ui_items の単数版。商品詳細は1件しか無いので id は含まず、
+    image_url（絶対URL化）と page_url の2キーだけを返す。
+    """
+
+    def test_absolute_urls_are_built_from_frontend_origin(self):
+        product = _FakeProduct(id=1, image_url="/products/kettle.svg")
+
+        result = ui_assets.build_product_ui_item(product)
+
+        assert result == {
+            "image_url": "http://localhost:3000/products/kettle.svg",
+            "page_url": "http://localhost:3000/products/1",
+        }
+
+    def test_image_url_none_stays_none_but_page_url_is_always_built(self):
+        product = _FakeProduct(id=2, image_url=None)
+
+        result = ui_assets.build_product_ui_item(product)
+
+        assert result["image_url"] is None
+        assert result["page_url"] == "http://localhost:3000/products/2"
 
 
 class TestAppsExtensionMisconfiguration:
