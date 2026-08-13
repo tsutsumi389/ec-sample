@@ -1,0 +1,14 @@
+# ホストの `npm install`（README の「動かし方」で案内している）で入った node_modules を、
+# Dockerfile の `COPY . .` がイメージへ持ち込まないための除外。
+#
+# **compose の匿名ボリュームによる隔離は bind mount 側にしか効かない。** イメージの
+# /app/node_modules は Dockerfile の `npm install`（alpine = linux/musl）で作られるが、
+# その後ろの `COPY . .` はディレクトリをマージするので、除外しないとホストの
+# darwin 向けネイティブバイナリ（lightningcss-darwin-arm64、@rolldown/binding-darwin-arm64
+# など）がイメージに混ざる。匿名ボリュームはその汚れたイメージの中身で初期化されるため、
+# 汚染は実行時まで持ち越される。今 musl 版が残っていて動くのは COPY の挙動による偶然で、
+# 設計ではない。ビルドコンテキストが 80MB 膨らむ副作用もある。
+node_modules
+
+# ビルドに関係しないもの。
+.git

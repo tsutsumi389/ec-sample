@@ -5,13 +5,25 @@ apps_ui.py（Apps() への配線本体）はここでは import しない——a
 app.routers から app.auth を import し、app.auth はモジュール読み込み時点で SECRET_KEY の
 fail closed 検査を実行する（未設定・短すぎ・既知の弱い値なら RuntimeError）。conftest.py が
 明言する「DB 不要の純ロジックテストのみ」を守るため、ここでは持ち込まない。
+
+View 本体（iframe の中身）は別プロジェクト mcp-apps/（TypeScript + Vite）が持ち、
+backend はそのビルド成果物（ui/dist/*.html）を読むだけになった。したがってここで固定
+するのは「読めないとき・壊れているときにどう振る舞うか」であって、HTML の中身ではない。
+実物の dist を読むテストは置かない——dist は .gitignore 済みの生成物で、新規チェックアウトや
+mcp-apps の初回ビルド前には存在せず、無条件に読むテストは必ず落ちるため。
 """
 
 import inspect
+import logging
 
 import pytest
 
 from app.mcp_server import ui_assets
+
+# ui_assets._load_app_html が「壊れている」と判定しない最小の HTML。dist に置かれる
+# 実物は vite-plugin-singlefile が吐く単一ファイル HTML だが、backend が見るのは
+# 「文書として体を成しているか」だけなのでテストもその粒度で書く。
+_VALID_HTML = "<!DOCTYPE html><html lang='ja'><body><div id='root'></div></body></html>"
 
 
 class _FakeProduct:
@@ -27,38 +39,27 @@ class _FakeProduct:
         self.image_url = image_url
 
 
-class TestBuildAppHtml:
-    def test_replaces_placeholder_exactly_once(self):
-        template = f"<script>before\n{ui_assets.PLACEHOLDER}\nafter</script>"
-        html = ui_assets.build_app_html(template, "globalThis.__McpAppSdk = {};")
+def _use_dist(monkeypatch, tmp_path):
+    """DIST_DIR を tmp_path へ差し替える。
 
-        assert ui_assets.PLACEHOLDER not in html
-        assert "globalThis.__McpAppSdk = {};" in html
-        assert "before" in html
-        assert "after" in html
+    差し替えられること自体が回帰テストの対象でもある——ローダはモジュール属性
+    DIST_DIR を**関数本体で**名前解決しており、デフォルト引数値に束縛すると import
+    時点の値で凍結されてここが効かなくなる（ui_assets._load_app_html の docstring 参照）。
+    """
+    monkeypatch.setattr(ui_assets, "DIST_DIR", tmp_path)
 
-    def test_rejects_bundle_containing_close_script_tag(self):
-        template = f"<script>{ui_assets.PLACEHOLDER}</script>"
 
-        with pytest.raises(ValueError):
-            ui_assets.build_app_html(template, "var x = '</script>';")
+class TestLoaderSignatures:
+    """ローダに商品データを渡す口が無いことの回帰テスト。
 
-    def test_rejects_template_missing_placeholder(self):
-        with pytest.raises(ValueError):
-            ui_assets.build_app_html("<script>no placeholder here</script>", "var x = 1;")
+    View を別コンテナへ移す前は build_app_html(template, bundle_js) の引数が2つだけで
+    あることが「UI リソースの HTML に商品データを焼き込まない」設計の根拠だった。今は
+    「ローダが引数を1つも取らない」ことがその根拠にあたる。
+    """
 
-    def test_rejects_template_with_duplicate_placeholder(self):
-        template = f"{ui_assets.PLACEHOLDER}{ui_assets.PLACEHOLDER}"
-
-        with pytest.raises(ValueError):
-            ui_assets.build_app_html(template, "var x = 1;")
-
-    def test_signature_cannot_receive_product_data(self):
-        # テンプレートに商品データを焼き込む経路が無いことの回帰テスト。引数が
-        # template と bundle_js の2つだけであること自体が、UI リソースの HTML に
-        # 商品データを埋め込めない設計の根拠になっている。
-        params = set(inspect.signature(ui_assets.build_app_html).parameters)
-        assert params == {"template", "bundle_js"}
+    def test_loaders_take_no_arguments(self):
+        assert len(inspect.signature(ui_assets.load_search_app_html).parameters) == 0
+        assert len(inspect.signature(ui_assets.load_product_app_html).parameters) == 0
 
 
 class TestLoadSearchAppHtml:
@@ -66,117 +67,136 @@ class TestLoadSearchAppHtml:
     壊れている（想定外の設定ミス）」のどちらでも None を返し、例外を外へ漏らさない
     ことの回帰テスト。
 
-    後者を漏らすと apps_ui.py のモジュール import 自体が ValueError で失敗し、
-    server.py の `from app.mcp_server import apps_ui, checkout, tools` が例外を
-    投げて /mcp 全体（既存11ツール）が起動できなくなる——vendor バンドルの取得や
-    search.html の編集をわずかに誤っただけで店ごと止まる障害モードなので、
-    load_search_app_html() の内側で確実に吸収されていることをここで固定する。
+    例外を漏らすと apps_ui.py のモジュール import 自体が失敗し、server.py の
+    `from app.mcp_server import apps_ui, checkout, tools` が例外を投げて /mcp 全体
+    （既存11ツール）が起動できなくなる——mcp-apps のビルドがわずかに崩れただけで店ごと
+    止まる障害モードなので、ローダの内側で確実に吸収されていることをここで固定する。
     """
 
-    def test_returns_none_when_files_missing(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(ui_assets, "TEMPLATE_PATH", tmp_path / "missing.html")
-        monkeypatch.setattr(ui_assets, "VENDOR_SDK_PATH", tmp_path / "missing.js")
+    def test_returns_none_when_file_missing(self, monkeypatch, tmp_path):
+        # mcp-apps がまだ dist を書き出していない状態（初回起動中・compose を通さずに
+        # backend だけ動かした場合）。
+        _use_dist(monkeypatch, tmp_path)
 
         assert ui_assets.load_search_app_html() is None
 
-    def test_returns_none_without_raising_when_bundle_contains_close_script_tag(
-        self, monkeypatch, tmp_path
-    ):
-        template_path = tmp_path / "search.html"
-        vendor_path = tmp_path / "mcp-app-sdk.js"
-        template_path.write_text(
-            f"<script>{ui_assets.PLACEHOLDER}</script>", encoding="utf-8"
+    def test_missing_file_is_silent(self, monkeypatch, tmp_path, caplog):
+        # 「無い」は想定内なので鳴らさない。毎回鳴らすと開発環境のログが埋まり、
+        # 本物の警告（下の test_broken_file_logs_warning）が埋もれる。
+        _use_dist(monkeypatch, tmp_path)
+
+        with caplog.at_level(logging.WARNING, logger="app.mcp_server.ui_assets"):
+            assert ui_assets.load_search_app_html() is None
+
+        assert caplog.records == []
+
+    def test_returns_none_when_file_is_empty(self, monkeypatch, tmp_path):
+        # vite build --watch が書きかけの0バイトを晒す瞬間に踏む、実在する経路。
+        (tmp_path / "search.html").write_text("", encoding="utf-8")
+        _use_dist(monkeypatch, tmp_path)
+
+        assert ui_assets.load_search_app_html() is None
+
+    def test_returns_none_when_content_is_not_html(self, monkeypatch, tmp_path):
+        (tmp_path / "search.html").write_text("not html at all", encoding="utf-8")
+        _use_dist(monkeypatch, tmp_path)
+
+        assert ui_assets.load_search_app_html() is None
+
+    def test_returns_none_when_html_is_truncated(self, monkeypatch, tmp_path):
+        # ビルド途中の書きかけを読んでしまった場合。書き込みが終われば dist の更新で
+        # backend がもう一度再起動し、次の import で正しく読める（自然に回復する）。
+        (tmp_path / "search.html").write_text(
+            "<!DOCTYPE html><html lang='ja'><body>", encoding="utf-8"
         )
-        vendor_path.write_text("var x = '</script>';", encoding="utf-8")
-        monkeypatch.setattr(ui_assets, "TEMPLATE_PATH", template_path)
-        monkeypatch.setattr(ui_assets, "VENDOR_SDK_PATH", vendor_path)
+        _use_dist(monkeypatch, tmp_path)
 
         assert ui_assets.load_search_app_html() is None
 
-    def test_returns_none_without_raising_when_placeholder_count_is_wrong(
-        self, monkeypatch, tmp_path
+    def test_returns_none_when_utf8_is_truncated_midcharacter(
+        self, monkeypatch, tmp_path, caplog
     ):
-        template_path = tmp_path / "search.html"
-        vendor_path = tmp_path / "mcp-app-sdk.js"
-        # プレースホルダが0個（誤って消された想定）。
-        template_path.write_text("<script>no placeholder here</script>", encoding="utf-8")
-        vendor_path.write_text("globalThis.__McpAppSdk = {};", encoding="utf-8")
-        monkeypatch.setattr(ui_assets, "TEMPLATE_PATH", template_path)
-        monkeypatch.setattr(ui_assets, "VENDOR_SDK_PATH", vendor_path)
+        # 上の truncated テストと同じ「書きかけを読んだ」経路だが、切れた位置が
+        # **マルチバイト文字の途中**の場合。read_text() が UnicodeDecodeError を投げる。
+        # UnicodeDecodeError は ValueError の子であって OSError ではないため、
+        # `except OSError` だけでは捕まらず外へ漏れる——漏れると apps_ui.py の import が
+        # 失敗し、/mcp が 11 ツールごと 404 になる（実測済みの障害）。dist は大半が
+        # ASCII なのでこの経路を踏む確率は数%だが、踏んだときの被害は店ごと止まる。
+        # ASCII だけの断片ではこの分岐を通らないので、テストは必ず bytes で書くこと。
+        (tmp_path / "search.html").write_bytes(
+            "<!DOCTYPE html><html lang='ja'><body>ホ".encode()[:-1]
+        )
+        _use_dist(monkeypatch, tmp_path)
+
+        with caplog.at_level(logging.WARNING, logger="app.mcp_server.ui_assets"):
+            assert ui_assets.load_search_app_html() is None
+
+        # 「壊れている」側（warning あり）へ合流させる。末尾が </html> で切れた場合と
+        # 同じ事象なので、切れた位置で無音と警告が入れ替わってはならない。
+        assert len(caplog.records) == 1
+
+    def test_broken_file_logs_warning(self, monkeypatch, tmp_path, caplog):
+        # 「壊れている」は想定外の設定ミスなので、make logs-backend で気づけるように
+        # 必ず1件残す。無言でフォールバックに落ちないことがこのテストの本体。
+        (tmp_path / "search.html").write_text("not html at all", encoding="utf-8")
+        _use_dist(monkeypatch, tmp_path)
+
+        with caplog.at_level(logging.WARNING, logger="app.mcp_server.ui_assets"):
+            assert ui_assets.load_search_app_html() is None
+
+        assert len(caplog.records) == 1
+
+    def test_returns_file_content_unchanged(self, monkeypatch, tmp_path):
+        # backend は読むだけで一切加工しない。ここに置換処理を戻そうとした人が落ちる。
+        (tmp_path / "search.html").write_text(_VALID_HTML, encoding="utf-8")
+        _use_dist(monkeypatch, tmp_path)
+
+        assert ui_assets.load_search_app_html() == _VALID_HTML
+
+    def test_does_not_read_the_product_app(self, monkeypatch, tmp_path):
+        # ファイル名の取り違え（search が product を読む）の回帰テスト。2つの View は
+        # 独立して成否が決まるので、片方だけ dist にある状態を作って確かめる。
+        (tmp_path / "product.html").write_text(_VALID_HTML, encoding="utf-8")
+        _use_dist(monkeypatch, tmp_path)
 
         assert ui_assets.load_search_app_html() is None
-
-    def test_returns_html_when_files_are_valid(self, monkeypatch, tmp_path):
-        template_path = tmp_path / "search.html"
-        vendor_path = tmp_path / "mcp-app-sdk.js"
-        template_path.write_text(
-            f"<script>{ui_assets.PLACEHOLDER}</script>", encoding="utf-8"
-        )
-        vendor_path.write_text("globalThis.__McpAppSdk = {};", encoding="utf-8")
-        monkeypatch.setattr(ui_assets, "TEMPLATE_PATH", template_path)
-        monkeypatch.setattr(ui_assets, "VENDOR_SDK_PATH", vendor_path)
-
-        html = ui_assets.load_search_app_html()
-
-        assert html == "<script>globalThis.__McpAppSdk = {};</script>"
+        assert ui_assets.load_product_app_html() == _VALID_HTML
 
 
 class TestLoadProductAppHtml:
     """load_product_app_html() が load_search_app_html() と同じ壊れ方（ファイル欠落・
-    プレースホルダ異常）を同じ規律で吸収することの回帰テスト。
+    内容が HTML でない）を同じ規律で吸収することの回帰テスト。
 
     ロジック本体は共有ヘルパー _load_app_html に集約されているため（TestLoadSearchAppHtml
-    が既に「ファイル欠落」「</script 混入」「プレースホルダ数不一致」「正常系」の4パターンを
-    固定している）、ここでは商品詳細側のパス（PRODUCT_TEMPLATE_PATH）を差し替えても同じ
-    挙動になることだけを確認する。
+    が既に全パターンを固定している）、ここでは商品詳細側のファイル名でも同じ挙動になる
+    ことだけを確認する。
     """
 
-    def test_returns_none_when_files_missing(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(ui_assets, "PRODUCT_TEMPLATE_PATH", tmp_path / "missing.html")
-        monkeypatch.setattr(ui_assets, "VENDOR_SDK_PATH", tmp_path / "missing.js")
+    def test_returns_none_when_file_missing(self, monkeypatch, tmp_path):
+        _use_dist(monkeypatch, tmp_path)
 
         assert ui_assets.load_product_app_html() is None
 
-    def test_returns_none_without_raising_when_placeholder_count_is_wrong(
-        self, monkeypatch, tmp_path
-    ):
-        template_path = tmp_path / "product.html"
-        vendor_path = tmp_path / "mcp-app-sdk.js"
-        # プレースホルダが0個（誤って消された想定）。
-        template_path.write_text("<script>no placeholder here</script>", encoding="utf-8")
-        vendor_path.write_text("globalThis.__McpAppSdk = {};", encoding="utf-8")
-        monkeypatch.setattr(ui_assets, "PRODUCT_TEMPLATE_PATH", template_path)
-        monkeypatch.setattr(ui_assets, "VENDOR_SDK_PATH", vendor_path)
+    def test_returns_none_when_content_is_not_html(self, monkeypatch, tmp_path):
+        (tmp_path / "product.html").write_text("not html at all", encoding="utf-8")
+        _use_dist(monkeypatch, tmp_path)
 
         assert ui_assets.load_product_app_html() is None
 
-    def test_returns_html_when_files_are_valid(self, monkeypatch, tmp_path):
-        template_path = tmp_path / "product.html"
-        vendor_path = tmp_path / "mcp-app-sdk.js"
-        template_path.write_text(
-            f"<script>{ui_assets.PLACEHOLDER}</script>", encoding="utf-8"
-        )
-        vendor_path.write_text("globalThis.__McpAppSdk = {};", encoding="utf-8")
-        monkeypatch.setattr(ui_assets, "PRODUCT_TEMPLATE_PATH", template_path)
-        monkeypatch.setattr(ui_assets, "VENDOR_SDK_PATH", vendor_path)
+    def test_broken_file_logs_warning(self, monkeypatch, tmp_path, caplog):
+        (tmp_path / "product.html").write_text("", encoding="utf-8")
+        _use_dist(monkeypatch, tmp_path)
 
-        html = ui_assets.load_product_app_html()
+        with caplog.at_level(logging.WARNING, logger="app.mcp_server.ui_assets"):
+            assert ui_assets.load_product_app_html() is None
 
-        assert html == "<script>globalThis.__McpAppSdk = {};</script>"
+        assert len(caplog.records) == 1
 
+    def test_returns_file_content_unchanged(self, monkeypatch, tmp_path):
+        (tmp_path / "product.html").write_text(_VALID_HTML, encoding="utf-8")
+        _use_dist(monkeypatch, tmp_path)
 
-class TestProductTemplateFile:
-    """product.html（静的資産そのもの）にちょうど1個のプレースホルダがあることの固定。
-
-    search.html と同じ契約を新しいテンプレートにも要求しないと、build_app_html が本番の
-    起動時にだけ ValueError を出し、load_product_app_html() がそれを飲み込んで
-    「vendor JS が無いときと同じ」フォールバックへ静かに落ちる（気づきにくい劣化）。
-    """
-
-    def test_has_exactly_one_placeholder(self):
-        template = ui_assets.PRODUCT_TEMPLATE_PATH.read_text(encoding="utf-8")
-
-        assert template.count(ui_assets.PLACEHOLDER) == 1
+        assert ui_assets.load_product_app_html() == _VALID_HTML
 
 
 class TestBuildSearchUiItems:

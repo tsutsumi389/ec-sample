@@ -20,6 +20,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      # /mcp の画面部分（MCP Apps の View）をビルドするコンテナ。**healthy を待つ**のは、
+      # backend が `ui/dist/*.html` を apps_ui.py の **import 時に一度だけ**読むため。
+      # dist が揃う前に起動すると、その回の起動はずっと UI 無しの素のツール登録に落ちた
+      # ままになる（フォールバック自体は正常な挙動で /mcp は 11 ツールのまま動くが、
+      # 開発中はいつまでも UI が付かない）。待たせて確実に UI を付けるほうを取る。
+      mcp-apps:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://ec:ecpass@db:5432/ecdb
       # JWT の署名鍵。compose が同ディレクトリの .env から読む（`make secret` が生成）。
@@ -33,7 +40,56 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # `--reload-include '*.html'` が必須。uvicorn の既定の監視対象は *.py だけなので、
+    # mcp-apps が ui/dist/*.html を書き換えても backend は再起動せず、import 時に読んだ
+    # 古い View を配り続ける。既定の *.py は外れない（watchfiles のフィルタに追加される
+    # 形）。リスト形式で書くのは、'*.html' がシェルにも compose にも展開されないことを
+    # 一目で保証するため。**requirements.txt の `uvicorn[standard]`（= watchfiles）が
+    # 前提**で、素の uvicorn に落とすと StatReload になり --reload-include は warning を
+    # 出して無視される（HTML の変更が反映されない静かな劣化になる）。
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--reload", "--reload-include", "*.html"]
+
+  # /mcp の画面部分（MCP Apps の View）だけを持つコンテナ。MCPServer 本体・11ツール・
+  # 在庫/価格/購入可否の判定・confirm_token・`_meta.ui` の組み立ては backend（Python）に
+  # 残っており、ここは iframe の中で描画される TypeScript を単一ファイル HTML 2枚
+  # （search.html / product.html）へビルドするだけ。ポートは公開しない。
+  mcp-apps:
+    build: ./mcp-apps
+    volumes:
+      - ./mcp-apps:/app
+      # node_modules は匿名ボリュームでコンテナ側に隔離する（frontend と同じ流儀）。
+      # **外してはならない**——bind mount 側に置くと alpine 用の esbuild / rollup の
+      # ネイティブバイナリがホストの mcp-apps/node_modules に降り、ホストで
+      # `npm run build` した瞬間に「このプラットフォーム用のバイナリが無い」で壊れる
+      # （逆向きも同じ）。隔離しておけば、ホストとコンテナのどちらからでもビルドできる。
+      # 中身はイメージの /app/node_modules（Dockerfile の npm install）で初期化される。
+      # **この隔離が効くのは bind mount 側だけ**で、イメージのビルド（`COPY . .` が
+      # ホストの node_modules を吸い込む経路）は mcp-apps/.dockerignore が受け持つ。
+      # 匿名ボリュームは汚れたイメージの中身で初期化されるので、片方だけでは守れない。
+      - /app/node_modules
+      # 出力先。Vite の build.outDir は mcp-apps/ からの相対で
+      # `../backend/app/mcp_server/ui/dist` を指しているので、`/app/..` = `/` の下に
+      # backend/app/mcp_server/ui を置くとコンテナ内でも `/backend/app/mcp_server/ui/dist`
+      # に解決される。**ホストで npm run build したときとまったく同じ相対パスが同じ場所へ
+      # 出る**ようにするための配置で、だから出力先を環境変数で切り替える必要がない。
+      # マウント位置を変えたり外したりしないこと（Vite 側の設定と対になっている）。
+      - ./backend/app/mcp_server/ui:/backend/app/mcp_server/ui
+    # `npm run dev` は watch ビルド。常駐してソースの変更を拾い続ける（backend 側は
+    # --reload-include '*.html' でその書き換えを拾って再起動する）。
+    command: npm run dev
+    healthcheck:
+      # dist の2枚が「存在して空でない」ことだけを見る。-f ではなく -s にしてあるのは、
+      # ビルド途中の0バイトを healthy と誤判定しないため。中身が HTML として妥当かの
+      # 判定は backend の ui_assets.py が持つ（分担を二重にしない）。
+      test: ["CMD-SHELL", "test -s /backend/app/mcp_server/ui/dist/search.html && test -s /backend/app/mcp_server/ui/dist/product.html"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      # 初回は View を2枚ビルドし終えるまで healthy にならない（start_period 中の失敗は
+      # retries を消費しない）。依存のインストールはイメージのビルド時に済んでいるが、
+      # そのイメージが無い環境では docker build から始まるぶんだけ余計に掛かる。
+      start_period: 180s
 
   frontend:
     build: ./frontend

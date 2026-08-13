@@ -42,8 +42,9 @@ mcp = MCPServer(
 
 tools.register(mcp)
 checkout.register(mcp)
-# apps_ui.apps が search_products / get_product を UI 付きで登録できていれば（= vendor JS
-# が取得済みで import 時点の登録が成功していれば）そのツールについては何もしない。登録
+# apps_ui.apps が search_products / get_product を UI 付きで登録できていれば（= mcp-apps が
+# 書き出した ui/dist の View HTML が読めて、import 時点の登録が成功していれば）そのツール
+# については何もしない。登録
 # できていないツールだけ、従来どおり素のツールとして登録する（CLAUDE.md の「付随機能の
 # 失敗で店を止めない」規律。2ツールの成否は独立に判定される——apps_ui.py 参照）。
 apps_ui.register_fallback(mcp)

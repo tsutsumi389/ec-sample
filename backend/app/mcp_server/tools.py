@@ -361,7 +361,7 @@ GET_PRODUCT_ANNOTATIONS = hints("商品の詳細を見る")
 def register(mcp: MCPServer) -> None:
     # search_products と get_product はここでは登録しない。apps_ui.py が
     # SEARCH_PRODUCTS_DESCRIPTION/ANNOTATIONS・GET_PRODUCT_DESCRIPTION/ANNOTATIONS を
-    # 使って UI 付きで登録する（vendor JS が無ければ apps_ui.register_fallback() が
+    # 使って UI 付きで登録する（ui/dist の View HTML が無ければ apps_ui.register_fallback() が
     # 同じ定数で素登録する）。ここで add_tool すると、ToolManager.add_tool() は
     # 同名ツールの再登録を「先勝ち＋警告ログのみ」で処理するため、後から来る
     # apps_ui.py 側の UI 付き登録が黙って捨てられ、UI が一生付かない（例外もログも

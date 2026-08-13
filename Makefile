@@ -2,8 +2,10 @@
 COMPOSE := docker compose
 
 .PHONY: help up up-d build down stop restart logs logs-backend logs-frontend ps \
-        backend-shell frontend-shell db-shell lint reset clean fonts secret \
-        migrate migrate-new migrate-down migrate-status mcp-check mcp-app-sdk
+        logs-mcp-apps backend-shell frontend-shell mcp-apps-shell db-shell \
+        lint reset clean fonts secret \
+        migrate migrate-new migrate-down migrate-status mcp-check mcp-ui-build \
+        mcp-typecheck
 
 help: ## このヘルプを表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -17,18 +19,6 @@ fonts: frontend/app/fonts.css ## Webフォントを取得（未取得のとき�
 
 frontend/app/fonts.css:
 	node frontend/scripts/fetch-fonts.mjs
-
-## --- MCP App SDK（vendor） -----------------------------------------
-# search_products の検索結果をカード一覧で描く View（MCP Apps）が使うクライアント側 SDK
-# （@modelcontextprotocol/ext-apps の app-with-deps.js を変換したもの）をホスト側で
-# 1回だけ取得する。詳細は backend/scripts/fetch-mcp-app-sdk.mjs。
-# **up / up-d の前提条件には入れていない**（fonts / secret とは違う）。取得しなくても
-# /mcp は起動できる——vendor が無ければ search_products は UI 無しの素のツールとして
-# 登録される（backend/app/mcp_server/apps_ui.py 参照）。取得すれば次の起動から UI が付く。
-mcp-app-sdk: backend/app/mcp_server/ui/vendor/mcp-app-sdk.js ## MCP App SDK（vendor JS）を取得（未取得のときだけ走る）
-
-backend/app/mcp_server/ui/vendor/mcp-app-sdk.js:
-	node backend/scripts/fetch-mcp-app-sdk.mjs
 
 ## --- シークレット ------------------------------------------------
 # JWT の署名鍵はデプロイごとに違う乱数でなければならない。HS256（対称鍵）なので、
@@ -72,12 +62,18 @@ logs-backend: ## バックエンドのログを追跡
 logs-frontend: ## フロントエンドのログを追跡
 	$(COMPOSE) logs -f frontend
 
+logs-mcp-apps: ## MCP Apps（/mcp の画面部分）のビルドログを追跡
+	$(COMPOSE) logs -f mcp-apps
+
 ## --- コンテナ操作 ------------------------------------------------
 backend-shell: ## バックエンドコンテナでシェルを開く
 	$(COMPOSE) exec backend bash
 
 frontend-shell: ## フロントエンドコンテナでシェルを開く
 	$(COMPOSE) exec frontend sh
+
+mcp-apps-shell: ## MCP Apps コンテナでシェルを開く
+	$(COMPOSE) exec mcp-apps sh
 
 db-shell: ## PostgreSQL に psql で接続
 	$(COMPOSE) exec db psql -U ec -d ecdb
@@ -114,16 +110,39 @@ mcp-check: ## MCP サーバー(/mcp)の疎通確認（ツール一覧・UIリソ
 		| python3 -c 'import json,sys; t=json.load(sys.stdin)["result"]["tools"]; print(f"{len(t)} tools:"); [print("  -", x["name"]) for x in t]' \
 		|| { echo '--- /mcp のツール一覧を取得できませんでした。上のエラーが原因です。まず make logs-backend に MCP の読み込みエラーが出ていないか、依存を足したあと make up-d でイメージを作り直したかを確認してください'; exit 1; }
 	@echo
-	@# search_products は vendor JS（make mcp-app-sdk）が取得済みのときだけ UI 付きで
-	@# 登録され、text/html;profile=mcp-app の ui:// リソースが resources/list に載る。
-	@# 未取得のときは apps_ui.py が素のツール登録にフォールバックする正常な状態なので、
-	@# ここは「なし」を表示するだけで exit 1 にはしない（mcp-check 自体を失敗させない）。
+	@# search_products / get_product は、mcp-apps コンテナがビルドした View
+	@# （backend/app/mcp_server/ui/dist/{search,product}.html）を backend が読めたときだけ
+	@# UI 付きで登録され、text/html;profile=mcp-app の ui:// リソースが resources/list に
+	@# 載る。読めないときは apps_ui.py が素のツール登録にフォールバックする正常な状態
+	@# （ツールは 11 本のまま）なので、ここは「なし」を表示するだけで exit 1 にはしない
+	@# （mcp-check 自体を失敗させない）。dist は backend の import 時に一度だけ読まれる
+	@# ので、ビルドが後から通った場合は backend の再起動が要る点にも注意。
 	@curl -sS -X POST http://localhost:8000/mcp \
 		-H 'Content-Type: application/json' \
 		-H 'Accept: application/json, text/event-stream' \
 		-d '{"jsonrpc":"2.0","id":2,"method":"resources/list"}' \
 		| sed -n 's/^data: //p' \
-		| python3 -c 'import json,sys; r=json.load(sys.stdin)["result"]["resources"]; ui=[x["uri"] for x in r if x.get("mimeType")=="text/html;profile=mcp-app"]; print("UIリソース:", ", ".join(ui) if ui else "なし（make mcp-app-sdk で取得できます）")'
+		| python3 -c 'import json,sys; r=json.load(sys.stdin)["result"]["resources"]; ui=[x["uri"] for x in r if x.get("mimeType")=="text/html;profile=mcp-app"]; print("UIリソース:", ", ".join(ui) if ui else "なし（make logs-mcp-apps でビルドの状況を確認できます）")'
+
+## --- MCP Apps（/mcp の画面部分） ----------------------------------
+# View（検索結果カード一覧・商品詳細パネル）は mcp-apps コンテナが watch ビルド
+# （`npm run dev`）で常時作り直しているので、通常このターゲットは要らない。取りこぼしたときや、
+# 依存を入れ替えた直後に手で流し直すためのもの。出力先は
+# backend/app/mcp_server/ui/dist/{search,product}.html。
+# **up / up-d の前提条件には入れないこと**（fonts / secret とは違う）。フォントを
+# ホスト側の前提条件にしてあるのは「コンテナから取りに行くと失敗するから」であって、
+# View のビルドはコンテナの中で完結する——ここに前提条件を足すと、ホストに Node が
+# 必要という環境依存を復活させることになる。
+mcp-ui-build: ## MCP Apps の View を1回だけビルドし直す
+	$(COMPOSE) run --rm mcp-apps npm run build
+
+# **ビルドは型を見ない。** Vite 8 は rolldown/oxc で型注釈を落とすだけで検査しないので、
+# 型エラーがあっても `npm run build` は成功し、logs-mcp-apps にも何も出ない（実行時まで
+# 残る）。フロントの `make lint` にあたるものがここに無いと、mcp-apps だけが素通りになる。
+# ホストで `npm run typecheck` を叩かせないのは mcp-ui-build と同じ理由——ホストに Node が
+# 必要という環境依存を復活させないため。
+mcp-typecheck: ## MCP Apps の View を型検査（tsc --noEmit）
+	$(COMPOSE) run --rm mcp-apps npm run typecheck
 
 ## --- 開発補助 ----------------------------------------------------
 lint: ## フロントエンドの Lint を実行

@@ -22,8 +22,9 @@
 `mcp.add_tool()` を外してあり（tools.py 側にもコメントを残してある）、UI 付き登録は
 必ずここだけが行う。
 
-**vendor JS（MCP App SDK）が無ければ UI を諦める。** `ui_assets.load_search_app_html()` /
-`load_product_app_html()` が None を返す（テンプレートまたは vendor JS が読めない）場合、
+**ビルド済みの View HTML（ui/dist/*.html）が無ければ UI を諦める。**
+`ui_assets.load_search_app_html()` / `load_product_app_html()` が None を返す
+（dist の HTML が読めない、または読めても内容が壊れている）場合、
 その 1 ツールぶんは `apps` に何も登録しない（＝もう片方が登録済みでも `Apps()` の状態は
 そのツールについてだけ空のまま。`MCPServer(extensions=[apps])` の構築は成功する——
 `apps.tools()` の ValueError は「ツールだけ登録してリソースを登録しなかった」ときにしか
@@ -33,8 +34,11 @@
 CLAUDE.md の「付随機能の失敗で店を止めない」規律（マイグレーション 0001/0002 を分けて
 あるのと同じ）を Apps 拡張にも適用したもの。2 ツールの成否は独立している——片方の UI
 登録だけ失敗しても、もう片方の UI 登録・フォールバック登録には影響しない（後述の
-`_ui_registered_tools` 参照）。`make mcp-app-sdk` で vendor JS を取得すれば、次回の
-起動から両方に UI が付く。
+`_ui_registered_tools` 参照）。View 本体は別コンテナ `mcp-apps/`（TypeScript + Vite）が
+持っており、そこが `ui/dist/{search,product}.html` を書き出せば次の起動から両方に UI が
+付く（backend は `uvicorn --reload-include '*.html'` で dist の書き換えを拾って再起動
+する——HTML はこのモジュールの **import 時に一度だけ**読まれるため、再起動しなければ
+古い UI が配られ続ける）。
 
 **client_supports_apps で分岐しないこと。** このサーバーの構成（stateless_http=True）
 では常に False を返す（initialize で送られる ClientCapabilities が、リクエストごとに
