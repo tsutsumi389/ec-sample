@@ -1,0 +1,167 @@
+/* ---- 検索結果カード一覧（search）固有のスタイル ---------------------------
+   **両 View に同じ宣言で存在するものは shared/theme.css が持つ。** ここに置くのは
+   search にしか無いもの（グリッド・カード・並び替え・ページング）と、product と
+   値が違うもの（#app の max-width、.page-btn の padding）だけ。
+
+   規律は shared/theme.css と同じ:
+   - spacing（padding / margin / gap / grid の寸法）はホストから配られない変数なので
+     固定 px で書く（仕様書 Theming 節: "Spacing intentionally excluded"）。
+   - 色・書体・角丸・影・線幅は必ず var(--x, light-dark(明, 暗)) を経由する。変数名は
+     SDK が受け付ける 76 個から選ぶ（それ以外の名前を発明してもフォールバックしか
+     当たらない）。
+   - display を持つ要素には [hidden] を明示する（display: flex / grid は [hidden] の
+     既定 display: none に勝ってしまう）。 */
+
+/* padding: 16px と margin: 0 auto は shared/theme.css が持つ。max-width だけが
+   View ごとに違う（search 720px / product 560px）。 */
+#app {
+  max-width: 720px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.sort-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sort-label {
+  font-size: var(--font-text-xs-size, 12px);
+  color: var(--color-text-secondary, light-dark(#52525b, #d4d4d8));
+}
+
+#sort-select {
+  padding: 5px 8px;
+  border-radius: var(--border-radius-sm, 6px);
+  border: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#e4e4e7, #3f3f46));
+  background: var(--color-background-secondary, light-dark(#fafafa, #27272a));
+}
+
+/* .page-btn:disabled は shared/theme.css にある（同じ見た目）。 */
+#sort-select:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-text-xs-size, 12px);
+  color: var(--color-text-tertiary, light-dark(#71717a, #a1a1aa));
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+  transition: opacity .15s ease;
+}
+
+.grid[hidden] { display: none; }
+
+/* 通信中は「今出ているのは古い結果」であることを薄さで示しつつ、**中身は消さない**。
+   消してしまうと再検索が失敗したときに戻る先が無くなる（元の表示に戻せることが
+   バナー型エラーの前提）。 */
+.grid[data-loading="true"] { opacity: .45; pointer-events: none; }
+
+/* 地色・枠・角丸・影・display は shared/theme.css の .card, .panel が持つ。
+   ここにあるのは「クリックできる <button> であること」に由来する分だけ。 */
+.card {
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+
+.card:hover { border-color: var(--color-border-secondary, light-dark(#d4d4d8, #52525b)); }
+
+.card:focus-visible {
+  outline: 2px solid var(--color-ring-primary, light-dark(#3b82f6, #60a5fa));
+  outline-offset: 2px;
+}
+
+.card:disabled { opacity: .6; cursor: default; }
+
+/* 買えない商品は理由の文字を一段強く見せる。**強調するだけで文言は作らない**——
+   availability の文言はサーバー（services/cart.py）が唯一の源。 */
+.card[data-purchasable="false"] .card-availability { font-weight: var(--font-weight-medium, 500); }
+
+.card-body {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.card-category {
+  font-size: var(--font-text-xs-size, 11px);
+  color: var(--color-text-tertiary, light-dark(#71717a, #a1a1aa));
+}
+
+.card-name {
+  font-size: var(--font-text-sm-size, 13px);
+  font-weight: var(--font-weight-semibold, 600);
+  overflow-wrap: anywhere;
+}
+
+.card-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.card-price {
+  font-size: var(--font-text-md-size, 15px);
+  font-weight: var(--font-weight-bold, 700);
+}
+
+.card-list-price {
+  font-size: var(--font-text-xs-size, 11px);
+  color: var(--color-text-tertiary, light-dark(#a1a1aa, #71717a));
+  text-decoration: line-through;
+}
+
+.card-rating {
+  font-size: var(--font-text-xs-size, 11px);
+  color: var(--color-text-secondary, light-dark(#52525b, #d4d4d8));
+}
+
+/* margin-top: auto でカードの高さが揃わないときも最下段へ落とす。
+   色分け（[data-ok]）は shared/theme.css が持つ。 */
+.card-availability {
+  margin-top: auto;
+  padding-top: 6px;
+  font-size: var(--font-text-xs-size, 11px);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.pagination[hidden] { display: none; }
+
+/* padding は product 側（8px 16px）と違う。共通化のときに寄せないこと。 */
+.page-btn {
+  padding: 6px 14px;
+  border-radius: var(--border-radius-full, 999px);
+  border: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#e4e4e7, #3f3f46));
+  background: var(--color-background-secondary, light-dark(#fafafa, #27272a));
+  cursor: pointer;
+}
+
+.page-indicator {
+  font-size: var(--font-text-sm-size, 13px);
+  color: var(--color-text-secondary, light-dark(#52525b, #d4d4d8));
+}

@@ -1,0 +1,157 @@
+/* ---- 商品詳細パネル（get_product view）固有のスタイル ----------------------
+   **両 View に同じ宣言で存在していたものは src/shared/theme.css が持つ。**
+   ここに置くのは product にしか無いもの（.panel-* / .specs-* / .spec-*）と、
+   search と値が違うもの（#app の max-width、.header の並べ方、.page-btn の
+   padding）だけ。main.ts が theme.css → このファイルの順に import するので、
+   同じセレクタを書けばこちらが勝つ。
+
+   規律は theme.css と同じ:
+   - **余白（padding / margin / gap）は固定 px で書く。** spacing はホストから
+     配られない前提の変数（Apps の仕様書 Theming 節: "Spacing intentionally
+     excluded"）なので、var() を通しても永久にフォールバックしか当たらない。
+   - **色・書体・角丸・影・線幅は必ず var(--x, light-dark(明, 暗)) を経由する。**
+     変数名はホストが流し込める 76 個から選ぶ（新しい名前を発明しない）。
+   - **display を持つ要素には [hidden] を明示する。** display: flex は [hidden] の
+     既定 display: none に勝ってしまうため。 */
+
+/* max-width だけが View ごとに違う（search 720px / product 560px）。padding 16px と
+   margin: 0 auto は theme.css 側にあり、padding は shared/host.ts の
+   BASE_PADDING_PX と対で持っている値なので**こちらに書き写さないこと**。 */
+#app {
+  max-width: 560px;
+}
+
+/* 見出し（商品名）と「再読み込み」を両端に置く。search の View は並び替えの行を
+   下に積むので column だが、こちらは横1行。 */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* .panel の地色・枠・角丸・影・display: flex は theme.css が .card と共通で持つ。
+   ここに [hidden] だけを足すのは、display: flex を持つ要素だから。 */
+.panel[hidden] { display: none; }
+
+.panel-body {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.panel-category {
+  font-size: var(--font-text-xs-size, 11px);
+  color: var(--color-text-tertiary, light-dark(#71717a, #a1a1aa));
+}
+
+.panel-category[hidden] { display: none; }
+
+.panel-name {
+  margin: 0;
+  font-size: var(--font-heading-sm-size, 18px);
+  font-weight: var(--font-weight-semibold, 600);
+  overflow-wrap: anywhere;
+}
+
+.panel-sku {
+  font-size: var(--font-text-xs-size, 11px);
+  color: var(--color-text-tertiary, light-dark(#71717a, #a1a1aa));
+}
+
+.panel-sku[hidden] { display: none; }
+
+.panel-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.panel-price {
+  /* 価格だけは商品名（--font-heading-sm-size）より一段大きく見せたいが、固定 px で
+     書くとホストが配るフォントサイズ変数（applyHostStyleVariables）に追随せず、
+     文字を拡大している利用者の画面でここだけ取り残される。倍率で持たせて、
+     他の宣言と同じく必ずホスト変数を経由させる。 */
+  font-size: calc(var(--font-heading-sm-size, 18px) * 1.22);
+  font-weight: var(--font-weight-bold, 700);
+}
+
+.panel-list-price {
+  font-size: var(--font-text-sm-size, 13px);
+  color: var(--color-text-tertiary, light-dark(#a1a1aa, #71717a));
+  text-decoration: line-through;
+}
+
+.panel-list-price[hidden] { display: none; }
+
+.panel-rating {
+  font-size: var(--font-text-sm-size, 13px);
+  color: var(--color-text-secondary, light-dark(#52525b, #d4d4d8));
+}
+
+/* availability は「購入できます」/ 買えない理由の完成文がサーバーから来る
+   （backend の services/cart.py の availability_reason_for_status が唯一の源）。
+   **View が持つのは見た目だけで、文言は自作しない。** ここは字の大きさと太さ、
+   成功色／危険色の切り替え（theme.css の [data-ok] 側）に限る。 */
+.panel-availability {
+  font-size: var(--font-text-sm-size, 13px);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.panel-description {
+  margin: 6px 0 0;
+  font-size: var(--font-text-sm-size, 13px);
+  color: var(--color-text-primary, light-dark(#18181b, #f4f4f5));
+  /* description は改行を含みうる自由文。innerHTML は使わないので、改行の見た目は
+     textContent のままここで pre-wrap にして表現する。 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.panel-description[hidden] { display: none; }
+
+.specs-heading {
+  margin: 10px 0 4px;
+  font-size: var(--font-text-sm-size, 13px);
+  font-weight: var(--font-weight-semibold, 600);
+}
+
+/* specs は "ラベル: 値" に潰した文字列の配列（views.ProductDetail.specs）。
+   label/value に分割しての表形式にはしない——CLAUDE.md の「label/value の
+   2キーを増やさない」規律に、表示側も倣う。 */
+.spec-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.spec-item {
+  font-size: var(--font-text-sm-size, 13px);
+  color: var(--color-text-secondary, light-dark(#52525b, #d4d4d8));
+  padding: 6px 0;
+  /* この罫だけフォールバックが他所の枠線（#e4e4e7 / #3f3f46）より薄い。
+     行と行の仕切りであって器の輪郭ではないため。**共通化のときに寄せないこと。** */
+  border-top: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#f4f4f5, #2a2a2e));
+  overflow-wrap: anywhere;
+}
+
+.spec-item:first-child { border-top: none; }
+
+.panel-actions { margin-top: 12px; }
+
+/* padding が search の View（6px 14px）と違う。無効時の見た目は theme.css 側。 */
+.page-btn {
+  padding: 8px 16px;
+  border-radius: var(--border-radius-full, 999px);
+  border: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#e4e4e7, #3f3f46));
+  background: var(--color-background-secondary, light-dark(#fafafa, #27272a));
+  cursor: pointer;
+}
+
+.page-btn[hidden] { display: none; }

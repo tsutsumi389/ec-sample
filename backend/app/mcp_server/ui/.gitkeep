@@ -1,0 +1,6 @@
+このディレクトリを git に残すためのファイル（中身は読まれない）。
+
+ui/ は mcp-apps コンテナ（TypeScript + Vite）が View をビルドして書き出す dist/ の親で、
+docker compose がここをそのままコンテナへ bind mount する。dist/ は .gitignore 済みの
+生成物なので、これが無いと新規チェックアウトで ui/ ごと存在しなくなり、compose が
+マウント元を root 所有で勝手に作ってしまう（以降ホスト側から書けなくなる）。

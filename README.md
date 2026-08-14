@@ -8,6 +8,7 @@
 - **バックエンド**: Python 3.12 + FastAPI + SQLAlchemy 2.0 + Pydantic v2
 - **データベース**: PostgreSQL 16（pgvector 拡張）
 - **AIレコメンド**: Ollama + pgvector + セマンティックID（商品埋め込みの残差量子化）
+- **MCP Apps の View**: TypeScript + Vite（`/mcp` の画面部分だけを単一ファイル HTML にビルドする別コンテナ）
 - すべて Docker コンテナ上で動作します。
 
 ## 起動方法
@@ -15,8 +16,11 @@
 事前に [Docker](https://www.docker.com/) がインストールされている必要があります。
 
 ```bash
-docker compose up --build
+make up      # フォアグラウンドで起動（ログを表示）
+make up-d    # バックグラウンドで起動
 ```
+
+`make up` / `make up-d` は、未生成のときだけ `make secret`（JWT の署名鍵を `.env` に生成）と `make fonts`（自己ホストの和文フォントを取得）を先に走らせます。**`docker compose up` を直接叩く場合は、先にこの2つを実行してください**（署名鍵が無いとバックエンドは起動時に停止します）。
 
 初回起動時に PostgreSQL のテーブル作成（マイグレーション適用）と初期データ（管理者/一般ユーザー、商品10件）の投入が自動的に行われます。
 
@@ -105,14 +109,31 @@ Claude Code などの MCP クライアントから、商品検索・カート操
 
 ### 登録
 
-MCP 用に依存（`mcp` / `sse-starlette`）が増えたため、**既存環境からの更新時は必ずイメージを作り直してください**。`make restart` では `ModuleNotFoundError: No module named 'mcp'` のまま直りません。
+MCP 用に依存（`mcp` / `sse-starlette`）が増えたことに加え、画面部分をビルドする `mcp-apps` サービスも増えたため、**既存環境からの更新時は必ずイメージを作り直してください**。`make restart` では `ModuleNotFoundError: No module named 'mcp'` のまま直らず、新しいサービスも立ち上がりません。
 
 ```bash
 make up-d      # --build 付きで起動（イメージを作り直す）
 make mcp-check # /mcp が応答し、ツールが 11 本見えることを確認
 ```
 
-`search_products` は MCP Apps 対応のホスト（例: Claude Code）で使うと、検索結果をカード一覧（画像・価格・評価・在庫状況）で表示できます。表示にはクライアント側の UI SDK が要るため、`make mcp-app-sdk` を一度実行して `backend/app/mcp_server/ui/vendor/mcp-app-sdk.js` を取得してください（`.gitignore` 済みなのでリポジトリには含まれません）。未取得のままでも `/mcp` は起動し、ツールは 11 本とも従来どおりテキストの `structuredContent` で動作します（カード UI だけが付きません）。
+初回は `mcp-apps` のイメージビルド（依存のインストール）と View の初回ビルドが終わるまで backend の起動を待ちます（1〜2分）。進み具合は `make logs-mcp-apps` で見られます。**View のビルドが失敗した場合も backend は待ち続ける**ので、いつまでも起動しないときは同じログを確認してください。
+
+### 画面部分（MCP Apps）は別コンテナ
+
+`search_products`（検索結果のカード一覧）と `get_product`（商品詳細のパネル）は、MCP Apps 対応のホスト（例: Claude Code）で使うと画像・価格・評価・在庫状況を含む UI で表示されます。
+
+**MCP サーバー本体はバックエンドに同居したままで、別コンテナになっているのは画面（View）だけです。** ツールの定義・在庫や価格の判定・購入の確認トークンはすべて `backend/app/mcp_server/` にあり、iframe の中で描画される TypeScript だけが `mcp-apps/`（TypeScript + Vite）に分かれています。`mcp-apps` コンテナは単一ファイルの HTML 2枚を `backend/app/mcp_server/ui/dist/{search,product}.html` に書き出し、backend はそれを読むだけです（`.gitignore` 済みの生成物なのでリポジトリには含まれません）。
+
+| コマンド | 内容 |
+|---|---|
+| `make logs-mcp-apps` | View のビルドログを追跡 |
+| `make mcp-ui-build` | View を1回だけビルドし直す |
+| `make mcp-typecheck` | View を型検査（`tsc --noEmit`。ビルドは型を見ません） |
+| `make mcp-apps-shell` | MCP Apps コンテナでシェルを開く |
+
+View を編集すると `mcp-apps` が自動で作り直し、backend が `--reload-include '*.html'` でその書き換えを拾って再起動します（HTML は起動時に一度だけ読まれるため、再起動しないと反映されません）。UI が載っているかは `make mcp-check` の「UIリソース」欄で確認できます。
+
+**compose では backend が `mcp-apps` の healthy（View が2枚とも書き出された状態）を待つため、ビルドが通らない間は backend 自体が起動しません。** http://localhost:8000 も 3000 も応答しないときは `make logs-mcp-apps` を見てください（backend は起動していないので `make logs-backend` には何も出ません）。UI 無しで 11 ツールが動くフォールバックが実際に効くのは、compose を通さず backend だけを動かした場合と、View はあるが中身が壊れている場合の2つです。
 
 カート操作と購入にはログインが必要です。トークンは REST の `POST /api/auth/login` で取得します（MCP 側に login ツールはありません。会話ログにパスワードを残さないためです）。
 
@@ -184,6 +205,7 @@ MCP 経由の操作は行動ログ（`analytics_events`）に記録されませ�
 ```
 ec-sample/
 ├── docker-compose.yml
-├── backend/    # FastAPI アプリケーション
-└── frontend/   # Next.js アプリケーション
+├── backend/    # FastAPI アプリケーション（MCP サーバー /mcp を含む）
+├── frontend/   # Next.js アプリケーション
+└── mcp-apps/   # MCP Apps の View（/mcp の画面部分。TypeScript + Vite）
 ```

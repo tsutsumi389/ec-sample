@@ -1,5 +1,9 @@
 """MCP Apps 用 UI アセットの純関数（DB・認証・ルーターに一切触れない）。
 
+View 本体（iframe の中で描画される画面）は別プロジェクト `mcp-apps/`（TypeScript +
+Vite）が持ち、単一ファイル HTML として `ui/dist/` へ書き出す。**このモジュールは
+その成果物を読むだけで、HTML を組み立てない。**
+
 apps_ui.py（Apps() への配線本体）から呼ばれる処理のうち、入出力だけで完結するものを
 ここに分けてある。apps_ui.py は app.mcp_server.tools を import しており、tools.py は
 app.routers 経由で app.auth を import する（app.auth はモジュール読み込み時点で
@@ -13,6 +17,10 @@ views.py（LLM 向け structuredContent の契約を持つモジュール）に�
 「重いものは一覧に出さない（画像は詳細ツールだけ）」と明言しており、画像URLを返す関数を
 並べて置くと、実際には別チャンネル（_meta.ui であって structuredContent ではない）
 なのにその規律に反しているように読めてしまうため。
+
+なお `_meta.ui` の組み立て（この2関数）は View を別コンテナへ切り出した後も backend に
+残っている。在庫・価格・購入可否の判定と同じく「何を渡すか」はサーバー側の契約であり、
+移したのは「どう描くか」だけ。
 """
 
 from __future__ import annotations
@@ -26,103 +34,109 @@ from app.config import FRONTEND_ORIGIN
 logger = logging.getLogger(__name__)
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
-TEMPLATE_PATH = UI_DIR / "search.html"
-PRODUCT_TEMPLATE_PATH = UI_DIR / "product.html"
-VENDOR_SDK_PATH = UI_DIR / "vendor" / "mcp-app-sdk.js"
 
-# search.html 側のプレースホルダ（<script type="module"> の中）と文字列を一致させること。
-PLACEHOLDER = "<!--MCP_APP_SDK-->"
+# mcp-apps コンテナ（TypeScript + Vite + vite-plugin-singlefile）が書き出す単一ファイル
+# HTML の置き場。backend はここを **読むだけ**で、一切書かない（.gitignore 済みなので
+# リポジトリにも入らない）。ビルドは mcp-apps 側の責務であり backend の起動条件ではない
+# ——揃っていなければ UI を諦めて素のツール登録に落ちる（_load_app_html 参照）。
+DIST_DIR = UI_DIR / "dist"
 
-
-def build_app_html(template: str, bundle_js: str) -> str:
-    """テンプレートの PLACEHOLDER を vendor バンドルへちょうど1回だけ差し替える。
-
-    プレースホルダは search.html の <script type="module"> タグの中に置かれている
-    （search.html 参照）。ここで <script> タグを新たに被せないのはそのため——被せると
-    外側のタグと二重になり構文が壊れる。
-
-    商品データなど未信頼のテキストは一切受け取らない（引数は template と bundle_js の
-    2つだけ）。UI リソースの HTML に商品データを焼き込まない設計はこの関数の引数リストが
-    根拠になっている。
-
-    Raises:
-        ValueError: bundle_js に "</script" が含まれる場合、または template 内の
-            プレースホルダがちょうど1回でない場合。
-
-    bundle_js に "</script" が含まれていたら、埋め込み先の <script> タグをその場で
-    閉じてしまい、以降の HTML（イベント配線・初期化処理）がブラウザにただのテキストとして
-    解釈される。fetch-mcp-app-sdk.mjs はハッシュを検証した実物だけを書き出すので通常は
-    起きないが、将来 vendor のビルド方式が変わって偶然この文字列を含むようになった場合に
-    備え、黙って壊れた HTML を配るよりここで検知して落とす。
-    """
-    if "</script" in bundle_js:
-        raise ValueError(
-            "MCP App SDK バンドルに '</script' が含まれています。"
-            "<script> タグを途中で閉じてしまうため埋め込めません。"
-        )
-    count = template.count(PLACEHOLDER)
-    if count != 1:
-        raise ValueError(
-            f"テンプレートのプレースホルダ {PLACEHOLDER!r} は1回だけ現れる必要があります"
-            f"（実際: {count}回）。search.html の構造が変わっていないか確認してください。"
-        )
-    return template.replace(PLACEHOLDER, bundle_js, 1)
+# ファイル名は mcp-apps 側の Vite の入口（rollupOptions.input）と一対一で対応する。
+# 片方だけ名前を変えると、backend は「ファイルが無い」と判断して無音でフォールバック
+# するので、名前をここに固定して対応関係を目で追えるようにしておく。
+SEARCH_APP_FILENAME = "search.html"
+PRODUCT_APP_FILENAME = "product.html"
 
 
-def _load_app_html(template_path: Path, *, label: str, tool_name: str) -> str | None:
-    """テンプレート・vendor バンドルを読んで完成品 HTML を返す共通処理。
+def _load_app_html(path: Path, *, label: str, tool_name: str) -> str | None:
+    """ビルド済みの View HTML を読んでそのまま返す共通処理。読めない・壊れていれば None。
 
-    テンプレート・vendor バンドルのどちらかが読めなければ None を返す。apps_ui.py は
-    これを「UI を諦めて素のツール登録へ切り替える」合図として使う——make mcp-app-sdk を
-    まだ走らせていない開発環境や、vendor 取得に失敗したままの環境でも /mcp 自体は
-    起動できる、という CLAUDE.md の「付随機能の失敗で店を止めない」規律をここが支える。
+    None は apps_ui.py にとって「UI を諦めて素のツール登録へ切り替える」合図。mcp-apps が
+    まだ dist を書き出していない環境（初回起動中・compose を通さず backend だけ動かした
+    場合・pytest）でも /mcp 自体は 11 ツールで起動できる、という CLAUDE.md の
+    「付随機能の失敗で店を止めない」規律をここが支える。
 
-    ここで拾うのは OSError（ファイルが単に無い＝想定内。make mcp-app-sdk 未実行の
-    開発環境で毎回起きるので無音でよい）だけでなく、build_app_html() が投げる
-    ValueError（vendor バンドルに "</script" が混入している／テンプレートの
-    プレースホルダが1個でない＝想定外の設定ミス）も含める。ValueError まで
-    OSError と同様に握りつぶさないと、apps_ui.py のモジュール import が
-    ValueError で失敗し、`from app.mcp_server.server import mcp` ごと落ちて
-    /mcp 全体（既存11ツール）が道連れになる——「付随機能の失敗で店を止めない」の
-    対象は「vendor JS が無い」だけで、「vendor JS が壊れている」まで含めるなら
-    ここで吸収しておく必要がある。ただし後者は make logs-backend で気づけるよう
-    warning を残す（前者は毎回鳴ると開発環境のログが埋まるので鳴らさない）。
+    **例外を外へ漏らさないこと。** ここから例外が出ると apps_ui.py のモジュール import が
+    失敗し、server.py の `from app.mcp_server import apps_ui, checkout, tools` ごと落ちて
+    /mcp 全体（既存11ツール）が道連れになる。View のビルドが少し崩れただけで店が止まる。
 
-    template_path は呼び出し元（load_search_app_html / load_product_app_html）の
-    引数として渡す。デフォルト引数値として束縛すると import 時点の値で凍結され、
-    テストの monkeypatch.setattr(ui_assets, "TEMPLATE_PATH", ...) が効かなくなる
-    （呼び出し元の関数本体で毎回モジュール属性を名前解決させ、それをここへ渡す形を
-    保つこと）。VENDOR_SDK_PATH はここでモジュール属性として直接参照しており、同じ
-    理由でこちらも monkeypatch が効く。
+    無音と警告を撃ち分ける（この2段は View を別コンテナへ移す前からの規律をそのまま
+    引き継いだもの）:
+      - OSError（ファイルがまだ無い）= 想定内。mcp-apps の初回ビルドが終わる前や、
+        compose を使わずに backend だけ動かしたときに毎回起きるので鳴らさない
+        （毎回鳴らすと開発環境のログが埋まり、本物の警告が埋もれる）。
+      - 内容が壊れている（空・<html> が無い・末尾が切れている・UTF-8 として読めない）
+        = 想定外の設定ミス、またはビルド途中の書きかけ。make logs-backend で気づける
+        よう warning を残す。**ここを無音にしないこと**（next/font が「失敗しても
+        ビルドを通して黙ってフォールバックに落ちる」ことをこの repo が嫌っているのと
+        同じ話）。
+
+    path は呼び出し元（load_search_app_html / load_product_app_html）の関数本体で
+    DIST_DIR を名前解決して渡す。デフォルト引数値として束縛すると import 時点の値で
+    凍結され、テストの monkeypatch.setattr(ui_assets, "DIST_DIR", ...) が効かなくなる。
     """
     try:
-        template = template_path.read_text(encoding="utf-8")
-        bundle_js = VENDOR_SDK_PATH.read_text(encoding="utf-8")
+        html = path.read_text(encoding="utf-8")
     except OSError:
+        # ファイルがまだ無い＝想定内。無音でフォールバックへ。
         return None
-    try:
-        return build_app_html(template, bundle_js)
-    except ValueError:
+    except UnicodeDecodeError:
+        # ビルド途中の書きかけを、マルチバイト文字の**途中で**読んだ場合。
+        # UnicodeDecodeError は ValueError の子であって OSError ではないので、上の
+        # except では捕まらない。**捕まえ損ねると例外がここから外へ出て apps_ui.py の
+        # モジュール import ごと落ち、server.py の
+        # `from app.mcp_server import apps_ui, checkout, tools` が失敗して /mcp が
+        # 丸ごと消える**（REST だけが生き残り、POST /mcp は 404 になる。実測済み）。
+        # dist の大半は ASCII なので、途中で切れた場合の大半は下の </html> 検査に
+        # 落ちて正しく処理される——**この分岐はその残りを同じ場所へ合流させるためだけに
+        # ある**。空文字にして下の検査へ渡し、警告の文言も1本に保つ。
+        html = ""
+
+    # vite-plugin-singlefile は完結した HTML 文書を1枚だけ吐く。ここで見るのは「文書として
+    # 体を成しているか」だけで、中身の妥当性は見ない（見ようとすると View の実装形式が
+    # backend 側へ漏れ、mcp-apps のビルド構成を変えるたびに backend を直す羽目になる）。
+    # 末尾（</html>）まで確認するのは、ビルド中の書きかけを読んでしまった場合を弾くため
+    # ——その場合は書き込み完了でもう一度 reload が掛かり、次の import で正しく読める
+    # （放っておいても自然に回復する）。
+    # **この3条件は mcp-apps/scripts/check-dist.ts の findHtmlProblems と対で持つ値。**
+    # 作り手（mcp-apps）の検査がこちらより緩いと、ビルドは緑のまま UI だけが消える。
+    # 片方だけ直さないこと。
+    if not html.strip() or "<html" not in html or "</html>" not in html:
         logger.warning(
-            "MCP App の%s UI（%s / %s）を組み立てられませんでした。"
-            "%s は UI 無しのツールとして登録します。詳細は原因の例外を参照してください。",
+            "MCP App の%s UI（%s）が壊れています"
+            "（空・不完全な HTML・UTF-8 として読めないバイト列のいずれか）。"
+            "%s は UI 無しのツールとして登録します。"
+            "mcp-apps のビルドが完了しているか（make logs-mcp-apps）を確認してください。",
             label,
-            template_path,
-            VENDOR_SDK_PATH,
+            path,
             tool_name,
-            exc_info=True,
         )
         return None
+    return html
 
 
 def load_search_app_html() -> str | None:
-    """検索 UI の完成品 HTML を返す。apps_ui.py の search_products 登録が使う。"""
-    return _load_app_html(TEMPLATE_PATH, label="検索", tool_name="search_products")
+    """検索 UI（ビルド済み）の HTML を返す。apps_ui.py の search_products 登録が使う。
+
+    **引数を取らないこと。** 商品データを渡す口がどこにも無いこと自体が、UI リソースの
+    HTML に個別のデータが焼き込まれない設計の根拠になっている（View を別コンテナへ移す
+    前は build_app_html(template, bundle_js) の引数が2つだけであることがその根拠だった）。
+    View は iframe 側の JS が app.ontoolresult で受け取った structuredContent / _meta.ui を
+    描画時に埋める。
+    """
+    return _load_app_html(
+        DIST_DIR / SEARCH_APP_FILENAME, label="検索", tool_name="search_products"
+    )
 
 
 def load_product_app_html() -> str | None:
-    """商品詳細 UI の完成品 HTML を返す。apps_ui.py の get_product 登録が使う。"""
-    return _load_app_html(PRODUCT_TEMPLATE_PATH, label="商品詳細", tool_name="get_product")
+    """商品詳細 UI（ビルド済み）の HTML を返す。apps_ui.py の get_product 登録が使う。
+
+    load_search_app_html と同じく引数を取らない（理由も同じ）。
+    """
+    return _load_app_html(
+        DIST_DIR / PRODUCT_APP_FILENAME, label="商品詳細", tool_name="get_product"
+    )
 
 
 def build_search_ui_items(items: list[Any]) -> list[dict[str, Any]]:
@@ -140,7 +154,7 @@ def build_search_ui_items(items: list[Any]) -> list[dict[str, Any]]:
     ページの2つのリンクを流す。
 
     呼び出し側（apps_ui.py）は search_products_with_raw_items が返す商品列をそのまま
-    渡すこと。structuredContent.items と同じ順序・同じ id になる（search.html は id で
+    渡すこと。structuredContent.items と同じ順序・同じ id になる（View は id で
     突き合わせるので順序自体は必須ではないが、揃えておく）。
     """
     result: list[dict[str, Any]] = []

@@ -1,0 +1,172 @@
+/* ---- ホストのテーマに乗るための共通スタイル -------------------------------
+   検索結果カード一覧（search）と商品詳細パネル（product）の **両方に同じ宣言で
+   存在していたものだけ**をここに置く。片方にしか無いもの、値が違うもの
+   （#app の max-width、.page-btn の padding など）は各 View の CSS が持つ。
+
+   **spacing（余白）はホストから配られない前提の変数なので、var() を使わず固定値で
+   書く**（Apps の仕様書 Theming 節: "Spacing intentionally excluded"）。
+   色・書体・角丸・影・線幅だけを var(--x, フォールバック) で参照し、ホストが値を
+   渡さない場合は light-dark() を使った既定値に落ちる。light-dark() の分岐は
+   document.documentElement の color-scheme に従う。ここは各 View の
+   <meta name="color-scheme" content="light dark"> と、shared/host.ts の
+   applyHostContext() が呼ぶ applyDocumentTheme() が両方担当する。
+
+   **ホストが流し込める CSS 変数名は SDK の union で 76 個に固定されている**
+   （--color-* / --font-* / --border-radius-* / --border-width-regular / --shadow-*）。
+   この 76 個以外の名前を var() で読んでも永久にフォールバックしか当たらないので、
+   新しい変数名を発明しないこと。
+
+   **display を持つ要素には [hidden] の指定を明示する。** display: flex / grid は
+   [hidden] の既定 display: none に勝ってしまうため、書き忘れると「hidden にしたのに
+   消えない」が起きる。View 側で display を持つ要素を足すときも同じ規律で。 */
+
+* , *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  background: var(--color-background-primary, light-dark(#ffffff, #18181b));
+  color: var(--color-text-primary, light-dark(#18181b, #f4f4f5));
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif);
+  font-size: var(--font-text-md-size, 15px);
+  line-height: 1.6;
+}
+
+/* select は search にしか無いが、無い側で当たっても害が無いのでまとめてある。 */
+button, select {
+  font: inherit;
+  color: inherit;
+}
+
+/* padding の 16px は shared/host.ts の BASE_PADDING_PX と同じ値。safe area が
+   届いたとき「既定の余白 + インセット」を JS 側で計算するので、**片方だけ
+   変えないこと**。max-width は View ごとに違う（search 720px / product 560px）ので
+   各 View の CSS で指定する。 */
+#app {
+  padding: 16px;
+  margin: 0 auto;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-heading-sm-size, 18px);
+  font-weight: var(--font-weight-bold, 700);
+  overflow-wrap: anywhere;
+}
+
+.text-btn {
+  flex: none;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  text-decoration: underline;
+  cursor: pointer;
+  color: inherit;
+}
+
+.text-btn:disabled { opacity: .5; cursor: not-allowed; }
+.text-btn[hidden] { display: none; }
+
+/* 再検索・再取得・リンク開放の失敗は「元の表示に戻せる」ように、既存のグリッド／
+   パネルを消さずにこのバナーだけを重ねて出す（初回読み込み失敗の全面エラーとは
+   別物。あちらは .state-message--error）。 */
+.banner-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: var(--border-radius-sm, 6px);
+  background: var(--color-background-danger, light-dark(#fef2f2, #450a0a));
+  color: var(--color-text-danger, light-dark(#b91c1c, #fca5a5));
+  font-size: var(--font-text-sm-size, 13px);
+}
+
+.banner-error[hidden] { display: none; }
+
+.main { margin-top: 14px; }
+
+.state-message {
+  text-align: center;
+  padding: 36px 12px;
+  color: var(--color-text-secondary, light-dark(#52525b, #d4d4d8));
+}
+
+.state-message--error {
+  color: var(--color-text-danger, light-dark(#b91c1c, #fca5a5));
+}
+
+.state-message[hidden] { display: none; }
+
+.retry-btn {
+  margin-top: 10px;
+  padding: 6px 16px;
+  border-radius: var(--border-radius-full, 999px);
+  border: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#e4e4e7, #3f3f46));
+  background: var(--color-background-secondary, light-dark(#fafafa, #27272a));
+  cursor: pointer;
+}
+
+.retry-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* .page-btn の padding は View ごとに違う（search 6px 14px / product 8px 16px）ので
+   基本形は各 View が持つ。無効時の見た目だけは共通。 */
+.page-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* 画像の器。search の .card-image と product の .panel-image は宣言が完全に同一。
+   クラス名は View 側の HTML と一対一で対応させたいので統合せず、セレクタを
+   並べる形で共有する。 */
+.card-image,
+.panel-image {
+  aspect-ratio: 4 / 3;
+  background: var(--color-background-tertiary, light-dark(#f4f4f5, #2a2a2e));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.card-image img,
+.panel-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.card-image .placeholder,
+.panel-image .placeholder {
+  font-size: var(--font-text-xs-size, 11px);
+  color: var(--color-text-tertiary, light-dark(#a1a1aa, #71717a));
+}
+
+/* カード（search、クリックできる <button>）とパネル（product、クリックしない
+   <article>）の共通部分。地色・枠・角丸・影はまったく同じ。
+   .card だけが持つ text-align / cursor / padding: 0 と、:hover / :focus-visible /
+   :disabled は search 側の CSS に置く。 */
+.card,
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-background-secondary, light-dark(#ffffff, #1f1f23));
+  border: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#e4e4e7, #3f3f46));
+  border-radius: var(--border-radius-lg, 14px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, .08));
+  overflow: hidden;
+}
+
+/* availability の色分け。**View がやってよいのはこの色分けだけで、文言は
+   サーバーが返した完成文をそのまま出す**（backend の services/cart.py の
+   availability_reason_for_status が唯一の源）。
+   暗色側の危険色が #f87171 なのは意図的で、.banner-error / .state-message--error
+   の #fca5a5 とは別の値。共通化のときに混ぜないこと。 */
+.card-availability[data-ok="true"],
+.panel-availability[data-ok="true"] {
+  color: var(--color-text-success, light-dark(#15803d, #4ade80));
+}
+
+.card-availability[data-ok="false"],
+.panel-availability[data-ok="false"] {
+  color: var(--color-text-danger, light-dark(#b91c1c, #f87171));
+}
