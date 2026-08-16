@@ -8,9 +8,12 @@
 // vite の JS API を呼び分ける。npm scripts に `vite build && vite build` と
 // 並べないのは、--watch を同じ形で扱いたいから（`&&` では1本目が終わらない）。
 //
-// エントリの一覧はここが持つ。dist に何が揃っていなければならないかは
-// scripts/check-dist.ts の EXPECTED_DIST_FILES が持ち、最後のビルドで突き合わせる
-// （片方だけ足して片方を忘れたら、その場でビルドが落ちる）。
+// **エントリの一覧を持つのはこのファイルだけ。** 「dist に何が揃っていなければ
+// ならないか」は scripts/check-dist.ts がこの一覧から `${entry}.html` として導出する
+// （MCP_APP_ENTRIES → vite.config.ts → checkDistPlugin({ entries })）。以前は
+// check-dist.ts 側にもファイル名を並べていたが、あちらは期待するファイルを1枚ずつ
+// 読むだけでディレクトリを列挙しないため、**ここにだけ足して向こうを忘れた場合は
+// ビルドが緑のまま通ってしまう**（新しい View が黙って検査を素通りする）。
 //
 // **dist を消す処理をここに足さないこと。** ビルドは毎回同じ2つのファイル名を
 // 上書きするだけなので溜まるものが無く、消すと「backend が読みに行った一瞬だけ
@@ -21,6 +24,10 @@ import { build } from "vite";
 
 const ENTRIES = ["search", "product"];
 const WATCH = process.argv.includes("--watch");
+
+// dist に揃っているべき成果物を check-dist.ts が導出するための一覧（上記）。
+// ループの外で1回だけ渡す。
+process.env.MCP_APP_ENTRIES = ENTRIES.join(",");
 
 try {
   for (const [index, entry] of ENTRIES.entries()) {

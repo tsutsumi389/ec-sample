@@ -11,12 +11,12 @@
      excluded"）なので、var() を通しても永久にフォールバックしか当たらない。
    - **色・書体・角丸・影・線幅は必ず var(--x, light-dark(明, 暗)) を経由する。**
      変数名はホストが流し込める 76 個から選ぶ（新しい名前を発明しない）。
-   - **display を持つ要素には [hidden] を明示する。** display: flex は [hidden] の
-     既定 display: none に勝ってしまうため。 */
+   - [hidden] の指定は要らない。theme.css の `[hidden] { display: none !important }` が
+     display: flex ごと一括で伏せる。 */
 
-/* max-width だけが View ごとに違う（search 720px / product 560px）。padding 16px と
-   margin: 0 auto は theme.css 側にあり、padding は shared/host.ts の
-   BASE_PADDING_PX と対で持っている値なので**こちらに書き写さないこと**。 */
+/* max-width だけが View ごとに違う（search 720px / product 560px）。padding と
+   margin: 0 auto は theme.css 側にあり、padding は safe area のインセットを
+   calc() で足し込む式になっているので**こちらに書き写さないこと**。 */
 #app {
   max-width: 560px;
 }
@@ -31,9 +31,7 @@
   margin-bottom: 4px;
 }
 
-/* .panel の地色・枠・角丸・影・display: flex は theme.css が .card と共通で持つ。
-   ここに [hidden] だけを足すのは、display: flex を持つ要素だから。 */
-.panel[hidden] { display: none; }
+/* .panel の地色・枠・角丸・影・display: flex は theme.css が .card と共通で持つ。 */
 
 .panel-body {
   padding: 14px 16px 16px;
@@ -42,12 +40,8 @@
   gap: 6px;
 }
 
-.panel-category {
-  font-size: var(--font-text-xs-size, 11px);
-  color: var(--color-text-tertiary, light-dark(#71717a, #a1a1aa));
-}
-
-.panel-category[hidden] { display: none; }
+/* .panel-category / .panel-sku は theme.css が .card-category とまとめて持つ
+   （3か所とも同じ宣言だった）。 */
 
 .panel-name {
   margin: 0;
@@ -55,13 +49,6 @@
   font-weight: var(--font-weight-semibold, 600);
   overflow-wrap: anywhere;
 }
-
-.panel-sku {
-  font-size: var(--font-text-xs-size, 11px);
-  color: var(--color-text-tertiary, light-dark(#71717a, #a1a1aa));
-}
-
-.panel-sku[hidden] { display: none; }
 
 .panel-price-row {
   display: flex;
@@ -84,8 +71,6 @@
   color: var(--color-text-tertiary, light-dark(#a1a1aa, #71717a));
   text-decoration: line-through;
 }
-
-.panel-list-price[hidden] { display: none; }
 
 .panel-rating {
   font-size: var(--font-text-sm-size, 13px);
@@ -110,8 +95,6 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-
-.panel-description[hidden] { display: none; }
 
 .specs-heading {
   margin: 10px 0 4px;
@@ -145,13 +128,8 @@
 
 .panel-actions { margin-top: 12px; }
 
-/* padding が search の View（6px 14px）と違う。無効時の見た目は theme.css 側。 */
+/* 角丸・枠・地色・cursor・無効時は theme.css。**padding だけが search の View
+   （6px 14px）と違う**ので、ここに残すのはこの1行だけ。 */
 .page-btn {
   padding: 8px 16px;
-  border-radius: var(--border-radius-full, 999px);
-  border: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#e4e4e7, #3f3f46));
-  background: var(--color-background-secondary, light-dark(#fafafa, #27272a));
-  cursor: pointer;
 }
-
-.page-btn[hidden] { display: none; }

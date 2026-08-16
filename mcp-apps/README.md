@@ -9,8 +9,10 @@ mcp-apps/                     ← ここ（View の実装とビルド）
   search.html / product.html  ← エントリ HTML（**root 直下に置くこと**。後述）
   src/<view>/*.ts, *.css      ← 各 View の実装
   src/shared/                 ← 2つの View で共通のもの
-  build.mjs                   ← vite を2回呼ぶビルドスクリプト
-  scripts/check-dist.ts       ← 成果物が自己完結しているかの検査
+  build.mjs                   ← vite をエントリごとに呼ぶビルドスクリプト。
+                                 **エントリの一覧（ENTRIES）を持つ唯一の場所**
+  scripts/check-dist.ts       ← 成果物が自己完結しているかの検査。dist に何が揃って
+                                 いるべきかは ENTRIES から `${entry}.html` で導出する
         ↓ 出力
 backend/app/mcp_server/ui/dist/search.html
 backend/app/mcp_server/ui/dist/product.html
@@ -56,10 +58,12 @@ make mcp-check      # /mcp のツール一覧と UI リソースの有無を確�
 型エラーがあっても `npm run build` は成功し、`make logs-mcp-apps` にも何も出ない。
 フロントの `make lint` にあたるのが `make mcp-typecheck` で、View を直したら必ず通すこと。
 
-ホストに Node がある環境なら `npm install && npm run build` でも同じものが出るが、
+ホストに Node がある環境なら `npm ci && npm run build` でも同じものが出るが、
 **手順としては勧めない**（ホストに Node が必要という環境依存を復活させないため。
 `Makefile` の `mcp-ui-build` のコメントも同じ理由でホスト実行を避けている）。
-ホストで `npm install` した場合、その `node_modules` は `mcp-apps/.dockerignore` が
+`npm install` ではなく `npm ci` なのは Dockerfile と同じ理由で、前者はロックファイルを
+書き換えうるため（イメージ・ホスト・リポジトリで入っている版が黙ってずれる）。
+ホストで入れた場合、その `node_modules` は `mcp-apps/.dockerignore` が
 イメージから除外する——除外しないと darwin 向けのネイティブバイナリが
 `COPY . .` でイメージに混ざる。
 

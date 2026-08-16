@@ -108,8 +108,23 @@ export interface ProductUiMeta {
   page_url: string;
 }
 
-/** search_products の sort 引数（tools.search_products の signature の写し）。 */
-export type SortKey = "newest" | "price_asc" | "price_desc" | "rating" | "recommended";
+/**
+ * search_products の sort 引数（tools.search_products の signature の写し）。
+ *
+ * **配列が源で、型はそこから導出する。** 実行時の検査（search の View の isSortKey）が
+ * 必要なので値の列は実体として要り、それと union 型を別々に書くと backend が並び順を
+ * 足したときに片方だけ古くなる——しかも tsc は両者を突き合わせないので
+ * `make mcp-typecheck` は緑のまま、新しい並び順が黙って既定へ落ちる。
+ */
+export const SORT_KEYS = [
+  "newest",
+  "price_asc",
+  "price_desc",
+  "rating",
+  "recommended",
+] as const;
+
+export type SortKey = (typeof SORT_KEYS)[number];
 
 /** search_products のツール引数。 */
 export interface SearchProductsArgs {

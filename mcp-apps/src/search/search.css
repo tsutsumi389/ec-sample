@@ -9,8 +9,8 @@
    - 色・書体・角丸・影・線幅は必ず var(--x, light-dark(明, 暗)) を経由する。変数名は
      SDK が受け付ける 76 個から選ぶ（それ以外の名前を発明してもフォールバックしか
      当たらない）。
-   - display を持つ要素には [hidden] を明示する（display: flex / grid は [hidden] の
-     既定 display: none に勝ってしまう）。 */
+   - [hidden] の指定は要らない。shared/theme.css の `[hidden] { display: none !important }`
+     が display: flex / grid ごと一括で伏せる。 */
 
 /* padding: 16px と margin: 0 auto は shared/theme.css が持つ。max-width だけが
    View ごとに違う（search 720px / product 560px）。 */
@@ -38,17 +38,11 @@
   color: var(--color-text-secondary, light-dark(#52525b, #d4d4d8));
 }
 
+/* 枠・地色・無効時の見た目は shared/theme.css が .retry-btn / .page-btn とまとめて持つ。
+   ここにあるのは「丸ボタンではない」ぶんの違い（角丸が sm、padding が独自）だけ。 */
 #sort-select {
   padding: 5px 8px;
   border-radius: var(--border-radius-sm, 6px);
-  border: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#e4e4e7, #3f3f46));
-  background: var(--color-background-secondary, light-dark(#fafafa, #27272a));
-}
-
-/* .page-btn:disabled は shared/theme.css にある（同じ見た目）。 */
-#sort-select:disabled {
-  opacity: .5;
-  cursor: not-allowed;
 }
 
 .note {
@@ -63,8 +57,6 @@
   gap: 12px;
   transition: opacity .15s ease;
 }
-
-.grid[hidden] { display: none; }
 
 /* 通信中は「今出ているのは古い結果」であることを薄さで示しつつ、**中身は消さない**。
    消してしまうと再検索が失敗したときに戻る先が無くなる（元の表示に戻せることが
@@ -100,10 +92,8 @@
   flex: 1;
 }
 
-.card-category {
-  font-size: var(--font-text-xs-size, 11px);
-  color: var(--color-text-tertiary, light-dark(#71717a, #a1a1aa));
-}
+/* .card-category は shared/theme.css が .panel-category / .panel-sku とまとめて持つ
+   （3か所とも同じ宣言だった）。 */
 
 .card-name {
   font-size: var(--font-text-sm-size, 13px);
@@ -150,15 +140,10 @@
   margin-top: 18px;
 }
 
-.pagination[hidden] { display: none; }
-
-/* padding は product 側（8px 16px）と違う。共通化のときに寄せないこと。 */
+/* 角丸・枠・地色・cursor・無効時は shared/theme.css。**padding だけが product 側
+   （8px 16px）と違う**ので、ここに残すのはこの1行だけ。寄せないこと。 */
 .page-btn {
   padding: 6px 14px;
-  border-radius: var(--border-radius-full, 999px);
-  border: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#e4e4e7, #3f3f46));
-  background: var(--color-background-secondary, light-dark(#fafafa, #27272a));
-  cursor: pointer;
 }
 
 .page-indicator {

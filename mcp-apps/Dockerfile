@@ -3,7 +3,12 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+# **`npm install` ではなく `npm ci`。** ロックファイルを COPY している以上、依存の解決を
+# もう一度やり直す理由が無い（そのぶん速い）だけでなく、`npm install` は解決結果が
+# 変われば **イメージの中の** package-lock.json を書き換えてしまうため、
+# 「イメージとリポジトリで入っている版が違う」状態が黙って作れてしまう。
+# `mcp==2.0.0` や `@modelcontextprotocol/ext-apps` を厳密固定してあるのと同じ規律。
+RUN npm ci
 
 COPY . .
 

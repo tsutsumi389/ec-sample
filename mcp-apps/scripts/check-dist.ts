@@ -11,7 +11,7 @@
  * 砦であって作り手の検査の代わりにはならない。
  *
  * 検査するもの:
- *   1. dist に search.html / product.html が両方あること（最終ビルドのときだけ）
+ *   1. dist にエントリぶんの HTML が全部あること（最終ビルドのときだけ）
  *   2. HTML 文書として完結していること（空でない・`<html` と `</html>` が揃っている）。
  *      **この条件は backend の ui_assets.py と同一**にしてある（後述）
  *   3. インライン化されたスクリプトの内側に生の "</script" が無いこと
@@ -29,16 +29,24 @@ import { join } from "node:path";
 import type { Plugin } from "vite";
 
 /**
- * dist に揃っていなければならない成果物。
+ * エントリ名（"search" / "product"）から dist に出る成果物の名前を作る。
  *
- * backend/app/mcp_server/apps_ui.py がこの2枚をそれぞれ
- * ui://hibino/search-products.html / ui://hibino/product-detail.html として登録する。
- * **ここは build.mjs の ENTRIES と一致していなければならない。** 一致していない場合
- * （どちらかにエントリを足し忘れた場合）は checkDistFiles() が
- * 「dist に無い」または「余計なものがある」として落ちるので、二重定義は
- * 放置されるのではなく必ず表面化する。
+ * **エントリの一覧はここに持たない。** 唯一の源は build.mjs の ENTRIES で、そこから
+ * MCP_APP_ENTRIES 経由で vite.config.ts → checkDistPlugin({ entries }) と渡ってくる。
+ * 以前はこちらにも ["search.html", "product.html"] を並べ、コメントで「食い違えば
+ * checkDistFiles() が落ちるので必ず表面化する」と説明していたが、**それは半分しか
+ * 正しくなかった**——checkDistFiles() は期待するファイル名を1枚ずつ読むだけで
+ * ディレクトリを列挙しないため、「余計なものがある」検出は存在せず、
+ * ENTRIES にだけ足した場合（一番ありがちな向き）はビルドが緑のまま通る。
+ * 二重に持つのをやめれば、その食い違い自体が起こらない。
+ *
+ * backend/app/mcp_server/ui_assets.py の SEARCH_APP_FILENAME / PRODUCT_APP_FILENAME は
+ * 言語をまたぐ写しなので、そちらは別途手で揃える（Python から参照できる形にすると
+ * ビルドと起動が結合する）。
  */
-export const EXPECTED_DIST_FILES = ["search.html", "product.html"] as const;
+function distFileName(entry: string): string {
+  return `${entry}.html`;
+}
 
 /**
  * 単一ファイル HTML 1枚ぶんの検査。問題があれば日本語の理由を配列で返す。
@@ -107,20 +115,21 @@ export function findHtmlProblems(fileName: string, html: string): string[] {
 /**
  * dist ディレクトリ全体の検査。存在確認まで含む。
  *
- * 各エントリのビルドは自分が出した1枚しか見られないので、「2枚とも揃っているか」は
+ * 各エントリのビルドは自分が出した1枚しか見られないので、「エントリぶん揃っているか」は
  * ここでディスクを読んで確かめる（最終エントリのビルドの最後に1回だけ走る）。
  */
-export function checkDistFiles(distDir: string): string[] {
+function checkDistFiles(distDir: string, entries: readonly string[]): string[] {
   const problems: string[] = [];
-  for (const fileName of EXPECTED_DIST_FILES) {
+  for (const entry of entries) {
+    const fileName = distFileName(entry);
     const path = join(distDir, fileName);
     let html: string;
     try {
       html = readFileSync(path, "utf8");
     } catch {
       problems.push(
-        `${path}: ビルド成果物がありません。build.mjs の ENTRIES と`
-        + " check-dist.ts の EXPECTED_DIST_FILES が食い違っていないか確認してください。",
+        `${path}: ビルド成果物がありません。エントリ ${entry} のビルドが`
+        + " 成功しているか確認してください。",
       );
       continue;
     }
@@ -137,10 +146,14 @@ export function checkDistFiles(distDir: string): string[] {
  * backend に読まれる（コンテナの backend は --reload-include '*.html' で
  * 拾い直す）状況になる。
  *
- * @param finalCheck 最後のエントリのビルドなら true。dist 全体（2枚揃っているか）の
- *   検査をこのビルドの終わりに行う。
+ * @param finalCheck 最後のエントリのビルドなら true。dist 全体（エントリぶん揃って
+ *   いるか）の検査をこのビルドの終わりに行う。
+ * @param entries build.mjs の ENTRIES がそのまま渡ってくる（唯一の源はあちら）。
  */
-export function checkDistPlugin(options: { finalCheck: boolean }): Plugin {
+export function checkDistPlugin(options: {
+  finalCheck: boolean;
+  entries: readonly string[];
+}): Plugin {
   let outDir = "";
   return {
     name: "hibino-mcp-apps:check-dist",
@@ -163,7 +176,7 @@ export function checkDistPlugin(options: { finalCheck: boolean }): Plugin {
     },
     closeBundle() {
       if (!options.finalCheck) return;
-      const problems = checkDistFiles(outDir);
+      const problems = checkDistFiles(outDir, options.entries);
       if (problems.length > 0) {
         // closeBundle のプラグインコンテキストは実装差があるので this.error() では
         // なく素直に throw する。build.mjs 側で拾って非ゼロ終了する。
