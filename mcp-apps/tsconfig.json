@@ -4,6 +4,10 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    // React 17 以降の自動ランタイム。各 .tsx が `import React from "react"` を
+    // 書かなくても JSX が組める（実際の変換はビルド側の Vite/oxc がやるが、
+    // **その設定の唯一の源はこの2行**——vite.config.ts に jsx の指定を書き写さないこと）。
+    "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,
     "skipLibCheck": true,

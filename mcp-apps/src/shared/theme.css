@@ -8,8 +8,8 @@
    色・書体・角丸・影・線幅だけを var(--x, フォールバック) で参照し、ホストが値を
    渡さない場合は light-dark() を使った既定値に落ちる。light-dark() の分岐は
    document.documentElement の color-scheme に従う。ここは各 View の
-   <meta name="color-scheme" content="light dark"> と、shared/host.ts の
-   applyHostContext() が呼ぶ applyDocumentTheme() が両方担当する。
+   <meta name="color-scheme" content="light dark"> と、SDK の useHostStyles()
+   （内部で applyDocumentTheme を呼ぶ）が両方担当する。
 
    **ホストが流し込める CSS 変数名は SDK の union で 76 個に固定されている**
    （--color-* / --font-* / --border-radius-* / --border-width-regular / --shadow-*）。
@@ -21,7 +21,10 @@
    を書き足していたが、**足し忘れが「hidden にしたのに消えない」として表に出る**書き方
    だった。両 View で11個まで増えたところで normalize 系と同じ一括指定に寄せてある。
    `!important` なのは display を持つ規則すべてに勝つ必要があるため——hidden 属性が
-   付いた要素を見せたい状況はこの2画面に存在しないので、例外は考えなくてよい。 */
+   付いた要素を見せたい状況はこの2画面に存在しないので、例外は考えなくてよい。
+   React へ移してからは表示の出し分けが条件付きレンダリング（描かない）になったため
+   **今この規則に当たる要素は1つも無い**が、normalize 相当の防御として残してある
+   （hidden を1つ書いた瞬間に、上の足し忘れが再発しない形で効く）。 */
 
 * , *::before, *::after { box-sizing: border-box; }
 
@@ -46,7 +49,7 @@ button, select {
 }
 
 /* 既定の余白（16px）が存在するのはここ1か所だけ。ホストから safe area のインセットが
-   届いたときは shared/host.ts の applyHostContext() が --safe-area-* を #app に載せ、
+   届いたときは shared/host.ts の useSafeAreaInsets() が --safe-area-* を #app に載せ、
    足し算はこの calc() がやる。**JS 側に 16 を写して足し込む形へ戻さないこと**——
    同じ数値を CSS と JS で二重に持つことになり、余白を変えた日にインセットを持つ端末
    でだけ古い基準が残る（手元では絶対に再現しない壊れ方になる）。

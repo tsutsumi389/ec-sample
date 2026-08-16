@@ -8,76 +8,20 @@
      **消さないこと**——消すと最初の一瞬の描画が常に light 側に倒れる。 -->
 <meta name="color-scheme" content="light dark">
 <title>get_product view</title>
-<!-- スタイルはここに直書きせず src/product/main.ts が import する
+<!-- スタイルはここに直書きせず src/product/main.tsx が import する
      （shared/theme.css → product.css の順。この順がそのままカスケードの順になる）。
      ビルドで vite-plugin-singlefile が1枚の style 要素にまとめて差し込むので、
      出来上がった dist/product.html は外部参照を1つも持たない。 -->
 </head>
 <body>
-<div id="app">
-  <header class="header">
-    <h1 id="result-title" class="title">商品詳細</h1>
-    <!-- 直近成功時の product_id で get_product を呼び直すボタン。並び替え・
-         ページングが無い分、search の View より状態は単純（読み込み中／表示／
-         エラーの3状態）。 -->
-    <button id="reload-btn" type="button" class="text-btn" hidden>再読み込み</button>
-  </header>
-
-  <!-- 再取得・商品ページを開く操作の失敗はここに出す。直前まで表示していた
-       パネルはそのまま残す（= 元の表示に戻せる）ので hidden の初期値以外
-       このバナーは触らない。 -->
-  <div id="refresh-error" class="banner-error" hidden role="alert">
-    <span id="refresh-error-text"></span>
-    <button id="refresh-error-dismiss" type="button" class="text-btn">閉じる</button>
-  </div>
-
-  <main class="main">
-    <p id="loading-state" class="state-message">商品情報を取得しています…</p>
-
-    <!-- 一度も結果を受け取れていない状態（初回の取得そのものが失敗、または
-         商品が存在しない）専用の全面エラー。get_product は「0件」を返す概念が
-         無く、存在しない product_id はここに落ちる（search の View の
-         empty-state に相当するものはこちら1本に集約する）。 -->
-    <div id="initial-error-state" class="state-message state-message--error" hidden role="alert">
-      <p id="initial-error-text"></p>
-      <button id="initial-error-retry" type="button" class="retry-btn">再試行</button>
-    </div>
-
-    <!-- 商品 1 件を深く見せるパネル。search の View の .card 相当だが、複数件から
-         選ぶボタンではないので <article> にし、クリックでの遷移は持たせない
-         （商品ページへ出るのは下の open-page-btn 1つだけ）。 -->
-    <article id="panel" class="panel" hidden>
-      <div id="panel-image" class="panel-image"></div>
-      <div class="panel-body">
-        <span id="panel-category" class="panel-category" hidden></span>
-        <h2 id="panel-name" class="panel-name"></h2>
-        <span id="panel-sku" class="panel-sku" hidden></span>
-
-        <div class="panel-price-row">
-          <span id="panel-price" class="panel-price"></span>
-          <span id="panel-list-price" class="panel-list-price" hidden></span>
-        </div>
-
-        <span id="panel-rating" class="panel-rating"></span>
-
-        <span id="panel-availability" class="panel-availability"></span>
-
-        <p id="panel-description" class="panel-description" hidden></p>
-
-        <div id="panel-specs-wrap" hidden>
-          <h3 class="specs-heading">仕様</h3>
-          <ul id="panel-specs" class="spec-list"></ul>
-        </div>
-
-        <div class="panel-actions">
-          <button id="open-page-btn" type="button" class="page-btn" hidden>商品ページを見る</button>
-        </div>
-      </div>
-    </article>
-  </main>
-</div>
+<!-- **画面の中身は React（src/product/ProductView.tsx）が組む。**
+     ここに骨組みを書き戻さないこと——createRoot().render() はこの器の中身を
+     必ず作り直すので、静的に置いた要素は一瞬だけ見えて消える（描画の二重化）。
+     ホストの safe area を受ける #app も ProductView が描く（shared/host.ts の
+     useSafeAreaInsets がその要素へ --safe-area-* を載せる）。 -->
+<div id="root"></div>
 <!-- root（mcp-apps/）からの絶対パスで参照する。ビルド後はこの1行が
      インライン化された JS + CSS に置き換わる。 -->
-<script type="module" src="/src/product/main.ts"></script>
+<script type="module" src="/src/product/main.tsx"></script>
 </body>
 </html>
