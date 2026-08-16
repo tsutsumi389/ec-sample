@@ -17,8 +17,10 @@
 
 import { App } from "@modelcontextprotocol/ext-apps";
 
-import { formatRating, formatYen } from "../shared/format.ts";
-import { applyHostContext } from "../shared/host.ts";
+import { createBanner, fillImage, requireEl, setOptionalText } from "../shared/dom.ts";
+import { formatRating, formatYen, readNumber } from "../shared/format.ts";
+import { connectWithHostContext } from "../shared/host.ts";
+import { openPageInHost } from "../shared/openLink.ts";
 import {
   extractErrorMessage,
   extractProductUiMeta,
@@ -41,47 +43,37 @@ import "./product.css";
  */
 const FALLBACK_ERROR_MESSAGE = "商品情報を取得できませんでした。";
 
-/**
- * HTML 側の id を引く。見つからなければ即座に落とす。
- *
- * product.html と このファイルは同時にビルドされる一組なので、id の食い違いは
- * 実行時の状況ではなく**書き間違い**。null を無言で受け流して後段の
- * 「undefined の hidden に代入しても何も起きない」形で沈むより、その場で
- * 止まったほうが早く気づける。
- */
-function requireEl<T extends HTMLElement = HTMLElement>(id: string): T {
-  const found = document.getElementById(id);
-  if (found === null) {
-    throw new Error(`#${id} が product.html にありません。HTML 側の id と食い違っています。`);
-  }
-  return found as T;
-}
+/** shared/dom.ts の requireEl に、この View のエントリ HTML 名を固定しただけの別名。 */
+const el = <T extends HTMLElement = HTMLElement>(id: string): T => requireEl<T>(id, "product.html");
 
 const els = {
-  app: requireEl("app"),
-  title: requireEl("result-title"),
-  reloadBtn: requireEl<HTMLButtonElement>("reload-btn"),
-  refreshError: requireEl("refresh-error"),
-  refreshErrorText: requireEl("refresh-error-text"),
-  refreshErrorDismiss: requireEl<HTMLButtonElement>("refresh-error-dismiss"),
-  loadingState: requireEl("loading-state"),
-  initialErrorState: requireEl("initial-error-state"),
-  initialErrorText: requireEl("initial-error-text"),
-  initialErrorRetry: requireEl<HTMLButtonElement>("initial-error-retry"),
-  panel: requireEl("panel"),
-  panelImage: requireEl("panel-image"),
-  panelCategory: requireEl("panel-category"),
-  panelName: requireEl("panel-name"),
-  panelSku: requireEl("panel-sku"),
-  panelPrice: requireEl("panel-price"),
-  panelListPrice: requireEl("panel-list-price"),
-  panelRating: requireEl("panel-rating"),
-  panelAvailability: requireEl("panel-availability"),
-  panelDescription: requireEl("panel-description"),
-  panelSpecsWrap: requireEl("panel-specs-wrap"),
-  panelSpecs: requireEl("panel-specs"),
-  openPageBtn: requireEl<HTMLButtonElement>("open-page-btn"),
+  app: el("app"),
+  title: el("result-title"),
+  reloadBtn: el<HTMLButtonElement>("reload-btn"),
+  refreshError: el("refresh-error"),
+  refreshErrorText: el("refresh-error-text"),
+  refreshErrorDismiss: el<HTMLButtonElement>("refresh-error-dismiss"),
+  loadingState: el("loading-state"),
+  initialErrorState: el("initial-error-state"),
+  initialErrorText: el("initial-error-text"),
+  initialErrorRetry: el<HTMLButtonElement>("initial-error-retry"),
+  panel: el("panel"),
+  panelImage: el("panel-image"),
+  panelCategory: el("panel-category"),
+  panelName: el("panel-name"),
+  panelSku: el("panel-sku"),
+  panelPrice: el("panel-price"),
+  panelListPrice: el("panel-list-price"),
+  panelRating: el("panel-rating"),
+  panelAvailability: el("panel-availability"),
+  panelDescription: el("panel-description"),
+  panelSpecsWrap: el("panel-specs-wrap"),
+  panelSpecs: el("panel-specs"),
+  openPageBtn: el<HTMLButtonElement>("open-page-btn"),
 };
+
+/** 再取得・リンク開放の失敗を重ねて出すバナー（全面エラーとは領域が重ならない）。 */
+const refreshError = createBanner(els.refreshError, els.refreshErrorText);
 
 interface ViewState {
   productId: number | null;
@@ -94,18 +86,18 @@ interface ViewState {
 // 変えない。ontoolresult / callServerTool の戻り値には product_id が含まれない
 // ため、ここが「再試行」「再読み込み」双方の唯一の土台になる（search の View の
 // state.base と同じ役割）。
-const state: ViewState = {
-  productId: null,
-  hasResult: false, // 一度でも結果（成功・失敗いずれか）を受け取ったか
-  loading: false,
-  pageUrl: null, // 直近成功時の _meta.ui.page_url（商品ページを開くボタン用）
-};
-
-// hasResult について補足（**実装をコメントに合わせて直さないこと**）: 実際に true を
+//
+// hasResult について（**実装をコメントに合わせて直さないこと**）: 実際に true を
 // 立てるのは renderPanel、つまり成功して描画できたときだけで、失敗では立てない。
 // この非対称が「初回の失敗＝全面エラー / 2回目以降の失敗＝バナー」の分岐そのもの。
 // 失敗でも立てるようにすると、最初の取得に失敗した画面が再試行ボタンの無い
 // バナーだけになり、利用者は何もできなくなる。
+const state: ViewState = {
+  productId: null,
+  hasResult: false,
+  loading: false,
+  pageUrl: null, // 直近成功時の _meta.ui.page_url（商品ページを開くボタン用）
+};
 
 // App インスタンス。移植元は関数定義より後ろで代入する都合上 let だったが、
 // モジュールでは先に作れるので const にしてある。**ハンドラの登録と connect() は
@@ -128,16 +120,6 @@ function resetControlsToConfirmed(): void {
   els.openPageBtn.disabled = false;
 }
 
-function showRefreshError(message: string): void {
-  els.refreshErrorText.textContent = message;
-  els.refreshError.hidden = false;
-}
-
-function hideRefreshError(): void {
-  els.refreshError.hidden = true;
-  els.refreshErrorText.textContent = "";
-}
-
 function showInitialError(message: string): void {
   els.loadingState.hidden = true;
   els.panel.hidden = true;
@@ -154,14 +136,14 @@ function showInitialError(message: string): void {
  * - 既に描画済み（hasResult=true）→ パネルはそのまま残し、バナーだけを足す。
  *   「元の表示に戻せる」ことを優先し、成功していた内容を失敗で消さない。
  *
- * **showInitialError は refresh バナーに触らず、showRefreshError は全面エラーに
+ * **showInitialError は refresh バナーに触らず、refreshError.show は全面エラーに
  * 触らない。** この非対称は意図的で、片方を出すときにもう片方を掃除しに行くと
  * 「バナーを閉じたら全面エラーまで消えた」のような組み合わせが生まれる。
  */
 function showFailure(message: string): void {
+  resetControlsToConfirmed();
   if (state.hasResult) {
-    resetControlsToConfirmed();
-    showRefreshError(message);
+    refreshError.show(message);
   } else {
     showInitialError(message);
   }
@@ -176,53 +158,21 @@ function renderPanel(data: ProductDetail, meta: ProductUiMeta | null): void {
 
   els.title.textContent = data.name;
 
-  els.panelImage.textContent = ""; // innerHTML は使わず子要素を作り直す
-  if (meta && meta.image_url) {
-    // src に入れてよいのは _meta.ui 側の絶対URLだけ。structuredContent.image_url は
-    // 相対パスで、iframe には解決できるオリジンが無いので絶対に使わない。
-    const img = document.createElement("img");
-    img.src = meta.image_url;
-    // 商品名は下に別途テキストで出るので、ここは装飾画像として alt を空にする。
-    // **商品名を入れる「改善」をしないこと**——未信頼テキストの置き場所を増やす。
-    img.alt = "";
-    img.loading = "lazy";
-    els.panelImage.appendChild(img);
-  } else {
-    const placeholder = document.createElement("span");
-    placeholder.className = "placeholder";
-    placeholder.textContent = "画像なし";
-    els.panelImage.appendChild(placeholder);
-  }
+  // src に入れてよいのは _meta.ui 側の絶対URLだけ。structuredContent.image_url は
+  // 相対パスで、iframe には解決できるオリジンが無いので絶対に使わない。
+  fillImage(els.panelImage, meta ? meta.image_url : null);
 
   // 商品名・カテゴリ名・説明・仕様は未信頼のテキストとして扱い、必ず
   // textContent で入れる（商品説明にはプロンプトインジェクションの文面が
   // 混ざりうる、というのが backend の DESCRIPTION_MAX_CHARS の趣旨でもある）。
-  if (data.category) {
-    els.panelCategory.textContent = data.category;
-    els.panelCategory.hidden = false;
-  } else {
-    els.panelCategory.hidden = true;
-    els.panelCategory.textContent = "";
-  }
+  setOptionalText(els.panelCategory, data.category);
 
   els.panelName.textContent = data.name;
 
-  if (data.sku) {
-    els.panelSku.textContent = `商品コード: ${data.sku}`;
-    els.panelSku.hidden = false;
-  } else {
-    els.panelSku.hidden = true;
-    els.panelSku.textContent = "";
-  }
+  setOptionalText(els.panelSku, data.sku ? `商品コード: ${data.sku}` : null);
 
   els.panelPrice.textContent = formatYen(data.effective_price);
-  if (data.list_price != null) {
-    els.panelListPrice.textContent = formatYen(data.list_price);
-    els.panelListPrice.hidden = false;
-  } else {
-    els.panelListPrice.hidden = true;
-    els.panelListPrice.textContent = "";
-  }
+  setOptionalText(els.panelListPrice, data.list_price != null ? formatYen(data.list_price) : null);
 
   els.panelRating.textContent = formatRating(data.avg_rating, data.review_count);
 
@@ -233,13 +183,7 @@ function renderPanel(data: ProductDetail, meta: ProductUiMeta | null): void {
   els.panelAvailability.dataset.ok = String(data.purchasable);
   els.panelAvailability.textContent = data.availability;
 
-  if (data.description) {
-    els.panelDescription.textContent = data.description;
-    els.panelDescription.hidden = false;
-  } else {
-    els.panelDescription.hidden = true;
-    els.panelDescription.textContent = "";
-  }
+  setOptionalText(els.panelDescription, data.description);
 
   els.panelSpecs.textContent = ""; // innerHTML は使わず子要素を作り直す
   if (Array.isArray(data.specs) && data.specs.length > 0) {
@@ -293,7 +237,7 @@ function handleToolResult(result: ToolResult | undefined): void {
     return;
   }
 
-  hideRefreshError();
+  refreshError.hide();
   renderPanel(data, extractProductUiMeta(result));
 }
 
@@ -303,7 +247,7 @@ async function fetchProduct(): Promise<void> {
     showInitialError("商品IDを受け取れませんでした。");
     return;
   }
-  hideRefreshError();
+  refreshError.hide();
   setLoading(true);
   try {
     // `satisfies`（`:` ではなく）で受けるのは、callServerTool の arguments が
@@ -321,41 +265,33 @@ async function fetchProduct(): Promise<void> {
   }
 }
 
-async function openProductPage(): Promise<void> {
-  const url = state.pageUrl;
-  if (!url) return;
-  els.openPageBtn.disabled = true;
-  try {
-    const { isError } = await app.openLink({ url });
-    if (isError) {
-      showRefreshError("商品ページを開けませんでした。");
-    }
-  } catch {
-    showRefreshError("商品ページを開く操作に失敗しました。");
-  } finally {
-    // **false 固定にしないこと。** リンクを開いている間に再取得が始まっていた
-    // 場合、ここで有効に戻すとこのボタンだけが通信中に押せてしまう。
-    els.openPageBtn.disabled = state.loading;
-  }
-}
-
 // ---- イベント配線 -------------------------------------------------------
 
 els.initialErrorRetry.addEventListener("click", () => void fetchProduct());
 els.reloadBtn.addEventListener("click", () => void fetchProduct());
-els.refreshErrorDismiss.addEventListener("click", hideRefreshError);
-els.openPageBtn.addEventListener("click", () => void openProductPage());
+els.refreshErrorDismiss.addEventListener("click", () => refreshError.hide());
+els.openPageBtn.addEventListener("click", () => {
+  const url = state.pageUrl;
+  if (!url) return;
+  void openPageInHost({
+    app,
+    url,
+    button: els.openPageBtn,
+    isLoading: () => state.loading,
+    onError: refreshError.show,
+  });
+});
 
 // ---- App 初期化 ----------------------------------------------------------
 // **ハンドラは必ず connect() より前に登録する。** tool-input / tool-result /
 // tool-cancelled は一度きりの通知で、connect() の解決後に登録すると取りこぼす
 // （SDK 自身が _assertHandlerTiming で「初期化済みなのに後から登録した」と
-// 警告・例外を出す設計になっている）。この順序は移植で変えていない。
+// 警告・例外を出す設計になっている）。connect() を呼ぶのは末尾の
+// connectWithHostContext なので、**この3つはそれより前**。この順序は移植で変えていない。
 
 app.ontoolinput = (params) => {
   const args = params?.arguments ?? {};
-  const productId = args["product_id"];
-  state.productId = typeof productId === "number" ? productId : null;
+  state.productId = readNumber(args["product_id"]) ?? null;
   setLoading(true); // ui/notifications/tool-result が届くまで操作不可にする
 };
 
@@ -370,25 +306,6 @@ app.ontoolcancelled = (params) => {
   );
 };
 
-app.onhostcontextchanged = (ctx) => {
-  // 「差分だけ渡ってくる可能性がある」ため、渡ってきたフィールドだけ適用する
-  // （判断は shared/host.ts が持つ。search の View と同じ）。
-  applyHostContext(ctx, els.app);
-};
-
-app.onerror = (err) => {
-  console.error("[product-detail view] transport error", err);
-};
-
-app
-  .connect()
-  .then(() => {
-    // 初期状態はホストから通知が飛んでこない可能性があるため、connect() 解決後に
-    // 手動で一度だけ getHostContext() を読んで適用する（以後の変化は
-    // onhostcontextchanged が拾う）。
-    applyHostContext(app.getHostContext(), els.app);
-  })
-  .catch((err: unknown) => {
-    console.error("[product-detail view] connect failed", err);
-    showInitialError("ホストとの接続に失敗しました。");
-  });
+// テーマ・safe area の配線と connect()。**必ず最後に呼ぶ**（上の3ハンドラの登録が
+// connect() より前でなければならないため。理由は shared/host.ts のコメント）。
+connectWithHostContext(app, els.app, "product-detail view", showInitialError);

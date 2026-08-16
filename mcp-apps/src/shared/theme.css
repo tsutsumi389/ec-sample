@@ -16,11 +16,18 @@
    この 76 個以外の名前を var() で読んでも永久にフォールバックしか当たらないので、
    新しい変数名を発明しないこと。
 
-   **display を持つ要素には [hidden] の指定を明示する。** display: flex / grid は
-   [hidden] の既定 display: none に勝ってしまうため、書き忘れると「hidden にしたのに
-   消えない」が起きる。View 側で display を持つ要素を足すときも同じ規律で。 */
+   **[hidden] は下の1行で一括して伏せる。** display: flex / grid は [hidden] の既定
+   display: none に勝ってしまうので、以前はセレクタごとに `.x[hidden] { display: none }`
+   を書き足していたが、**足し忘れが「hidden にしたのに消えない」として表に出る**書き方
+   だった。両 View で11個まで増えたところで normalize 系と同じ一括指定に寄せてある。
+   `!important` なのは display を持つ規則すべてに勝つ必要があるため——hidden 属性が
+   付いた要素を見せたい状況はこの2画面に存在しないので、例外は考えなくてよい。 */
 
 * , *::before, *::after { box-sizing: border-box; }
+
+/* hidden 属性が付いた要素は必ず消える。**これを弱めないこと**（弱めた瞬間、display を
+   持つ要素にだけ個別指定を足して回る運用に戻る）。 */
+[hidden] { display: none !important; }
 
 html, body { margin: 0; padding: 0; }
 
@@ -38,12 +45,19 @@ button, select {
   color: inherit;
 }
 
-/* padding の 16px は shared/host.ts の BASE_PADDING_PX と同じ値。safe area が
-   届いたとき「既定の余白 + インセット」を JS 側で計算するので、**片方だけ
-   変えないこと**。max-width は View ごとに違う（search 720px / product 560px）ので
-   各 View の CSS で指定する。 */
+/* 既定の余白（16px）が存在するのはここ1か所だけ。ホストから safe area のインセットが
+   届いたときは shared/host.ts の applyHostContext() が --safe-area-* を #app に載せ、
+   足し算はこの calc() がやる。**JS 側に 16 を写して足し込む形へ戻さないこと**——
+   同じ数値を CSS と JS で二重に持つことになり、余白を変えた日にインセットを持つ端末
+   でだけ古い基準が残る（手元では絶対に再現しない壊れ方になる）。
+   max-width は View ごとに違う（search 720px / product 560px）ので各 View の CSS で
+   指定する。 */
 #app {
-  padding: 16px;
+  padding:
+    calc(16px + var(--safe-area-top, 0px))
+    calc(16px + var(--safe-area-right, 0px))
+    calc(16px + var(--safe-area-bottom, 0px))
+    calc(16px + var(--safe-area-left, 0px));
   margin: 0 auto;
 }
 
@@ -64,8 +78,34 @@ button, select {
   color: inherit;
 }
 
-.text-btn:disabled { opacity: .5; cursor: not-allowed; }
-.text-btn[hidden] { display: none; }
+/* 面を持つ操作系（再試行・ページング・並び替え）の地色と枠。角丸と padding は形が
+   違うので下のそれぞれで指定する。 */
+.retry-btn,
+.page-btn,
+#sort-select {
+  border: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#e4e4e7, #3f3f46));
+  background: var(--color-background-secondary, light-dark(#fafafa, #27272a));
+}
+
+/* 丸い操作ボタン。**padding だけが View ごとに違う**（.retry-btn 6px 16px /
+   search の .page-btn 6px 14px / product の .page-btn 8px 16px）ので、そこだけ
+   各所で指定する。共通化のときに寄せないこと。 */
+.retry-btn,
+.page-btn {
+  border-radius: var(--border-radius-full, 999px);
+  cursor: pointer;
+}
+
+.retry-btn {
+  margin-top: 10px;
+  padding: 6px 16px;
+}
+
+/* 無効時の見た目は操作系すべて共通。 */
+.text-btn:disabled,
+.retry-btn:disabled,
+.page-btn:disabled,
+#sort-select:disabled { opacity: .5; cursor: not-allowed; }
 
 /* 再検索・再取得・リンク開放の失敗は「元の表示に戻せる」ように、既存のグリッド／
    パネルを消さずにこのバナーだけを重ねて出す（初回読み込み失敗の全面エラーとは
@@ -83,8 +123,6 @@ button, select {
   font-size: var(--font-text-sm-size, 13px);
 }
 
-.banner-error[hidden] { display: none; }
-
 .main { margin-top: 14px; }
 
 .state-message {
@@ -97,22 +135,16 @@ button, select {
   color: var(--color-text-danger, light-dark(#b91c1c, #fca5a5));
 }
 
-.state-message[hidden] { display: none; }
-
-.retry-btn {
-  margin-top: 10px;
-  padding: 6px 16px;
-  border-radius: var(--border-radius-full, 999px);
-  border: var(--border-width-regular, 1px) solid var(--color-border-primary, light-dark(#e4e4e7, #3f3f46));
-  background: var(--color-background-secondary, light-dark(#fafafa, #27272a));
-  cursor: pointer;
+/* 小さな添え書き（カード／パネルのカテゴリ名、商品コード）。3か所とも同じ宣言だった。
+   **打ち消し価格（.card-list-price / .panel-list-price）を混ぜないこと**——あちらは
+   同じ --color-text-tertiary でも light-dark() の明暗が逆（#a1a1aa, #71717a）で、
+   意図的に別の値。 */
+.card-category,
+.panel-category,
+.panel-sku {
+  font-size: var(--font-text-xs-size, 11px);
+  color: var(--color-text-tertiary, light-dark(#71717a, #a1a1aa));
 }
-
-.retry-btn:disabled { opacity: .5; cursor: not-allowed; }
-
-/* .page-btn の padding は View ごとに違う（search 6px 14px / product 8px 16px）ので
-   基本形は各 View が持つ。無効時の見た目だけは共通。 */
-.page-btn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* 画像の器。search の .card-image と product の .panel-image は宣言が完全に同一。
    クラス名は View 側の HTML と一対一で対応させたいので統合せず、セレクタを

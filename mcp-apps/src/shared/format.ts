@@ -8,7 +8,7 @@
 
 /** 金額表示。両 View 共通で "¥12,800" の形にする。 */
 export function formatYen(amount: number): string {
-  return "¥" + Number(amount).toLocaleString("ja-JP");
+  return "¥" + amount.toLocaleString("ja-JP");
 }
 
 /**
@@ -31,4 +31,22 @@ export function formatRating(avgRating: number | null, reviewCount: number): str
  */
 export function toArg<T extends string | number>(value: T | null | undefined): T | undefined {
   return value === undefined || value === null || value === "" ? undefined : value;
+}
+
+/**
+ * ツール引数（ontoolinput が渡す Record<string, unknown>）から文字列だけを受け取る。
+ * 型が違えば「指定なし」として落とす。
+ *
+ * 引数は backend 側（tools.py のシグネチャ）で検証済みなので、実際には想定外の型が
+ * 届くことは無い。それでも素通しにしないのは、**中身を確かめずに信じると型の上だけ
+ * 安全な嘘になる**ため。両 View の ontoolinput が同じ規律で読むよう、read* は
+ * View 側に書かず必ずここを通すこと。
+ */
+export function readString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+/** 同上、数値版（min_price / max_price / page / limit / product_id）。 */
+export function readNumber(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
 }

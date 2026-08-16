@@ -83,7 +83,13 @@ services:
       # ビルド途中の0バイトを healthy と誤判定しないため。中身が HTML として妥当かの
       # 判定は backend の ui_assets.py が持つ（分担を二重にしない）。
       test: ["CMD-SHELL", "test -s /backend/app/mcp_server/ui/dist/search.html && test -s /backend/app/mcp_server/ui/dist/product.html"]
-      interval: 5s
+      # この probe が答えたい問いは「backend を起動してよいか」だけで、それが要るのは
+      # start_period の間だけ。**間隔を2本立てにしてある**——起動中は 2s で細かく見て
+      # backend を早く通し、healthy になった後は 60s まで落とす。probe は毎回
+      # docker exec + sh の起動（実測 ~50ms）なので、5s 固定のままだと1日1.7万回、
+      # 何も待っていない相手に対して走り続けることになる。
+      interval: 60s
+      start_interval: 2s
       timeout: 5s
       retries: 12
       # 初回は View を2枚ビルドし終えるまで healthy にならない（start_period 中の失敗は

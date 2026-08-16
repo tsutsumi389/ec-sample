@@ -18,7 +18,7 @@
 
 import type { App } from "@modelcontextprotocol/ext-apps";
 
-import type { ProductUiMeta, SearchUiItem } from "./types.ts";
+import type { ProductUiMeta, SearchUiItem, SearchUiMeta } from "./types.ts";
 
 /**
  * ホストが ontoolresult / callServerTool で渡してくる結果の型（= CallToolResult）。
@@ -47,12 +47,16 @@ export function extractStructuredContent<T>(result: ToolResult): T | null {
  * 空配列を返すのは「UI 用データが無い＝画像もページURLも出せない」だけを意味し、
  * 検索結果そのもの（structuredContent.items）とは無関係。カードは id で突き合わせる
  * ので、items が空でも商品名・価格は描ける。
+ *
+ * 絞り込みの型に types.ts の SearchUiMeta を使う（無名の `{ items?: unknown }` を
+ * 書かない）。**backend の契約の写しを、実際に使われる型にしておくため**——
+ * 使われない型は build_search_ui_items からずれても誰も気づけない。
  */
 export function extractSearchUiItems(result: ToolResult): SearchUiItem[] {
   const ui = result._meta?.ui;
   if (typeof ui !== "object" || ui === null) return [];
-  const items = (ui as { items?: unknown }).items;
-  return Array.isArray(items) ? (items as SearchUiItem[]) : [];
+  const items = (ui as Partial<SearchUiMeta>).items;
+  return Array.isArray(items) ? items : [];
 }
 
 /**

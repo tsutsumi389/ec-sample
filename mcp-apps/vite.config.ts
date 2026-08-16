@@ -40,6 +40,11 @@ if (!entry) {
   );
 }
 
+// 最終ビルドで「dist にエントリぶん揃っているか」を確かめるための一覧。**唯一の源は
+// build.mjs の ENTRIES** で、ここはそれを受け取って checkDistPlugin へ渡すだけ
+// （このファイルにもう一度並べると、View を足したとき片方だけ古くなる）。
+const ENTRIES = (process.env.MCP_APP_ENTRIES ?? entry).split(",").filter(Boolean);
+
 export default defineConfig({
   // root は mcp-apps/ 直下。**エントリ HTML を src/ の下に置かないこと**——
   // Vite は root からの相対パスをそのまま outDir 内のパスにするので、
@@ -50,7 +55,7 @@ export default defineConfig({
     // 検査は vite-plugin-singlefile の **後**に走らせる（インライン化済みの HTML を
     // 見たいため）。独立した postbuild スクリプトにしないのは、npm run dev
     // （vite の watch）の再ビルドを素通りさせないため。
-    checkDistPlugin({ finalCheck: process.env.MCP_APP_FINAL === "1" }),
+    checkDistPlugin({ finalCheck: process.env.MCP_APP_FINAL === "1", entries: ENTRIES }),
   ],
   build: {
     outDir: OUT_DIR,
