@@ -1,39 +1,26 @@
 /**
- * 商品ページをホスト側で開く操作。両 View が同じ本体・同じ文言・同じ再有効化の規律を
- * 持っていたので括った。
+ * 商品ページをホスト側で開く操作。両 View が同じ本体・同じ文言を持っていたので括った。
+ *
+ * **ボタンの disabled をここで触らないこと。** 移植前（DOM を直に組んでいた頃）は
+ * HTMLButtonElement を受け取り、finally で `button.disabled = isLoading()` と
+ * 「今読み込み中か」の値へ戻していた——無条件に有効化すると、リンクを開いている間に
+ * 別の再検索・再取得が始まっていた場合に、このボタンだけが通信中に押せる状態に
+ * なるためだった。React では disabled が状態（loading / opening）からの派生値に
+ * なり、その配慮は呼び出し側の描画式が構造的に満たす。ここに DOM 操作を戻すと、
+ * 同じ判断が「状態」と「命令」の二重になり、必ず片方が古くなる。
+ *
+ * 失敗の文言は2つとも View 非依存なのでここが持つ。**表示の仕方は持たない**——
+ * 全面エラーとバナーの二層の振り分けは View 側（reducer の failure）の判断であり、
+ * ここには持ち込まない。返すのは文言だけで、成功なら null。
  */
 
-import type { App } from "@modelcontextprotocol/ext-apps";
+import type { App } from "@modelcontextprotocol/ext-apps/react";
 
-/**
- * ボタンを押して商品ページを開く。押している間はそのボタンだけを無効にする。
- *
- * **finally で `disabled = false` を固定にしないこと。** リンクを開いている間に
- * 別の再検索・再取得が始まっていた場合、無条件に有効化するとこのボタンだけが通信中に
- * 押せる状態になる。だから「今読み込み中か」を呼び出し側から関数で受け取り、
- * その値へ戻す。
- *
- * 失敗の文言は2つとも View 非依存なのでここが持つ。表示の仕方（バナー）は
- * View 側から onError で渡す——全面エラーとバナーの二層の振り分けは View の
- * showFailure が持つ判断であり、ここには持ち込まない。
- */
-export async function openPageInHost(params: {
-  app: App;
-  url: string;
-  button: HTMLButtonElement;
-  isLoading: () => boolean;
-  onError: (message: string) => void;
-}): Promise<void> {
-  const { app, url, button, isLoading, onError } = params;
-  button.disabled = true;
+export async function openPageInHost(app: App, url: string): Promise<string | null> {
   try {
     const { isError } = await app.openLink({ url });
-    if (isError) {
-      onError("商品ページを開けませんでした。");
-    }
+    return isError ? "商品ページを開けませんでした。" : null;
   } catch {
-    onError("商品ページを開く操作に失敗しました。");
-  } finally {
-    button.disabled = isLoading();
+    return "商品ページを開く操作に失敗しました。";
   }
 }

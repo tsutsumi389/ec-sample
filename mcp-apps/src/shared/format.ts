@@ -34,12 +34,12 @@ export function toArg<T extends string | number>(value: T | null | undefined): T
 }
 
 /**
- * ツール引数（ontoolinput が渡す Record<string, unknown>）から文字列だけを受け取る。
+ * ツール引数（toolinput が渡す Record<string, unknown>）から文字列だけを受け取る。
  * 型が違えば「指定なし」として落とす。
  *
  * 引数は backend 側（tools.py のシグネチャ）で検証済みなので、実際には想定外の型が
  * 届くことは無い。それでも素通しにしないのは、**中身を確かめずに信じると型の上だけ
- * 安全な嘘になる**ため。両 View の ontoolinput が同じ規律で読むよう、read* は
+ * 安全な嘘になる**ため。両 View の toolinput が同じ規律で読むよう、read* は
  * View 側に書かず必ずここを通すこと。
  */
 export function readString(value: unknown): string | undefined {

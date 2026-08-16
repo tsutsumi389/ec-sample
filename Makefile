@@ -5,7 +5,7 @@ COMPOSE := docker compose
         logs-mcp-apps backend-shell frontend-shell mcp-apps-shell db-shell \
         lint reset clean fonts secret \
         migrate migrate-new migrate-down migrate-status mcp-check mcp-ui-build \
-        mcp-typecheck
+        mcp-typecheck mcp-deps
 
 help: ## このヘルプを表示
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -143,6 +143,18 @@ mcp-ui-build: ## MCP Apps の View を1回だけビルドし直す
 # 必要という環境依存を復活させないため。
 mcp-typecheck: ## MCP Apps の View を型検査（tsc --noEmit）
 	$(COMPOSE) run --rm mcp-apps npm run typecheck
+
+# **mcp-apps/package.json に依存を足したら、`make up-d` では反映されない。**
+# node_modules は匿名ボリュームでコンテナ側に隔離してあり（docker-compose.yml の
+# コメント参照）、`docker compose up` は**コンテナを作り直しても匿名ボリュームは
+# 引き継ぐ**ため、イメージを新しくしても中身は古いままになる。そのまま watch ビルドが
+# 走ると、解決できなかった依存が `import ... from "react-dom/client"` の形で残った
+# HTML が dist へ書き出され（ビルドは非ゼロ終了するがファイルは書かれた後）、backend が
+# それを読んで白画面の View を配る。実際に踏んだ経路で、いまは
+# scripts/check-dist.ts がこの形の成果物を書く前に落とす。
+# -V（--renew-anon-volumes）が匿名ボリュームをイメージの中身で作り直す。
+mcp-deps: ## MCP Apps の依存を入れ直す（package.json を変えたら必ず）
+	$(COMPOSE) up -d --build -V mcp-apps
 
 ## --- 開発補助 ----------------------------------------------------
 lint: ## フロントエンドの Lint を実行

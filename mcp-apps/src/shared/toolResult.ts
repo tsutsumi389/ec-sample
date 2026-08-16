@@ -16,12 +16,17 @@
  * `as` を書かせないためにこのモジュールがある。
  */
 
-import type { App } from "@modelcontextprotocol/ext-apps";
+import type { App } from "@modelcontextprotocol/ext-apps/react";
 
 import type { ProductUiMeta, SearchUiItem, SearchUiMeta } from "./types.ts";
 
 /**
- * ホストが ontoolresult / callServerTool で渡してくる結果の型（= CallToolResult）。
+ * ホストが toolresult の通知 / callServerTool の戻り値で渡してくる結果の型
+ * （= CallToolResult）。
+ *
+ * 型の取り出し口に `App["ontoolresult"]`（deprecated な setter）を使っているのは、
+ * **型がそこにしか現れないから**であって、購読の仕方の話ではない（購読は
+ * `addEventListener("toolresult", ...)` を使う。理由は shared/host.ts のコメント）。
  *
  * `@modelcontextprotocol/sdk` から CallToolResult を直接 import しても同じ型になるが、
  * SDK は ext-apps の都合で入っている推移的な依存なので、mcp-apps 側のソースからは

@@ -9,62 +9,21 @@
      常に明側へ倒れる。 -->
 <meta name="color-scheme" content="light dark">
 <title>search_products view</title>
-<!-- スタイルはここに直書きせず src/search/main.ts が import する
+<!-- スタイルはここに直書きせず src/search/main.tsx が import する
      （shared/theme.css → search.css の順。この順がそのままカスケードの順になる）。
      ビルド時に vite-plugin-singlefile が1枚にまとめて head へ差し込む。 -->
 </head>
 <body>
-<div id="app">
-  <header class="header">
-    <h1 id="result-title" class="title">商品検索</h1>
-    <div class="sort-row">
-      <label class="sort-label" for="sort-select">並び替え</label>
-      <select id="sort-select" disabled>
-        <option value="recommended">おすすめ順</option>
-        <option value="newest">新着順</option>
-        <option value="price_asc">価格が安い順</option>
-        <option value="price_desc">価格が高い順</option>
-        <option value="rating">評価が高い順</option>
-      </select>
-    </div>
-    <!-- structuredContent.note（価格帯の申し送り、またはカテゴリ不一致の案内）。
-         控えめな表示にとどめ、無ければ何も出さない。 -->
-    <p id="note" class="note" hidden></p>
-  </header>
-
-  <!-- 再検索・商品ページを開く操作の失敗はここに出す。直前まで表示していた
-       グリッドはそのまま残す（= 元の表示に戻せる）ので hidden の初期値以外
-       このバナーは触らない。 -->
-  <div id="refresh-error" class="banner-error" hidden role="alert">
-    <span id="refresh-error-text"></span>
-    <button id="refresh-error-dismiss" type="button" class="text-btn">閉じる</button>
-  </div>
-
-  <main class="main">
-    <p id="loading-state" class="state-message">商品を検索しています…</p>
-
-    <!-- 一度も結果を受け取れていない状態（初回の検索そのものが失敗）専用の
-         全面エラー。グリッドも並び替えもまだ無いので、ここにだけ再試行を置く。 -->
-    <div id="initial-error-state" class="state-message state-message--error" hidden role="alert">
-      <p id="initial-error-text"></p>
-      <button id="initial-error-retry" type="button" class="retry-btn">再試行</button>
-    </div>
-
-    <p id="empty-state" class="state-message" hidden>該当する商品が見つかりませんでした。</p>
-
-    <div id="grid" class="grid" hidden></div>
-  </main>
-
-  <footer id="pagination" class="pagination" hidden>
-    <button id="prev-btn" class="page-btn" type="button">前へ</button>
-    <span id="page-indicator" class="page-indicator"></span>
-    <button id="next-btn" class="page-btn" type="button">次へ</button>
-  </footer>
-</div>
+<!-- **画面の中身は React（src/search/SearchView.tsx）が組む。**
+     ここに骨組みを書き戻さないこと——createRoot().render() はこの器の中身を
+     必ず作り直すので、静的に置いた要素は一瞬だけ見えて消える（描画の二重化）。
+     ホストの safe area を受ける #app も SearchView が描く（shared/host.ts の
+     useSafeAreaInsets がその要素へ --safe-area-* を載せる）。 -->
+<div id="root"></div>
 <!-- src からの絶対パス（root は mcp-apps/）。**このファイルは mcp-apps/ の直下から
      動かさないこと**——Vite は root からの相対パスをそのまま outDir 内のパスにするので、
      src/ の下へ移すと dist/src/search.html に出て、backend の ui_assets.py が読む
      dist/search.html が生えなくなる。 -->
-<script type="module" src="/src/search/main.ts"></script>
+<script type="module" src="/src/search/main.tsx"></script>
 </body>
 </html>

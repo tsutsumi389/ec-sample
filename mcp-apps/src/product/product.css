@@ -2,7 +2,7 @@
    **両 View に同じ宣言で存在していたものは src/shared/theme.css が持つ。**
    ここに置くのは product にしか無いもの（.panel-* / .specs-* / .spec-*）と、
    search と値が違うもの（#app の max-width、.header の並べ方、.page-btn の
-   padding）だけ。main.ts が theme.css → このファイルの順に import するので、
+   padding）だけ。main.tsx が theme.css → このファイルの順に import するので、
    同じセレクタを書けばこちらが勝つ。
 
    規律は theme.css と同じ:
