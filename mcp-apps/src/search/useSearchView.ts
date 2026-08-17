@@ -7,24 +7,22 @@
  * ここにも一切書かない**（同じ判断が backend の services/cart.py と二重になり、
  * 必ず片方が古くなる）。ここが持つのは「読み込み中か」「一度でも描けたか」
  * 「失敗をどちらの層に出すか」だけ。
+ *
+ * ホストとの接続手順（useApp / useHostStyles / safe area / 接続失敗の検出）は
+ * shared/useHostApp.ts が持つ。**あの手順をここへ書き戻さないこと**——順序と締切の
+ * 規律ごと1か所に閉じ込めてある。
  */
 
-import { useCallback, useEffect, useReducer, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useReducer } from "react";
 
-// **SDK は必ず `/react` エントリから import する。** `@modelcontextprotocol/ext-apps`
-// （ルート）と `/react` は**それぞれが App クラスの実体を持つ別々のバンドル**で、
-// 両方から import すると同じクラスが2つ入る（バンドルが 33KB 増え、`instanceof` が
-// 食い違う）。`/react` はルートの中身を丸ごと再エクスポートしているので、
-// 型も値もこちら1本で足りる。
-import { useApp, useHostStyles, type App } from "@modelcontextprotocol/ext-apps/react";
+import type { App } from "@modelcontextprotocol/ext-apps/react";
 
 import { readNumber, readString, toArg } from "../shared/format.ts";
-import { useSafeAreaInsets } from "../shared/host.ts";
 import { openPageInHost } from "../shared/openLink.ts";
 import {
-  extractErrorMessage,
+  NETWORK_ERROR_MESSAGE,
   extractSearchUiItems,
-  extractStructuredContent,
+  parseToolResult,
   type ToolResult,
 } from "../shared/toolResult.ts";
 import {
@@ -34,19 +32,29 @@ import {
   type SearchUiItem,
   type SortKey,
 } from "../shared/types.ts";
+import { useHostApp } from "../shared/useHostApp.ts";
+import { useLatestRef } from "../shared/useLatestRef.ts";
 
 const DEFAULT_SORT: SortKey = "recommended";
 const DEFAULT_LIMIT = 10;
 
-/** 再検索のたびに据え置く検索条件（ツールの初回引数から取る）。 */
-interface SearchBase {
-  query: string | undefined;
-  category: string | undefined;
-  minPrice: number | undefined;
-  maxPrice: number | undefined;
-}
+/** 結果を読めなかったときの文言。サーバーが文言を返していればそちらが優先される。 */
+const FAILURE_MESSAGES = {
+  missing: "検索結果を受け取れませんでした。",
+  fallback: "検索に失敗しました。もう一度お試しください。",
+  malformed: "検索結果の形式が不正です。",
+};
 
-export interface SearchState {
+/**
+ * 再検索のたびに据え置く検索条件（ツールの初回引数から取る）。
+ *
+ * **ツールの引数と同じ形（snake_case）で持つ。** camelCase に読み替えて持つと、
+ * 送り出すところで1つずつ書き戻す対応表が要り、絞り込み条件を1つ足すたびに
+ * 「型・受け取り・送り出し」の3か所を揃えることになる。同じ形なら展開するだけで済む。
+ */
+type SearchBase = Pick<SearchProductsArgs, "query" | "category" | "min_price" | "max_price">;
+
+interface SearchState {
   /**
    * 再検索では query / category / min_price / max_price をツールの初回引数
    * （toolinput で受け取る）から一切変えない。toolresult / callServerTool の
@@ -55,6 +63,12 @@ export interface SearchState {
   base: SearchBase;
   /** 「直近成功した検索」の並び順（= 画面に実際に出ている内容）。失敗では書き換えない。 */
   sort: SortKey;
+  /**
+   * 直近成功時のページと件数。**ページ送りも総ページ数の計算もこちらを読む。**
+   * result の中にも同じ2つが入っているが、読む先を混ぜないこと——揃っているのは
+   * 下の "result" が両方を書き戻しているからで、片方だけ読む箇所が生まれると
+   * backend が limit を正規化した日に画面の半分だけが追随する。
+   */
   page: number;
   limit: number;
   loading: boolean;
@@ -95,7 +109,7 @@ type SearchAction =
  * 以上、初期状態の側で表現する）。
  */
 const INITIAL_STATE: SearchState = {
-  base: { query: undefined, category: undefined, minPrice: undefined, maxPrice: undefined },
+  base: {},
   sort: DEFAULT_SORT,
   page: 1,
   limit: DEFAULT_LIMIT,
@@ -187,12 +201,17 @@ function isSortKey(value: unknown): value is SortKey {
   return typeof value === "string" && (SORT_KEYS as readonly string[]).includes(value);
 }
 
-export interface SearchView {
+interface UseSearchViewResult {
   state: SearchState;
+  /**
+   * 全面エラーが出ている間は null になる結果。**画面はこちらだけを読む。**
+   * 「全面エラーはグリッドとページングを丸ごと置き換え、バナーはそのどれにも触らない」
+   * という二層の分け方は、失敗の振り分け（reducer の failure）と対になる規律なので、
+   * 描画側の1行ではなくここで確定させる。
+   */
+  result: ProductSearchResult | null;
   /** 直近成功時の総ページ数。result からの派生値なので状態には持たない。 */
   totalPages: number;
-  /** ホストの safe area を受ける要素（#app）に付ける ref。 */
-  appElRef: RefObject<HTMLDivElement>;
   changeSort: (value: string) => void;
   goToPage: (page: number) => void;
   retry: () => void;
@@ -200,57 +219,32 @@ export interface SearchView {
   openPage: (productId: number) => void;
 }
 
-export function useSearchView(): SearchView {
+export function useSearchView(): UseSearchViewResult {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
-  const appElRef = useRef<HTMLDivElement>(null);
 
-  /**
-   * 最新の state をホストのイベントと非同期処理から読むための写し。
-   *
-   * **これが要るのは、ホストの購読（toolinput / toolresult / toolcancelled）が
-   * マウント時に一度だけ登録され、以後差し替えられないため。** 登録時のクロージャは
-   * 初期状態を閉じ込めているので、`state` を直接読むと「1回目の検索の並び順」を
-   * 永久に使い続ける。書き込みを effect に置いてあるのは描画中に ref を書き換えない
-   * ためで、React は次の discrete イベントを処理する前に passive effect を流すので、
-   * クリックやセレクト操作から読む値が古いことは無い。
-   */
-  const stateRef = useRef(state);
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  // ホストの購読と非同期処理から最新の state を読むための写し（理由は useLatestRef）。
+  const stateRef = useLatestRef(state);
 
   const handleToolResult = useCallback(
     (result: ToolResult | undefined, requestedSort: SortKey): void => {
-      if (!result || result.isError) {
-        dispatch({
-          type: "failure",
-          message: result
-            ? extractErrorMessage(result, "検索に失敗しました。もう一度お試しください。")
-            : "検索結果を受け取れませんでした。",
-        });
+      const outcome = parseToolResult<ProductSearchResult>(result, FAILURE_MESSAGES);
+      if (!outcome.ok) {
+        dispatch({ type: "failure", message: outcome.message });
         return;
       }
-
-      const data = extractStructuredContent<ProductSearchResult>(result);
-      if (!data) {
-        dispatch({ type: "failure", message: "検索結果の形式が不正です。" });
-        return;
-      }
-
-      dispatch({ type: "result", data, uiItems: extractSearchUiItems(result), sort: requestedSort });
+      dispatch({
+        type: "result",
+        data: outcome.data,
+        uiItems: extractSearchUiItems(outcome.result),
+        sort: requestedSort,
+      });
     },
     [],
   );
 
   /**
-   * ホストからの通知の購読。**useApp が App を作った直後・connect() を呼ぶ前に**
-   * 一度だけ呼ばれる（onAppCreated）。
-   *
-   * **この締切は守らなければならない。** tool-input / tool-result / tool-cancelled は
-   * 一度きりの通知で、connect() が ui/initialize を終えた後に登録すると取りこぼす
-   * （SDK 自身が _assertHandlerTiming で警告・例外を出す設計になっている）。
-   * 手で `new App()` して connect() する形に戻すと、この順序を自分で守り続ける必要が
-   * 生まれる——useApp を使う理由の半分はそこにある。
+   * ホストからの通知の購読。**App を作った直後・connect() を呼ぶ前に**一度だけ
+   * 呼ばれる（useHostApp が onAppCreated へ通す）。この締切の理由は useHostApp.ts。
    */
   const registerHandlers = useCallback(
     (app: App): void => {
@@ -258,11 +252,15 @@ export function useSearchView(): SearchView {
         const args = params?.arguments ?? {};
         dispatch({
           type: "tool-input",
+          // 空文字を「指定なし」として落とすのはここ1か所。**数値側に toArg を
+          // 掛け直さないこと**——readNumber が既に number | undefined まで絞っており、
+          // toArg の `=== ""` は数値に一致しないので何もしない（0 を守る仕掛けが
+          // 効くのは文字列を経由する入り口だけ）。
           base: {
-            query: readString(args.query),
-            category: readString(args.category),
-            minPrice: readNumber(args.min_price),
-            maxPrice: readNumber(args.max_price),
+            query: toArg(readString(args.query)),
+            category: toArg(readString(args.category)),
+            min_price: readNumber(args.min_price),
+            max_price: readNumber(args.max_price),
           },
           sort: isSortKey(args.sort) ? args.sort : DEFAULT_SORT,
           page: readNumber(args.page) ?? 1,
@@ -282,32 +280,22 @@ export function useSearchView(): SearchView {
             : "検索が中断されました。",
         });
       });
-
-      app.onerror = (err) => {
-        console.error("[search-products view] transport error", err);
-      };
     },
-    [handleToolResult],
+    [handleToolResult, stateRef],
   );
 
-  // capabilities は空、autoResize は既定（true）のまま。**autoResize を明示的に
-  // false にしないこと**——ResizeObserver による高さのホストへの通知がこれで付く。
-  const { app, error } = useApp({
-    appInfo: { name: "search-products-view", version: "1.0.0" },
-    capabilities: {},
+  const { app, connectError } = useHostApp({
+    name: "search-products-view",
+    version: "1.0.0",
     onAppCreated: registerHandlers,
   });
 
-  // テーマ・CSS 変数・フォントの適用は SDK に任せる。safe area だけは
-  // useHostStyles が扱わないので、こちらで #app に載せる（shared/host.ts）。
-  useHostStyles(app, app?.getHostContext());
-  useSafeAreaInsets(app, appElRef);
-
+  // 接続の失敗をどちらの層に出すかは View の判断なので、useHostApp から文言だけを
+  // 受け取ってここで振り分ける（まだ何も描けていないので全面エラー）。
   useEffect(() => {
-    if (error === null) return;
-    console.error("[search-products view] connect failed", error);
-    dispatch({ type: "initial-error", message: "ホストとの接続に失敗しました。" });
-  }, [error]);
+    if (connectError === null) return;
+    dispatch({ type: "initial-error", message: connectError });
+  }, [connectError]);
 
   // ---- 画面からの操作 ----------------------------------------------------
 
@@ -317,36 +305,33 @@ export function useSearchView(): SearchView {
       // app が null なのは接続が終わるまで。ツールは撃てないので何もしない。
       if (app === null || current.loading) return; // 多重送信を避ける
       dispatch({ type: "request" });
-      // toArg は空文字・undefined・null を「指定なし」として落とすが、**0 は落とさない**
-      // （min_price=0 は有効な指定）。`||` や `??` に書き換えると壊れる。
+      // base は既にツール引数の形なので展開するだけ。
+      // satisfies にしてあるのは、callServerTool の arguments が
+      // Record<string, unknown> を要求するため（interface 型の値は暗黙の
+      // インデックスシグネチャを持たず、そのままでは渡せない）。型の検査は効かせつつ、
+      // 推論される型はオブジェクトリテラルのままにする。
       const args = {
-        query: toArg(current.base.query),
-        category: toArg(current.base.category),
-        min_price: toArg(current.base.minPrice),
-        max_price: toArg(current.base.maxPrice),
+        ...current.base,
         sort: sortValue,
         page: pageValue,
         limit: current.limit,
-        // satisfies にしてあるのは、callServerTool の arguments が
-        // Record<string, unknown> を要求するため（interface 型の値は暗黙の
-        // インデックスシグネチャを持たず、そのままでは渡せない）。型の検査は効かせつつ、
-        // 推論される型はオブジェクトリテラルのままにする。
       } satisfies SearchProductsArgs;
       try {
         const result = await app.callServerTool({ name: "search_products", arguments: args });
         handleToolResult(result, sortValue);
       } catch {
-        dispatch({ type: "failure", message: "通信エラーが発生しました。もう一度お試しください。" });
+        dispatch({ type: "failure", message: NETWORK_ERROR_MESSAGE });
       }
     },
-    [app, handleToolResult],
+    [app, handleToolResult, stateRef],
   );
 
   const changeSort = useCallback(
     (value: string): void => {
-      // option は SearchView.tsx に書いた5つだけなので、実際に DEFAULT_SORT へ落ちる
-      // ことは無い。それでも isSortKey を通すのは、ツール引数へ渡る値の型を SortKey
-      // 1本に保つため（string のまま持ち回すと、どこからでも知らない並び順を入れられる）。
+      // option は SORT_LABELS（SearchView.tsx）が SortKey 全件から作るので、実際に
+      // DEFAULT_SORT へ落ちることは無い。それでも isSortKey を通すのは、ツール引数へ
+      // 渡る値の型を SortKey 1本に保つため（string のまま持ち回すと、どこからでも
+      // 知らない並び順を入れられる）。
       void doSearch(isSortKey(value) ? value : DEFAULT_SORT, 1); // 並び替えたら1ページ目へ
     },
     [doSearch],
@@ -356,13 +341,13 @@ export function useSearchView(): SearchView {
     (page: number): void => {
       void doSearch(stateRef.current.sort, page);
     },
-    [doSearch],
+    [doSearch, stateRef],
   );
 
   const retry = useCallback((): void => {
     const current = stateRef.current;
     void doSearch(current.sort, current.page);
-  }, [doSearch]);
+  }, [doSearch, stateRef]);
 
   const dismissBanner = useCallback((): void => {
     dispatch({ type: "dismiss-banner" });
@@ -373,18 +358,18 @@ export function useSearchView(): SearchView {
       const meta = stateRef.current.uiItems.get(productId);
       // page_url を持たないカード（_meta.ui が届かなかった場合）は押しても何もしない。
       if (app === null || meta === undefined) return;
-      void (async () => {
-        dispatch({ type: "open-start", id: productId });
-        dispatch({ type: "open-end", message: await openPageInHost(app, meta.page_url) });
-      })();
+      dispatch({ type: "open-start", id: productId });
+      void openPageInHost(app, meta.page_url).then((message) => {
+        dispatch({ type: "open-end", message });
+      });
     },
-    [app],
+    [app, stateRef],
   );
 
+  const result = state.initialError === null ? state.result : null;
   // total が 0 なら ceil(0 / limit) = 0 なので 1 ページ扱いになる（空の検索結果でも
   // 「1 / 1 ページ」の土台は保つ）。
-  const totalPages =
-    state.result !== null ? Math.max(1, Math.ceil(state.result.total / state.result.limit)) : 1;
+  const totalPages = result !== null ? Math.max(1, Math.ceil(result.total / state.limit)) : 1;
 
-  return { state, totalPages, appElRef, changeSort, goToPage, retry, dismissBanner, openPage };
+  return { state, result, totalPages, changeSort, goToPage, retry, dismissBanner, openPage };
 }

@@ -13,44 +13,43 @@
  * 静かに片方が消える）。SDK 自身も on* 系 setter を deprecated にしている。
  */
 
-import { useEffect, type RefObject } from "react";
+import { useEffect } from "react";
 
-import type { App } from "@modelcontextprotocol/ext-apps/react";
-
-/**
- * ホストが配ってくる文脈。View が読むのは safeAreaInsets だけで、
- * theme / styles は useHostStyles に任せている。
- */
-type HostContext = Parameters<NonNullable<App["onhostcontextchanged"]>>[0];
+import type { App, McpUiHostContext } from "@modelcontextprotocol/ext-apps/react";
 
 /**
- * safe area のインセットを **生値のまま** #app のカスタムプロパティへ載せる。
+ * safe area のインセットを **生値のまま** ドキュメントのルートへ載せる。
  *
- * 既定の余白との足し算は CSS 側（shared/theme.css の
- * `#app { padding: calc(16px + var(--safe-area-*)) }`）にさせる。JS に既定の余白
- * （16px）を写して足し込む形にすると、同じ数値を CSS と JS で二重に持つことになり、
- * View ごとに余白を変えたくなった日に safe area の計算だけが古い基準のまま残る
- * ——しかもインセットを持つ端末でしか表面化しない。
+ * **載せ先が documentElement なのは、これがホスト由来の文書レベルの値だから。**
+ * SDK の useHostStyles も CSS 変数を documentElement に当てており、載せ先を揃えて
+ * ある。カスタムプロパティは継承するので、`#app { padding: calc(16px + var(--safe-area-*)) }`
+ * はそのまま効く。**View ごとの要素へ ref 越しに載せる形へ戻さないこと**——
+ * 「ref を作る／フックの戻り値に通す／`#app` を持つ要素に付ける」の3つを View ごとに
+ * 揃える必要が生まれ、どれを落としても余白がずれるだけで何も壊れず、しかも
+ * インセットを報告する端末でしか表面化しない。
  *
- * インセットが渡ってこない通知では**何もしない**。onhostcontextchanged は差分だけを
+ * 既定の余白との足し算は CSS 側（shared/theme.css の calc()）にさせる。JS に既定の
+ * 余白（16px）を写して足し込む形にすると、同じ数値を CSS と JS で二重に持つことになり、
+ * View ごとに余白を変えたくなった日に safe area の計算だけが古い基準のまま残る。
+ *
+ * インセットが渡ってこない通知では**何もしない**。hostcontextchanged は差分だけを
  * 送ってくる可能性があるので、未指定を既定値（0）で上書きすると、ホストが設定済みの
  * インセットをこちらから消してしまう。
  *
  * @param app useApp が返す App。接続前は null で、そのときは何もしない。
- * @param appElRef インセットを載せる要素（各 View の #app）。
  */
-export function useSafeAreaInsets(app: App | null, appElRef: RefObject<HTMLElement>): void {
+export function useSafeAreaInsets(app: App | null): void {
   useEffect(() => {
-    const appEl = appElRef.current;
-    if (app === null || appEl === null) return;
+    if (app === null) return;
+    const root = document.documentElement;
 
-    const apply = (ctx: HostContext | undefined): void => {
+    const apply = (ctx: McpUiHostContext | undefined): void => {
       const insets = ctx?.safeAreaInsets;
       if (!insets) return;
-      appEl.style.setProperty("--safe-area-top", `${insets.top}px`);
-      appEl.style.setProperty("--safe-area-right", `${insets.right}px`);
-      appEl.style.setProperty("--safe-area-bottom", `${insets.bottom}px`);
-      appEl.style.setProperty("--safe-area-left", `${insets.left}px`);
+      root.style.setProperty("--safe-area-top", `${insets.top}px`);
+      root.style.setProperty("--safe-area-right", `${insets.right}px`);
+      root.style.setProperty("--safe-area-bottom", `${insets.bottom}px`);
+      root.style.setProperty("--safe-area-left", `${insets.left}px`);
     };
 
     // 接続時点の値は通知として飛んでこない可能性があるので、ここで一度読む
@@ -58,5 +57,5 @@ export function useSafeAreaInsets(app: App | null, appElRef: RefObject<HTMLEleme
     apply(app.getHostContext());
     app.addEventListener("hostcontextchanged", apply);
     return () => app.removeEventListener("hostcontextchanged", apply);
-  }, [app, appElRef]);
+  }, [app]);
 }

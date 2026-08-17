@@ -17,18 +17,18 @@ import { ErrorBanner, InitialError, ProductImage } from "../shared/ui.tsx";
 import { useProductView } from "./useProductView.ts";
 
 export function ProductView(): ReactElement {
-  const { state, pageUrl, appElRef, reload, dismissBanner, openPage } = useProductView();
+  // data は「全面エラーが出ている間は null」に揃えたもの（useProductView が確定させる）。
+  // search 側と同じ二層の分け方で、全面エラーはパネルと再読み込みを丸ごと置き換え、
+  // バナーはそのどちらにも触らない。
+  const { state, data, reload, dismissBanner, openPage } = useProductView();
 
-  // 全面エラーが出ている間はパネルを無かったことにして描く（search 側と同じ二層の
-  // 分け方。全面エラーはパネルと再読み込みを丸ごと置き換え、バナーはそのどちらにも
-  // 触らない）。
   const initialError = state.initialError;
-  const data = initialError === null ? state.data : null;
 
   return (
-    // ホストから safe area のインセットが届くと shared/host.ts の useSafeAreaInsets が
-    // この要素へ --safe-area-* を載せる（足し算は theme.css の calc() 側）。
-    <div id="app" ref={appElRef}>
+    // id="app" は theme.css が余白を当てるためのフック。safe area のインセットは
+    // shared/host.ts の useSafeAreaInsets がドキュメントのルートへ載せ、足し算は
+    // theme.css の calc() 側がやる（この要素に ref を付ける必要はない）。
+    <div id="app">
       <header className="header">
         <h1 className="title">{data !== null ? data.name : "商品詳細"}</h1>
         {/* 直近成功時の product_id で get_product を呼び直すボタン。並び替え・
@@ -97,10 +97,13 @@ export function ProductView(): ReactElement {
 
               {/* specs は "ラベル: 値" に潰した文字列の配列（views.ProductDetail.specs）。
                   label/value に分割しての表形式にはしない——CLAUDE.md の「label/value の
-                  2キーを増やさない」規律に、表示側も倣う。Array.isArray を残してあるのは
-                  structuredContent が検査されないキャストで届くため（型は約束であって
-                  実行時の保証ではない）。 */}
-              {Array.isArray(data.specs) && data.specs.length > 0 ? (
+                  2キーを増やさない」規律に、表示側も倣う。
+                  **ここだけ Array.isArray で守り直さないこと**——structuredContent を
+                  信じるか検査するかの判断は shared/toolResult.ts が「唯一のキャスト地点。
+                  中身のフィールドまでは検査しない」と決めており、SearchView も
+                  result.items を素で map している。1フィールドだけ二重に持つと、
+                  次に足す人が従う規則が無くなる。 */}
+              {data.specs.length > 0 ? (
                 <div>
                   <h3 className="specs-heading">仕様</h3>
                   <ul className="spec-list">
@@ -114,7 +117,10 @@ export function ProductView(): ReactElement {
               ) : null}
 
               <div className="panel-actions">
-                {pageUrl !== null ? (
+                {/* 開ける先は _meta.ui.page_url だけ。画像（上の ProductImage）と
+                    同じ state.meta を同じ読み方で見る——片方だけをフック側で
+                    派生させると、同じオブジェクトを2通りに読むことになる。 */}
+                {state.meta !== null ? (
                   <button
                     className="page-btn"
                     type="button"

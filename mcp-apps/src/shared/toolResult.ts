@@ -16,7 +16,7 @@
  * `as` を書かせないためにこのモジュールがある。
  */
 
-import type { App } from "@modelcontextprotocol/ext-apps/react";
+import type { AppEventMap } from "@modelcontextprotocol/ext-apps/react";
 
 import type { ProductUiMeta, SearchUiItem, SearchUiMeta } from "./types.ts";
 
@@ -24,15 +24,17 @@ import type { ProductUiMeta, SearchUiItem, SearchUiMeta } from "./types.ts";
  * ホストが toolresult の通知 / callServerTool の戻り値で渡してくる結果の型
  * （= CallToolResult）。
  *
- * 型の取り出し口に `App["ontoolresult"]`（deprecated な setter）を使っているのは、
- * **型がそこにしか現れないから**であって、購読の仕方の話ではない（購読は
- * `addEventListener("toolresult", ...)` を使う。理由は shared/host.ts のコメント）。
+ * `AppEventMap` は SDK が「イベント名 → その params の型」を引くために公開している
+ * 対応表で、まさにこの用途のためにある。**`App["ontoolresult"]` から
+ * `Parameters<NonNullable<...>>` で削り出さないこと**——あれは SDK が deprecated に
+ * している setter であり、購読に使ってはならないものを型の取り出し口にすると、
+ * setter が消えた日に「型の置き場所」という無関係な理由で壊れる。
  *
  * `@modelcontextprotocol/sdk` から CallToolResult を直接 import しても同じ型になるが、
  * SDK は ext-apps の都合で入っている推移的な依存なので、mcp-apps 側のソースからは
  * 参照しない（依存の向きを ext-apps 1本に見せておく）。
  */
-export type ToolResult = Parameters<NonNullable<App["ontoolresult"]>>[0];
+export type ToolResult = AppEventMap["toolresult"];
 
 /**
  * structuredContent をオブジェクトとして取り出す。形が違えば null。
@@ -98,4 +100,49 @@ export function extractErrorMessage(result: ToolResult, fallback: string): strin
     }
   }
   return fallback;
+}
+
+/**
+ * callServerTool そのものが例外で終わったときの文言。
+ * **View に依存しないのでここが持つ**（両 View の catch 節に同じ文字列が書いてあった）。
+ */
+export const NETWORK_ERROR_MESSAGE = "通信エラーが発生しました。もう一度お試しください。";
+
+/** parseToolResult の結果。成功なら絞り込み済みの本体、失敗なら画面に出す文言。 */
+export type ToolOutcome<T> =
+  | { ok: true; data: T; result: ToolResult }
+  | { ok: false; message: string };
+
+/**
+ * ツールの結果を「描けるもの」か「出す文言」かに振り分ける。
+ *
+ * **この判定がここにあるのは、境界の判断を1か所に集めるため。** 上の抽出関数群は
+ * 「形を確かめて絞る」だけを持っており、**その結果をどう分岐するか**は移植直後まで
+ * 両 View の handleToolResult に同じ形で書かれていた。分岐（届かなかった / isError /
+ * 形が違う）が増えたときに両方を直す必要があるのはこの層の設計として誤りなので、
+ * 抽出関数と同じモジュールへ寄せてある。
+ *
+ * **文言そのものは View ごとに違うので引数で受ける。** サーバーが返した文言があれば
+ * それが常に優先される（extractErrorMessage）ので、ここで渡すのはあくまで取れなかった
+ * ときの汎用文。
+ *
+ * `result` を成功側に添えて返すのは、_meta.ui の取り出し（extractSearchUiItems /
+ * extractProductUiMeta）が呼び出し側で必要になるため。**`result` を握り直すために
+ * 非 null アサーションを書かせないこと**がこの形の目的。
+ *
+ * @param messages missing = 結果そのものが届かなかった / fallback = isError だが
+ *   content から文言を取れなかった / malformed = structuredContent の形が違う。
+ */
+export function parseToolResult<T>(
+  result: ToolResult | undefined,
+  messages: { missing: string; fallback: string; malformed: string },
+): ToolOutcome<T> {
+  // 型の上では常に値が来ることになっているが、これはホストの実装を信じた型であって
+  // 検査ではない。移植元のガードをそのまま残してある。
+  if (!result) return { ok: false, message: messages.missing };
+  if (result.isError) {
+    return { ok: false, message: extractErrorMessage(result, messages.fallback) };
+  }
+  const data = extractStructuredContent<T>(result);
+  return data !== null ? { ok: true, data, result } : { ok: false, message: messages.malformed };
 }

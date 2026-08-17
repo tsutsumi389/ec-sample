@@ -8,35 +8,41 @@
  * **文言を組み立てる処理はここにも一切書かない。** availability も含め、表示する
  * 日本語はサーバーが完成文で寄越したものをそのまま出す（backend の
  * services/cart.py が唯一の源）。
+ *
+ * ホストとの接続手順（useApp / useHostStyles / safe area / 接続失敗の検出）は
+ * shared/useHostApp.ts が持つ（search 側と共通）。
  */
 
-import { useCallback, useEffect, useReducer, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useReducer } from "react";
 
-// **SDK は必ず `/react` エントリから import する**（理由は search/useSearchView.ts の
-// 同じ import のコメント。ルートと `/react` はそれぞれ App の実体を持つ別バンドル）。
-import { useApp, useHostStyles, type App } from "@modelcontextprotocol/ext-apps/react";
+import type { App } from "@modelcontextprotocol/ext-apps/react";
 
 import { readNumber } from "../shared/format.ts";
-import { useSafeAreaInsets } from "../shared/host.ts";
 import { openPageInHost } from "../shared/openLink.ts";
 import {
-  extractErrorMessage,
+  NETWORK_ERROR_MESSAGE,
   extractProductUiMeta,
-  extractStructuredContent,
+  parseToolResult,
   type ToolResult,
 } from "../shared/toolResult.ts";
 import type { GetProductArgs, ProductDetail, ProductUiMeta } from "../shared/types.ts";
+import { useHostApp } from "../shared/useHostApp.ts";
+import { useLatestRef } from "../shared/useLatestRef.ts";
 
 /**
- * content から文言を取れなかったときの汎用文。
+ * 結果を読めなかったときの文言。
  * **サーバーが返した文言があるならそちらが常に優先される**（extractErrorMessage）。
  * get_product が存在しない product_id に返す "Product not found" は英語のまま
  * 素通しされるが、View 側で日本語に訳し直さない——訳の対応表を持つと backend が
  * 文言を足したときに View だけが古い訳を出し続ける。
  */
-const FALLBACK_ERROR_MESSAGE = "商品情報を取得できませんでした。";
+const FAILURE_MESSAGES = {
+  missing: "商品情報を受け取れませんでした。",
+  fallback: "商品情報を取得できませんでした。",
+  malformed: "商品情報の形式が不正です。",
+};
 
-export interface ProductState {
+interface ProductState {
   /**
    * 再取得ではツールの初回引数（toolinput で受け取る）から一切変えない。
    * toolresult / callServerTool の戻り値には product_id が含まれないため、
@@ -137,62 +143,41 @@ function reducer(state: ProductState, action: ProductAction): ProductState {
   }
 }
 
-export interface ProductView {
+interface UseProductViewResult {
   state: ProductState;
-  /** 直近成功時の商品ページURL。meta からの派生値なので状態には持たない。 */
-  pageUrl: string | null;
-  /** ホストの safe area を受ける要素（#app）に付ける ref。 */
-  appElRef: RefObject<HTMLDivElement>;
+  /**
+   * 全面エラーが出ている間は null になる商品（search 側の result と同じ扱い）。
+   * **画面はこちらだけを読む。** 二層の「触る領域が重ならない」を、描画側の1行では
+   * なく失敗の振り分けと同じ層で確定させるため。
+   */
+  data: ProductDetail | null;
   reload: () => void;
   dismissBanner: () => void;
   openPage: () => void;
 }
 
-export function useProductView(): ProductView {
+export function useProductView(): UseProductViewResult {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
-  const appElRef = useRef<HTMLDivElement>(null);
 
-  /**
-   * 最新の state をホストのイベントと非同期処理から読むための写し
-   * （必要な理由は search 側の useSearchView.ts に同じ）。
-   */
-  const stateRef = useRef(state);
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  // ホストの購読と非同期処理から最新の state を読むための写し（理由は useLatestRef）。
+  const stateRef = useLatestRef(state);
 
   /**
    * ツールの結果を受けて画面を作り直す。ホストからの通知（toolresult）と、
    * View から撃った再取得（callServerTool）の戻り値が同じここに集まる。
-   *
-   * 引数を `ToolResult | undefined` で受けているのは、移植元の `!result` ガードを
-   * そのまま残すため。型の上では常に値が来ることになっているが、これはホストの
-   * 実装を信じた型であって検査ではない。
    */
   const handleToolResult = useCallback((result: ToolResult | undefined): void => {
-    if (!result || result.isError) {
-      dispatch({
-        type: "failure",
-        message: result
-          ? extractErrorMessage(result, FALLBACK_ERROR_MESSAGE)
-          : "商品情報を受け取れませんでした。",
-      });
+    const outcome = parseToolResult<ProductDetail>(result, FAILURE_MESSAGES);
+    if (!outcome.ok) {
+      dispatch({ type: "failure", message: outcome.message });
       return;
     }
-
-    const data = extractStructuredContent<ProductDetail>(result);
-    if (!data) {
-      dispatch({ type: "failure", message: "商品情報の形式が不正です。" });
-      return;
-    }
-
-    dispatch({ type: "result", data, meta: extractProductUiMeta(result) });
+    dispatch({ type: "result", data: outcome.data, meta: extractProductUiMeta(outcome.result) });
   }, []);
 
   /**
-   * ホストからの通知の購読。**useApp が App を作った直後・connect() を呼ぶ前に**
-   * 一度だけ呼ばれる（onAppCreated）。この締切を守らなければならない理由は
-   * search 側の同じ関数のコメントを参照。
+   * ホストからの通知の購読。**App を作った直後・connect() を呼ぶ前に**一度だけ
+   * 呼ばれる（useHostApp が onAppCreated へ通す）。この締切の理由は useHostApp.ts。
    */
   const registerHandlers = useCallback(
     (app: App): void => {
@@ -213,32 +198,22 @@ export function useProductView(): ProductView {
             : "取得が中断されました。",
         });
       });
-
-      app.onerror = (err) => {
-        console.error("[product-detail view] transport error", err);
-      };
     },
     [handleToolResult],
   );
 
-  // capabilities は空、autoResize は既定（true）のまま。**autoResize を明示的に
-  // false にしないこと**——ResizeObserver による高さのホストへの通知がこれで付く。
-  const { app, error } = useApp({
-    appInfo: { name: "product-detail-view", version: "1.0.0" },
-    capabilities: {},
+  const { app, connectError } = useHostApp({
+    name: "product-detail-view",
+    version: "1.0.0",
     onAppCreated: registerHandlers,
   });
 
-  // テーマ・CSS 変数・フォントの適用は SDK に任せる。safe area だけは
-  // useHostStyles が扱わないので、こちらで #app に載せる（shared/host.ts）。
-  useHostStyles(app, app?.getHostContext());
-  useSafeAreaInsets(app, appElRef);
-
+  // 接続の失敗をどちらの層に出すかは View の判断なので、useHostApp から文言だけを
+  // 受け取ってここで振り分ける（まだ何も描けていないので全面エラー）。
   useEffect(() => {
-    if (error === null) return;
-    console.error("[product-detail view] connect failed", error);
-    dispatch({ type: "initial-error", message: "ホストとの接続に失敗しました。" });
-  }, [error]);
+    if (connectError === null) return;
+    dispatch({ type: "initial-error", message: connectError });
+  }, [connectError]);
 
   // ---- 画面からの操作 ----------------------------------------------------
 
@@ -260,9 +235,9 @@ export function useProductView(): ProductView {
       const result = await app.callServerTool({ name: "get_product", arguments: args });
       handleToolResult(result);
     } catch {
-      dispatch({ type: "failure", message: "通信エラーが発生しました。もう一度お試しください。" });
+      dispatch({ type: "failure", message: NETWORK_ERROR_MESSAGE });
     }
-  }, [app, handleToolResult]);
+  }, [app, handleToolResult, stateRef]);
 
   const reload = useCallback((): void => {
     void fetchProduct();
@@ -275,16 +250,15 @@ export function useProductView(): ProductView {
   const openPage = useCallback((): void => {
     const url = stateRef.current.meta?.page_url;
     if (app === null || !url) return;
-    void (async () => {
-      dispatch({ type: "open-start" });
-      dispatch({ type: "open-end", message: await openPageInHost(app, url) });
-    })();
-  }, [app]);
+    dispatch({ type: "open-start" });
+    void openPageInHost(app, url).then((message) => {
+      dispatch({ type: "open-end", message });
+    });
+  }, [app, stateRef]);
 
   return {
     state,
-    pageUrl: state.meta !== null ? state.meta.page_url : null,
-    appElRef,
+    data: state.initialError === null ? state.data : null,
     reload,
     dismissBanner,
     openPage,
