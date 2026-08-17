@@ -16,20 +16,14 @@
    この 76 個以外の名前を var() で読んでも永久にフォールバックしか当たらないので、
    新しい変数名を発明しないこと。
 
-   **[hidden] は下の1行で一括して伏せる。** display: flex / grid は [hidden] の既定
-   display: none に勝ってしまうので、以前はセレクタごとに `.x[hidden] { display: none }`
-   を書き足していたが、**足し忘れが「hidden にしたのに消えない」として表に出る**書き方
-   だった。両 View で11個まで増えたところで normalize 系と同じ一括指定に寄せてある。
-   `!important` なのは display を持つ規則すべてに勝つ必要があるため——hidden 属性が
-   付いた要素を見せたい状況はこの2画面に存在しないので、例外は考えなくてよい。
-   React へ移してからは表示の出し分けが条件付きレンダリング（描かない）になったため
-   **今この規則に当たる要素は1つも無い**が、normalize 相当の防御として残してある
-   （hidden を1つ書いた瞬間に、上の足し忘れが再発しない形で効く）。 */
+   表示の出し分けは条件付きレンダリング（描かない）で行うので、**今この CSS に
+   [hidden] へ当たる要素は1つも無い**。下の1行は normalize 相当の防御として残してある。 */
 
 * , *::before, *::after { box-sizing: border-box; }
 
-/* hidden 属性が付いた要素は必ず消える。**これを弱めないこと**（弱めた瞬間、display を
-   持つ要素にだけ個別指定を足して回る運用に戻る）。 */
+/* display: flex / grid は [hidden] の既定 display: none に勝つので、hidden を書いた
+   要素が消えないという形で表に出る。**この !important を弱めないこと**（弱めた瞬間、
+   display を持つ要素にだけ個別指定を足して回る運用に戻る）。 */
 [hidden] { display: none !important; }
 
 html, body { margin: 0; padding: 0; }
@@ -49,8 +43,9 @@ button, select {
 }
 
 /* 既定の余白（16px）が存在するのはここ1か所だけ。ホストから safe area のインセットが
-   届いたときは shared/host.ts の useSafeAreaInsets() が --safe-area-* を #app に載せ、
-   足し算はこの calc() がやる。**JS 側に 16 を写して足し込む形へ戻さないこと**——
+   届いたときは shared/host.ts の useSafeAreaInsets() が --safe-area-* をドキュメントの
+   ルートに載せ（カスタムプロパティは継承するのでここまで届く）、足し算はこの calc() が
+   やる。**JS 側に 16 を写して足し込む形へ戻さないこと**——
    同じ数値を CSS と JS で二重に持つことになり、余白を変えた日にインセットを持つ端末
    でだけ古い基準が残る（手元では絶対に再現しない壊れ方になる）。
    max-width は View ごとに違う（search 720px / product 560px）ので各 View の CSS で

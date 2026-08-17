@@ -26,8 +26,9 @@ export function formatRating(avgRating: number | null, reviewCount: number): str
  * `value || undefined` や `value ?? undefined` に書き換えると 0 と "" を同一視して
  * （前者）、あるいは "" を残して（後者）壊れる。三項の条件をそのまま保つこと。
  *
- * 今のところ使うのは search の doSearch だけだが、この落とし穴ごと1か所に
- * 閉じ込めておきたいので shared に置いてある。
+ * 掛けるのは **文字列を経由する入り口（search の toolinput）だけ**。readNumber を
+ * 通した値へ掛け直しても `=== ""` は数値に一致せず何もしないので、数値側に足すと
+ * 「0 を守っているつもり」の空振りが増える。
  */
 export function toArg<T extends string | number>(value: T | null | undefined): T | undefined {
   return value === undefined || value === null || value === "" ? undefined : value;

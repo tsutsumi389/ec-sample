@@ -34,50 +34,59 @@ import { join } from "node:path";
 import type { Plugin } from "vite";
 
 /**
- * エントリ名（"search" / "product"）から dist に出る成果物の名前を作る。
- *
- * **エントリの一覧はここに持たない。** 唯一の源は build.mjs の ENTRIES で、そこから
- * MCP_APP_ENTRIES 経由で vite.config.ts → checkDistPlugin({ entries }) と渡ってくる。
- * 以前はこちらにも ["search.html", "product.html"] を並べ、コメントで「食い違えば
- * checkDistFiles() が落ちるので必ず表面化する」と説明していたが、**それは半分しか
- * 正しくなかった**——checkDistFiles() は期待するファイル名を1枚ずつ読むだけで
- * ディレクトリを列挙しないため、「余計なものがある」検出は存在せず、
- * ENTRIES にだけ足した場合（一番ありがちな向き）はビルドが緑のまま通る。
- * 二重に持つのをやめれば、その食い違い自体が起こらない。
- *
- * backend/app/mcp_server/ui_assets.py の SEARCH_APP_FILENAME / PRODUCT_APP_FILENAME は
- * 言語をまたぐ写しなので、そちらは別途手で揃える（Python から参照できる形にすると
- * ビルドと起動が結合する）。
- */
-function distFileName(entry: string): string {
-  return `${entry}.html`;
-}
-
-/**
- * ブラウザと同じ読み方で script 要素の本文を切り出す。
+ * ブラウザと同じ読み方で HTML を「マークアップ」と「script 要素の本文」に切り分ける。
  *
  * HTML の仕様上、`<script>` の本文は **最初に現れた "</script" まで**で終わる
  * （引用符もエスケープも効かない）。これが「インライン JS の中に生の "</script" が
  * 1つでもあると、そこで script が閉じて以降が画面にテキストとして出る」理由そのもの
  * なので、検査もこの読み方をそのまま写す。
  *
- * @param lower 小文字化した HTML（呼び出し側で1回だけ作る）。返す本文も小文字のまま
- *   だが、探すのは import 文と module specifier だけなので影響しない。
+ * **切り分けた markup を返すのは、テキストを見る検査すべてに同じ境界を使わせるため。**
+ * バンドルされた JS は HTML の形をした文字列を平気で持ち歩く（react-dom は
+ * `'<script>'` というリテラルを含む）。その事実を知らずに文書全体へ正規表現を掛けると、
+ * 健全なバンドルでビルドが恒久的に止まる——script の数え方はまさにそれで一度壊れた。
+ * 同じ轍を外部参照の検査（下の findHtmlProblems）でも踏まないよう、**JS の中身は
+ * markup に含めない**。
+ *
+ * @param html 元の HTML。markup はこちらから切り出す（外部参照の検査が URL を
+ *   そのままの大小文字で報告できるようにするため）。
+ * @param lower 小文字化した HTML（呼び出し側で1回だけ作る）。探索と、返す本文に使う。
+ *   本文が小文字のままなのは、探すのが import 文と module specifier だけだから。
  */
-function scanScripts(lower: string): { bodies: string[]; unterminated: boolean } {
+function scanScripts(
+  html: string,
+  lower: string,
+): { bodies: string[]; markup: string; unterminated: boolean } {
   const bodies: string[] = [];
+  const markupParts: string[] = [];
   let index = 0;
+  const done = (unterminated: boolean) => ({
+    bodies,
+    // 改行で継ぐ。素で連結すると、離れた位置のタグの断片どうしが1つのタグに
+    // 見えてしまう組み合わせを自分で作ることになる。
+    markup: markupParts.join("\n"),
+    unterminated,
+  });
   for (;;) {
     // "</script" は "<script" に一致しない（"<" の次が "/"）ので、閉じタグを
     // 開きとして数えてしまうことは無い。
     const open = lower.indexOf("<script", index);
-    if (open === -1) return { bodies, unterminated: false };
+    if (open === -1) {
+      markupParts.push(html.slice(index));
+      return done(false);
+    }
     const bodyStart = lower.indexOf(">", open);
-    if (bodyStart === -1) return { bodies, unterminated: true };
+    if (bodyStart === -1) {
+      markupParts.push(html.slice(index));
+      return done(true);
+    }
+    // **開始タグ自体は markup 側に残す。** `<script src="...">` を外部参照として
+    // 捕まえるのはこの部分であって、本文ではない。
+    markupParts.push(html.slice(index, bodyStart + 1));
     const close = lower.indexOf("</script", bodyStart + 1);
     if (close === -1) {
       bodies.push(lower.slice(bodyStart + 1));
-      return { bodies, unterminated: true };
+      return done(true);
     }
     bodies.push(lower.slice(bodyStart + 1, close));
     // 本文の内側は読み飛ばす。**ここが要点**——本文に "<script" という文字列リテラルが
@@ -151,7 +160,7 @@ export function findHtmlProblems(fileName: string, html: string): string[] {
   }
 
   const lower = html.toLowerCase();
-  const { bodies, unterminated } = scanScripts(lower);
+  const { bodies, markup, unterminated } = scanScripts(html, lower);
   const closeCount = (lower.match(/<\/script/g) ?? []).length;
   if (unterminated) {
     problems.push(
@@ -181,7 +190,11 @@ export function findHtmlProblems(fileName: string, html: string): string[] {
   // iframe に HTML 文字列を流し込むだけの MCP ホストでは、この参照は絶対に解決
   // できない（取得元のオリジンが無い）ので、白画面になって終わる。
   // data: URI はインライン化の結果そのものなので除外する。
-  const externals = [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)\s*=\s*["']([^"']*)["']/gi)]
+  // **走査するのは markup（script の本文を除いた部分）であって html 全体ではない。**
+  // インライン化された JS が `<link href="` のような文字列リテラルを持ち込んだ瞬間に
+  // 健全なバンドルでビルドが止まる——script の数え方が react-dom の `'<script>'` で
+  // 壊れたのとまったく同じ形の事故で、境界を1か所（scanScripts）に統一してある。
+  const externals = [...markup.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)\s*=\s*["']([^"']*)["']/gi)]
     .map((match) => match[1])
     .filter((url) => url !== undefined && !url.startsWith("data:"));
   if (externals.length > 0) {
@@ -199,11 +212,24 @@ export function findHtmlProblems(fileName: string, html: string): string[] {
  *
  * 各エントリのビルドは自分が出した1枚しか見られないので、「エントリぶん揃っているか」は
  * ここでディスクを読んで確かめる（最終エントリのビルドの最後に1回だけ走る）。
+ *
+ * **エントリの一覧はこのファイルに持たない。** 唯一の源は build.mjs の ENTRIES で、
+ * そこから MCP_APP_ENTRIES 経由で vite.config.ts → checkDistPlugin({ entries }) と
+ * 渡ってくる。以前はこちらにも ["search.html", "product.html"] を並べ、コメントで
+ * 「食い違えば checkDistFiles() が落ちるので必ず表面化する」と説明していたが、
+ * **それは半分しか正しくなかった**——この関数は期待するファイル名を1枚ずつ読むだけで
+ * ディレクトリを列挙しないため、「余計なものがある」検出は存在せず、ENTRIES にだけ
+ * 足した場合（一番ありがちな向き）はビルドが緑のまま通る。二重に持つのをやめれば、
+ * その食い違い自体が起こらない。
+ *
+ * backend/app/mcp_server/ui_assets.py の SEARCH_APP_FILENAME / PRODUCT_APP_FILENAME は
+ * 言語をまたぐ写しなので、そちらは別途手で揃える（Python から参照できる形にすると
+ * ビルドと起動が結合する）。
  */
 function checkDistFiles(distDir: string, entries: readonly string[]): string[] {
   const problems: string[] = [];
   for (const entry of entries) {
-    const fileName = distFileName(entry);
+    const fileName = `${entry}.html`;
     const path = join(distDir, fileName);
     let html: string;
     try {
