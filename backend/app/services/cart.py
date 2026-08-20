@@ -15,7 +15,13 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from app.models import CartItem, Product, is_on_sale_status, is_viewable_status
+from app.models import (
+    CartItem,
+    Product,
+    VIEWABLE_STATUSES,
+    is_on_sale_status,
+    is_viewable_status,
+)
 from app.schemas import CartLineResultOut, GuestCartItemOut, GuestCartOut, ProductOut
 
 
@@ -135,9 +141,17 @@ def merge_lines(
     if not lines:
         return added, skipped
 
+    # status は Python 側で弾かずクエリに添える。draft / archived を引いてしまうと
+    # unavailable_reason で見送る前に _display_name が商品マスタの名前を取り出し、
+    # 見送り明細の product_name として未公開商品の名前が外へ出る。ここで落とせば
+    # product is None となり、名前は fallback_name か "商品 #N" になる
+    # （unavailable_reason(None) も _GONE を返すので見送りの理由は変わらない）。
     products = (
         db.query(Product)
-        .filter(Product.id.in_([line.product_id for line in lines]))
+        .filter(
+            Product.id.in_([line.product_id for line in lines]),
+            Product.status.in_(VIEWABLE_STATUSES),
+        )
         .order_by(Product.id)
         .with_for_update()
         .all()
