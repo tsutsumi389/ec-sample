@@ -6,16 +6,35 @@
  * その受け渡しをここに集約する。
  */
 
+/** 判定用のダミーオリジン。`.invalid` は RFC 2606 で予約されており実在しない。 */
+const INTERNAL_BASE = 'https://redirect.invalid';
+
 /**
  * 戻り先を安全に解く。受け取るのは自サイト内の絶対パスだけ。
  *
- * 先頭が `/` でない値（`https://example.com`）と、プロトコル相対の `//example.com` は
- * 外部サイトへの誘導になるため捨てる（オープンリダイレクト対策）。
+ * 先頭が `/` でない値（`https://example.com`）は外部サイトへの誘導になるため捨てる。
+ * そのうえで**遷移側と同じ URL パーサに通して**オリジンが変わらないことを確かめる
+ * （オープンリダイレクト対策）。文字列の前方一致で `//example.com` だけを弾くのでは
+ * 足りない——URL パーサは special scheme のオーソリティ位置でバックスラッシュを
+ * スラッシュと同じに扱い、かつ解析前にタブ・CR・LF を取り除くので、`/\example.com`
+ * や `/%09/example.com` が同じ外部オリジンに化ける。`router.push()` は
+ * `new URL(href, location.href)` の結果が別オリジンなら `location.assign()` で
+ * そのまま外へ飛ばすため、ここが唯一の関所になる。
+ *
+ * 戻り値はパーサが正規化した後のパス（`/a/../b` は `/b` になる）。呼び出し側が
+ * 渡した文字列がそのまま返ることを期待しないこと。
  */
 export function safeRedirect(raw: string | null | undefined): string {
   if (!raw) return '/';
-  if (!raw.startsWith('/') || raw.startsWith('//')) return '/';
-  return raw;
+  if (!raw.startsWith('/')) return '/';
+  let url: URL;
+  try {
+    url = new URL(raw, INTERNAL_BASE);
+  } catch {
+    return '/';
+  }
+  if (url.origin !== INTERNAL_BASE) return '/';
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 /** 戻り先を引き継いだリンク先を作る。トップへ戻るだけなら余計なクエリを付けない。 */
