@@ -1,31 +1,27 @@
 'use client';
 
 import { FormEvent, MouseEvent, memo, useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import Link from 'next/link';
 import { api, ApiError } from '@/lib/api';
 import type { AssistantMessage, AssistantProduct, AssistantSource } from '@/lib/types';
 import Spinner from '@/components/Spinner';
 import TypingDots from '@/components/TypingDots';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import {
-  ArrowDownIcon,
-  ArrowPathIcon,
-  ArrowsPointingInIcon,
-  ArrowsPointingOutIcon,
-  PaperAirplaneIcon,
-  XMarkIcon,
-} from '@/components/Icons';
+import { ArrowDownIcon, ArrowPathIcon, PaperAirplaneIcon, XMarkIcon } from '@/components/Icons';
 import { btn, chip, iconBtn } from '@/lib/buttonStyles';
 import { trapTab } from '@/lib/focusTrap';
 import { fetchCategories } from '@/lib/categories';
 import { withWordBreaks } from '@/lib/wordBreak';
 import AssistantProductCard from '@/components/assistant/AssistantProductCard';
+import {
+  ASSISTANT_DEFAULT_WIDTH,
+  ASSISTANT_MIN_WIDTH,
+  useAssistantGeometry,
+} from '@/lib/assistant-context';
 
 // 会話IDの永続化キー。端末単位で会話を継続する（未ログインでも利用可）。
 const CONVERSATION_ID_KEY = 'assistant_conversation_id';
-// パネル表示サイズの永続化キー。次回オープン時に同じ広さで開く。
-const PANEL_SIZE_KEY = 'assistant_panel_size';
 
 // 入力の最大文字数。残数カウンタと入力制限に共有する。
 const MAX_INPUT_LENGTH = 500;
@@ -95,40 +91,10 @@ const ChipGroup = memo(function ChipGroup({
   );
 });
 
-// パネル表示サイズ。normal→wide→full の順に主要作業領域を広げる。
-type PanelSize = 'normal' | 'wide' | 'full';
-const SIZE_ORDER: PanelSize[] = ['normal', 'wide', 'full'];
-
-// デスクトップ（sm 以上）でのパネル寸法。モバイルは常に全画面（inset-0）。
-const SIZE_CLASSES: Record<PanelSize, string> = {
-  // normal でも lg/xl/2xl では幅・高さを段階的に広げ、開いた瞬間から大画面を活用する。
-  // 商品リストの列数はスクロール領域の実幅から auto-fill が決める（globals.css の
-  // .assistant-product-grid）ので、ここで与えるのは幅だけでよい。
-  // 高さの上限は sm から一貫して calc(100vh-11rem)。bottom-24(6rem) と合わせ上端に約5rem の
-  // 余白を残し、サイトヘッダー（検索/カート/ログイン。--header-h: 4rem）に重ならないようにする。
-  // 横向きスマホ（高さ約390px）ではこの上限で 214px の箱になる。狭さ自体はここでは解かず、
-  // ヘッダーとの重なりだけを断つ。
-  normal:
-    'sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[600px] sm:max-h-[calc(100vh-11rem)] sm:w-[400px] md:w-[440px] lg:h-[720px] lg:max-h-[calc(100vh-11rem)] lg:w-[600px] xl:h-[820px] xl:w-[820px] 2xl:w-[900px]',
-  // wide は上端をヘッダー下（top-20）に置き、大画面の縦幅をほぼ占有しつつヘッダーを露出させる。
-  wide: 'sm:inset-auto sm:top-20 sm:bottom-6 sm:right-6 sm:h-auto sm:w-[560px] md:w-[680px] lg:w-[820px] xl:w-[960px]',
-  full: 'sm:inset-6 sm:h-auto sm:w-auto',
-};
-
-const SIZE_LABELS: Record<PanelSize, string> = {
-  normal: 'ワイド表示に広げる',
-  wide: '全画面表示に広げる',
-  full: '通常表示に戻す',
-};
-
-function getStoredPanelSize(): PanelSize {
-  if (typeof window === 'undefined') return 'normal';
-  const stored = window.localStorage.getItem(PANEL_SIZE_KEY);
-  if (stored === 'normal' || stored === 'wide' || stored === 'full') return stored;
-  // 保存値が無い初回は、超ワイド画面（2xl ≧ 1536px）では既定を wide に昇格させ、
-  // 手動トグル無しでも大画面の余白を埋める（狭い画面は従来どおり normal）。
-  return window.innerWidth >= 1536 ? 'wide' : 'normal';
-}
+// キーボードで幅を変えるときの刻み（px）。Shift 併用で粗く動かす。
+// 細かい方は本文1文字ぶん、粗い方は商品カードの列幅（20rem = 320px）を数打鍵で跨げる幅。
+const RESIZE_STEP = 16;
+const RESIZE_STEP_COARSE = 64;
 
 // パネル内で保持するメッセージ（React key 用の id を付与）。
 interface ChatMessage {
@@ -188,17 +154,30 @@ interface AssistantPanelProps {
   /**
    * 開いた直後に入力欄へ入れておく文言（検索0件からの相談導線など）。
    * **自動送信はしない**——サジェスト chip と同じ規律で、送る前に予算などを書き足せる
-   * 状態にしておく。パネルは開くたびにマウントし直されるので初期値として読むだけでよい。
+   * 状態にしておく。
    */
   prefill?: string;
+  /**
+   * `openAssistant()` の通し番号。**接岸中はこのパネルが開いたまま呼ばれうる**
+   * （非モーダルなので背後の「相談する」ボタンが押せる）。そのとき再マウントは
+   * 起きず prefill の初期値は読み直されないので、この番号の変化を合図に入れ直す。
+   */
+  prefillNonce?: number;
 }
 
-export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: AssistantPanelProps) {
+export default function AssistantPanel({
+  onClose,
+  onNavigate,
+  prefill = '',
+  prefillNonce = 0,
+}: AssistantPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState(prefill);
   const [sending, setSending] = useState(false);
   const [initializing, setInitializing] = useState(true);
-  const [size, setSize] = useState<PanelSize>(() => getStoredPanelSize());
+  // 寸法は provider が持つ（本文を詰める側と同じ1つの値から導くため）。掴んでいる状態も
+  // provider 側——接岸が解けてハンドルが消えたときに降ろせるのは、接岸を知っている層だけ。
+  const { docked, width, maxWidth, setWidth, resizing, setResizing } = useAssistantGeometry();
   // 入場アニメーション用。マウント直後に true にしてフェード/スライドインさせる。
   const [entered, setEntered] = useState(false);
   // 上へスクロール中に新着が届いたことを示す「新着へ移動」インジケータ。
@@ -243,16 +222,32 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // マウント（＝パネルオープン）時に入力欄へフォーカスする。
-  // prefill 付きで開いたときはキャレットを末尾へ送る。focus() だけだと初期値が全選択される
+  // 入力欄へフォーカスし、キャレットを末尾へ送る。focus() だけだと初期値が全選択される
   // 実装があり、条件を書き足すつもりの1打鍵で渡した文言ごと消えてしまう。
-  useEffect(() => {
+  const focusInputEnd = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
     el.focus();
     const end = el.value.length;
     el.setSelectionRange(end, end);
   }, []);
+
+  // 入力欄を掴む経路はこの1本だけ。マウント（＝オープン）と、**開いたままの再オープン**
+  // （接岸中は非モーダルなので、背後の「相談する」ボタンが押せる）を同じ形で扱う。
+  // null 始まりなので初回も「nonce が変わった」側に落ちる。
+  //
+  // flushSync で値を先に確定させるのは、キャレット送りが el.value.length を読むため。
+  // 素の setInput だと値の反映は次のコミットになり、しかも同じ文言で2度呼ばれたときは
+  // React が再描画ごと省くので「値の反映を待つ」仕掛けはそもそも動かない（押しても
+  // 何も起きないボタンになる）。同期コミットにすればどちらの経路も1本で済む。
+  // passive effect の中なので flushSync は警告を出さない（レンダー中・layout effect 中は不可）。
+  const appliedNonceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (prefillNonce === appliedNonceRef.current) return;
+    appliedNonceRef.current = prefillNonce;
+    if (prefill) flushSync(() => setInput(prefill));
+    focusInputEnd();
+  }, [prefillNonce, prefill, focusInputEnd]);
 
   // カテゴリ chip の中身を取りに行く。失敗したら chip の行ごと出さない
   // （サジェスト chip と使い方ガイドは残るので行き止まりにはならない）。
@@ -483,13 +478,67 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
     [onNavigate],
   );
 
-  // 表示サイズを normal→wide→full→normal と循環させ、localStorage に保持する。
-  const cycleSize = () => {
-    setSize((prev) => {
-      const next = SIZE_ORDER[(SIZE_ORDER.indexOf(prev) + 1) % SIZE_ORDER.length];
-      if (typeof window !== 'undefined') window.localStorage.setItem(PANEL_SIZE_KEY, next);
-      return next;
-    });
+  // ── 幅のドラッグ（接岸中のみ） ──────────────────────────────────────────
+  // 掴んだ瞬間のアンカー（ポインタのXと、そのときの幅）。以降は差分だけで幅を出す。
+  // ビューポート右端からの絶対座標で出すと、サイドバーがどこに接岸しているか
+  // （--assistant-gutter のぶん内側に置いてある）を1フレームごとに再導出することになり、
+  // 接岸位置の決め方を変えた瞬間にドラッグだけが静かにカーソルからずれる。差分なら
+  // 基準が「掴んだときの自分の幅」なので、接岸位置が何であろうと正しい。
+  // レイアウトの読み取り（clientWidth）が毎フレーム消えるという実利もある——直前のフレームで
+  // body の padding を書き換えた直後に読むので、あれは強制同期レイアウトだった。
+  const anchorRef = useRef({ x: 0, width: 0 });
+  // 掴んでいる間の幅。null = まだ動かしていない（＝ただのクリックなので保存しない。
+  // ウィンドウを一時的に狭めている間にクリックすると、好みの幅がクランプ後の値で潰れる）。
+  // pointerup 時点で state の width が最新とは限らないため ref に控える——pointermove は
+  // React 18 では「連続イベント」扱いで、コミットが1回ぶん遅れて届くことがある。
+  const draggedWidthRef = useRef<number | null>(null);
+
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    // 既定の「テキスト選択の開始」を断つ。始まってしまうとドラッグ中ずっと背後の本文が反転する。
+    e.preventDefault();
+    // ポインタをハンドルに固定する。capture しないと、速く動かした指がハンドルを追い越した
+    // 瞬間にイベントが下の要素へ移ってドラッグが切れる。
+    e.currentTarget.setPointerCapture(e.pointerId);
+    anchorRef.current = { x: e.clientX, width };
+    draggedWidthRef.current = null;
+    setResizing(true);
+  };
+
+  const moveResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizing) return;
+    // サイドバーは右端にあるので、ポインタが左へ動いたぶんだけ広くなる。
+    // 下限・上限のクランプは provider の setWidth 側が持つ（寸法の規律を2箇所に書かない）。
+    const next = anchorRef.current.width + (anchorRef.current.x - e.clientX);
+    draggedWidthRef.current = next;
+    setWidth(next);
+  };
+
+  const endResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizing) return;
+    // 先に掴んだ状態を降ろす。release が投げても <html> の data-assistant-resizing が
+    // 残らないように——残ると、ページ全体が col-resize カーソル＋選択不可のまま固まる。
+    setResizing(false);
+    // pointercancel では捕捉が既に解けていることがあり、その pointerId で release すると投げる。
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    // localStorage への保存はここで1回だけ。pointermove ごとに書くと同期書き込みが毎フレーム
+    // 入り、ドラッグの追従が目に見えて鈍る。
+    if (draggedWidthRef.current !== null) setWidth(draggedWidthRef.current, true);
+  };
+
+  // キーボードでの幅変更。サイドバーは右端にあるので「セパレータを左へ動かす＝広くなる」。
+  const handleResizeKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? RESIZE_STEP_COARSE : RESIZE_STEP;
+    if (e.key === 'ArrowLeft') setWidth(width + step, true);
+    else if (e.key === 'ArrowRight') setWidth(width - step, true);
+    else if (e.key === 'Home') setWidth(maxWidth, true);
+    else if (e.key === 'End') setWidth(ASSISTANT_MIN_WIDTH, true);
+    else if (e.key === 'Enter' || e.key === ' ') setWidth(ASSISTANT_DEFAULT_WIDTH, true);
+    else return;
+    // 矢印と Home/End は既定でページをスクロールする。止めないと幅を変えるたびに本文が動く。
+    e.preventDefault();
   };
 
   // Esc で閉じる／Tab を dialog 内に閉じ込める（フォーカストラップ）。
@@ -504,6 +553,10 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
       return;
     }
     if (e.key !== 'Tab') return;
+    // フォーカストラップはオーバーレイ（＝モーダル）のときだけ。接岸中は本文と併置された
+    // 非モーダルの領域なので、Tab はサイドバーから本文へ素直に抜けるのが正しい。
+    // ここで閉じ込めると、サイドバーを開いている間キーボードだけの利用者が店を回れなくなる。
+    if (docked) return;
     // 巡回そのものは共有の trapTab に任せる（フォーカス可能要素の定義は lib/focusTrap.ts が唯一の源）。
     // 罫を畳んだ問い合わせ履歴など隠れている要素があるので、visibleOnly で除く。
     trapTab(panelRef.current, e, { visibleOnly: true });
@@ -514,35 +567,81 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
   const nearLimit = remaining <= 50;
 
   // バブルの行長は .assistant-bubble（globals.css §6）がスクロール領域の実幅から決める。
-  // 表示サイズ（normal/wide/full）で分岐させないのは、同じ幅でも size が違えば行長が変わる
-  // ような二重の基準を作らないため。
+  // サイドバーの幅で分岐させないのは、同じ実幅でも別の基準が効く二重の規律を作らないため。
 
   // ルートの tabIndex={-1} は、本文のドラッグ選択・バブル余白やカードの空き部分のタップで
   // activeElement が body へ落ちて onKeyDown が発火しなくなる（Escape も Tab トラップも死ぬ）
   // 経路を塞ぐためのもの。-1 なので Tab の巡回対象（[tabindex]:not([tabindex="-1"])）には入らない。
   //
+  // 入場前の位置。接岸は右から差し込み、オーバーレイは下から持ち上げる。
+  const enterFrom = docked ? 'translate-x-4' : 'translate-y-3';
+
   // ルートで補間するのは入場の opacity/transform だけ（transition-[opacity,transform]）。
-  // transition-all だと表示サイズの切り替え（normal→wide）で top が auto→80px、
-  // height が 820px→auto と補間できない値をまたぐため、幅だけが滑って上端と高さが瞬間移動していた。
+  // width は **補間しない**——ドラッグの追従は1フレームごとの即値であるべきで、
+  // transition が乗ると指から遅れてついてくる。開閉のときだけ translate で滑らせる。
+  //
+  // 形は2つだけ。接岸（docked）＝右端に居座る非モーダルのサイドバー、
+  // それ以外＝全画面のモーダル。role と aria-modal もここで切り替える。
+  // right は 0 ではなく --assistant-gutter（縦スクロールバーの実測幅。AssistantWidget が配る）。
+  // 0 にすると文書のスクロールバーを覆い、つまみを掴めなくなる環境がある。
   return (
     <div
       ref={panelRef}
-      role="dialog"
-      aria-modal="true"
+      id="assistant-sidebar"
+      role={docked ? 'complementary' : 'dialog'}
+      aria-modal={docked ? undefined : true}
       aria-label="ショッピングアシスタント"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      className={`fixed inset-0 z-50 flex flex-col bg-surface shadow-float transition-[opacity,transform] duration-slow ease-standard sm:rounded-2xl ${
-        SIZE_CLASSES[size]
-      } ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3'}`}
+      style={docked ? { width: `${width}px`, right: 'var(--assistant-gutter, 0px)' } : undefined}
+      className={`fixed z-50 flex flex-col bg-surface shadow-float transition-[opacity,transform] duration-slow ease-standard ${
+        docked ? 'inset-y-0 border-l border-line-strong' : 'inset-0'
+      } ${entered ? 'translate-x-0 translate-y-0 opacity-100' : `opacity-0 ${enterFrom}`}`}
     >
+      {/* 幅のドラッグハンドル。左端の罫に重ね、外へ 6px はみ出させて掴みやすくする
+          （罫の 1px だけを狙わせると実用にならない）。role="separator" ＋ tabIndex で
+          ウィンドウ・スプリッタとして名乗り、キーボードだけでも幅を変えられるようにする。
+          touch-none が無いと、タッチでのドラッグがページのスクロールに吸われて幅が動かない。
+          focus の見えに共有の FOCUS_RING を使わない唯一の箇所。あれは ring-2 + ring-offset-2 で、
+          幅 12px・高さ全画面の帯に回すと輪だけが外へはみ出してサイドバーの縁を二重に見せる。
+          代わりに下の罫を brand-600 で全高点灯させる（対 surface 6.0:1。造形は違うが、
+          focus の在り処は同じだけ明確に出る）。 */}
+      {docked && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="サイドバーの幅"
+          aria-controls="assistant-sidebar"
+          aria-valuenow={width}
+          aria-valuemin={ASSISTANT_MIN_WIDTH}
+          aria-valuemax={maxWidth}
+          tabIndex={0}
+          onPointerDown={startResize}
+          onPointerMove={moveResize}
+          onPointerUp={endResize}
+          onPointerCancel={endResize}
+          onKeyDown={handleResizeKeyDown}
+          onDoubleClick={() => setWidth(ASSISTANT_DEFAULT_WIDTH, true)}
+          title="ドラッグで幅を変更（ダブルクリック／Enter で既定幅に戻す）"
+          className="group absolute inset-y-0 -left-1.5 z-10 flex w-3 cursor-col-resize touch-none items-center justify-center focus-visible:outline-none"
+        >
+          {/* 掴める場所であることを示す罫。既定は透明で、hover / フォーカス / ドラッグ中だけ色が乗る。
+              常時見せると、サイドバーの左端に意味の無い縦線がもう1本増えるだけになる。 */}
+          <span
+            aria-hidden
+            className={`h-full w-[3px] rounded-full transition-colors duration-fast ease-standard group-hover:bg-brand-300 group-focus-visible:bg-brand-600 ${
+              resizing ? 'bg-brand-600' : 'bg-transparent'
+            }`}
+          />
+        </div>
+      )}
       {/* ヘッダー。丸アイコンではなく節記号（brand の縦罫）＋ eyebrow ＋ 明朝の見出しで、
           サイトの扉（PageMasthead・ProductFilters の絞り込みドロワー）と同じ組み方に揃える。
           text-h3 の fontWeight:500 は Zen Old Mincho が 700 しか持たないためフォントマッチングで
           700 面が選ばれる（合成ボールドにはならない）。
           下端の罫は line ではなく line-strong。すぐ下がスクロール面（bg-page）で、
           line は対 page 1.28:1 とほぼ見えず、ヘッダーが帯として閉じない。 */}
-      <div className="flex items-center gap-3 border-b border-line-strong px-4 py-3">
+      <div className="assistant-header flex items-center gap-3 border-b border-line-strong px-4 py-3">
         <span aria-hidden className="h-5 w-[2px] shrink-0 bg-brand-600" />
         <div className="min-w-0 flex-1">
           <p className="text-eyebrow uppercase font-num text-ink-muted">ASK HIBINO</p>
@@ -561,24 +660,15 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
             className={btn('ghost', 'sm')}
           >
             <ArrowPathIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">新しい会話</span>
+            {/* ラベルの出し分けはヘッダー帯自身の実幅で決める（globals.css §6 の
+                .assistant-header-label）。ビューポート基準の sm: だと、1440px の画面で
+                サイドバーを 320px まで狭めてもラベルが出続け、見出し「Hibino の店員AI」を
+                2行に折って帯の高さを押し上げる。バブルの行長・カードの列数と同じ規律。 */}
+            <span className="assistant-header-label">新しい会話</span>
           </button>
         )}
-        {/* 拡大/縮小トグル。モバイルは常に全画面のため非表示。
-            iconBtn('sm') は .hit で実効44pxを作るので、モバイル用の h-11 分岐は要らない。 */}
-        <button
-          type="button"
-          onClick={cycleSize}
-          title={SIZE_LABELS[size]}
-          aria-label={SIZE_LABELS[size]}
-          className={`${iconBtn('sm')} hidden sm:inline-flex`}
-        >
-          {size === 'full' ? (
-            <ArrowsPointingInIcon className="h-5 w-5" />
-          ) : (
-            <ArrowsPointingOutIcon className="h-5 w-5" />
-          )}
-        </button>
+        {/* 幅の切り替えボタンは持たない。接岸中は左端のハンドル（ドラッグ／矢印キー）が
+            唯一の広さの決め方で、オーバーレイ中は全画面なので変える余地が無い。 */}
         <button type="button" onClick={onClose} aria-label="閉じる" className={iconBtn('sm')}>
           <XMarkIcon className="h-5 w-5" />
         </button>
@@ -832,7 +922,7 @@ export default function AssistantPanel({ onClose, onNavigate, prefill = '' }: As
 
       {/* 確認ダイアログは body 直下へポータルする。このパネルのルートは入場アニメの translate-y を
           常に持ち、transform を持つ要素は position:fixed の含有ブロックになるため、ツリー内に
-          置くと `fixed inset-0` の膜と中央寄せがパネルの箱（400〜900px）に閉じ込められ、
+          置くと `fixed inset-0` の膜と中央寄せがサイドバーの箱（320〜720px）に閉じ込められ、
           ページ全体が暗転しない・ボタン行が 320px に潰れる。
           React の合成イベントはポータル越しでも JSX ツリーを辿って伝わるので、handleKeyDown 先頭の
           `if (resetOpen) return;`（Esc をダイアログへ譲るガード）は引き続き必要。

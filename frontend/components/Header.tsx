@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { MQ_SM, MQ_XL } from '@/lib/breakpoints';
 import { useAuth } from '@/lib/auth-context';
 import { useCart } from '@/lib/cart-context';
 import { btn, iconButton, navPill, NAV_ACTIVE_BAR, FOCUS_RING } from '@/lib/buttonStyles';
@@ -75,8 +76,8 @@ export default function Header() {
   // 止まったままになる（body の overflow を戻す後始末が走らない）ので、
   // 受け皿が消える幅に達したら状態ごと閉じる。
   useEffect(() => {
-    const drawerMq = window.matchMedia('(min-width: 1280px)');
-    const searchMq = window.matchMedia('(min-width: 640px)');
+    const drawerMq = window.matchMedia(MQ_XL);
+    const searchMq = window.matchMedia(MQ_SM);
     const syncDrawer = () => drawerMq.matches && setMenuOpen(false);
     const syncSearch = () => searchMq.matches && setSearchOpen(false);
     syncDrawer();
