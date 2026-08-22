@@ -350,9 +350,43 @@ textarea:focus-visible,
 /* ============================================================
    6. AIアシスタント
    ============================================================ */
+/* ── サイドバー（xl 以上で接岸）が本文を押しのける ─────────────────────────
+   サイドバーは position:fixed なので body の padding では動かない。幅を1つの変数で配り、
+   body（本文を詰める側）とサイドバー自身（幅を持つ側）が同じ値を見る。
+   変数を置くのは AssistantWidget の effect（開いている間だけ、xl 以上のときだけ）。
+
+   --assistant-dock   … サイドバーの幅
+   --assistant-gutter … 縦スクロールバーの実測幅。サイドバーはこのぶん内側へ寄る
+                        （right:0 に置くと文書のスクロールバーを覆い、つまみを掴めなくなる）。
+
+   固定要素（PDPの購入バー・Headerのドロワー・確認ダイアログ）はビューポート基準のままで、
+   この padding では動かない。接岸するのが xl 以上に限ってあるのはそのため——
+   購入バーは lg:hidden、Header のドロワーは xl:hidden で、どちらも接岸域には出てこない。 */
+body {
+  padding-right: var(--assistant-dock, 0px);
+  transition: padding-right var(--dur-slow) var(--ease-standard);
+}
+
+/* ハンドルを掴んでいる間の全体の振る舞い（印は AssistantWidget が <html> に付ける）。
+   ・本文の補間を切る: 付けたままだと本文が指から 280ms 遅れて追いかけてくる。
+   ・選択を止める: user-select は継承するので <html> に一度書けば足りる（pointerdown の
+     preventDefault で始まりは断てるが、掴む前からあった選択が伸び続けるのを防ぐ）。
+   ・カーソルを固定する: **ここだけは全称セレクタが要る**。ポインタはハンドルに capture
+     されているが、カーソルの絵柄は下に居る要素の指定が出る——cursor も継承はするものの、
+     リンクやボタンが自分で pointer を指定しているので継承では上書きできない。 */
+html[data-assistant-resizing] {
+  user-select: none;
+}
+html[data-assistant-resizing] body {
+  transition: none;
+}
+html[data-assistant-resizing] * {
+  cursor: col-resize !important;
+}
+
 /* AIアシスタント: 列数は .assistant-product-grid の auto-fill がグリッド実幅から決める。
-   container はバブルの行長にだけ使う（ビューポート基準だと normal/wide/full やモバイル
-   全画面で実効幅が一致しないため、スクロール領域自体を基準にする）。 */
+   container はバブルの行長にだけ使う（ビューポート基準だと、幅を自由に変えられる接岸時と
+   全画面のオーバーレイ時で実効幅が一致しないため、スクロール領域自体を基準にする）。 */
 .assistant-scroll {
   container-type: inline-size;
   container-name: assistant;
@@ -364,14 +398,28 @@ textarea:focus-visible,
 /* バブルの行長。ch は「0」の送り幅を単位にするので、42ch と書いても和文では全角21字にしかならず
    「全角30〜40字」の目安を達成できない。rem で持ち、SignatureBand の max-w-[34rem] や
    .wrap-read（40rem）と同じ語彙に揃える。閾値の基準はビューポートではなくスクロール領域
-   （上の container: assistant）なので、normal/wide/full とモバイル全画面のどれでも同じ行長になる。 */
+   （上の container: assistant）なので、サイドバーをどの幅に広げても、全画面のオーバーレイでも
+   同じ実幅なら同じ行長になる。 */
 .assistant-bubble { max-width: 88%; }
 @container assistant (min-width: 34rem) { .assistant-bubble { max-width: 32rem; } }
 @container assistant (min-width: 52rem) { .assistant-bubble { max-width: 40rem; } }
 
+/* AIアシスタント: ヘッダー帯。「新しい会話」のラベルは帯の実幅で出し分ける（ビューポート
+   基準にすると、広い画面でサイドバーを狭めたときにラベルが残って見出しを2行に折る）。
+   23rem は帯の内寸（px-4 を除いた実幅）なので、器としては約 416px から出る。ラベルまで載せても
+   見出し「Hibino の店員AI」が1行に収まる下限の実測値。 */
+.assistant-header {
+  container-type: inline-size;
+  container-name: assistant-header;
+}
+.assistant-header-label { display: none; }
+@container assistant-header (min-width: 23rem) { .assistant-header-label { display: inline; } }
+
 /* 列幅の下限を 20rem に固定し、何列入るかはグリッドの実幅に任せる。閾値で列数を決めていた頃は
-   normal lg(280px列)・xl(257px列)で「カートに追加」が必ず2行に折れていた。
-   min() が無いと 320px 端末（コンテナ288px）でトラック下限が溢れる。 */
+   280px列・257px列で「カートに追加」が必ず2行に折れていた。ドラッグで幅が連続に変わる以上、
+   閾値では正しい列数を出せない。min() が無いと 320px 端末（コンテナ288px）でトラック下限が溢れる。
+   ⚠ この 20rem はサイドバーの下限（lib/assistant-context.ts の ASSISTANT_MIN_WIDTH = 320px）の
+   根拠でもある。広げるなら向こうも一緒に上げること（1列も入らない幅まで狭められるようになる）。 */
 .assistant-product-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
