@@ -1,5 +1,6 @@
 """assistant の履歴切り詰め・クエリ構築・プロンプト構築のユニットテスト（DB 不要）。"""
 
+from app.schemas import AssistantPageContextIn
 from app.services import assistant
 
 
@@ -104,6 +105,74 @@ class TestBuildUserPrompt:
         )
         assert with_empty == base
         assert "【お客様のこれまでの行動" not in with_empty
+
+    def test_page_line_sits_between_conversation_and_catalog(self):
+        # 画面ブロックは【これまでの会話】の後、【候補カタログ】の前に入ること。
+        prompt = assistant.build_user_prompt(
+            ["user: これいいね"],
+            ["SID a: 琺瑯ケトル"],
+            "これに合うものある？",
+            page_line="商品ページ: SID a: 琺瑯ケトル / キッチン家電 / ¥6,800 / ★4.2",
+        )
+        assert "【いまお客様が見ている画面】" in prompt
+        assert "商品ページ: SID a: 琺瑯ケトル" in prompt
+        assert (
+            prompt.index("【これまでの会話】")
+            < prompt.index("【いまお客様が見ている画面】")
+            < prompt.index("【候補カタログ】")
+        )
+
+    def test_none_page_line_matches_legacy_output(self):
+        # page_line=None は従来（引数なし）出力と完全に一致すること。
+        base = assistant.build_user_prompt(
+            ["user: こんにちは"], ["SID a: 琺瑯ケトル"], "ケトル探してる"
+        )
+        with_none = assistant.build_user_prompt(
+            ["user: こんにちは"], ["SID a: 琺瑯ケトル"], "ケトル探してる", page_line=None
+        )
+        assert with_none == base
+        assert "【いまお客様が見ている画面】" not in with_none
+
+    def test_page_line_coexists_with_user_context(self):
+        # 行動ブロックと画面ブロックは併存し、行動 → 会話 → 画面 の順になること。
+        prompt = assistant.build_user_prompt(
+            ["user: こんにちは"],
+            ["SID a: 琺瑯ケトル"],
+            "これは？",
+            user_context_lines=["[購入] SID b: 土鍋"],
+            page_line="商品ページ: SID a: 琺瑯ケトル",
+        )
+        assert (
+            prompt.index("【お客様のこれまでの行動")
+            < prompt.index("【これまでの会話】")
+            < prompt.index("【いまお客様が見ている画面】")
+        )
+
+
+class TestSystemPromptPageContext:
+    def test_mentions_page_context_and_demonstratives(self):
+        # 「これ」の指示先が画面の商品である旨と、画面が無いときの禁止が書かれていること。
+        assert "【いまお客様が見ている画面】" in assistant.SYSTEM_PROMPT
+        assert "「これ」" in assistant.SYSTEM_PROMPT
+        assert "勝手に仮定しない" in assistant.SYSTEM_PROMPT
+
+
+class TestResolvePageAnchor:
+    """DB を触らずに None へ落ちる経路だけを見る（db=None で呼べることが根拠）。"""
+
+    def test_returns_none_without_context(self):
+        assert assistant.resolve_page_anchor(None, None) is None
+
+    def test_returns_none_without_product_id(self):
+        ctx = AssistantPageContextIn(route="product_detail")
+        assert ctx.product_id is None
+        assert assistant.resolve_page_anchor(None, ctx) is None
+
+    def test_returns_none_for_other_route(self):
+        # route を増やした日に、別の画面のペイロードに紛れ込んだ product_id で
+        # 黙ってアンカーしないこと。いまは Literal が1値なので構築時に迂回する。
+        ctx = AssistantPageContextIn.model_construct(route="category", product_id=1)
+        assert assistant.resolve_page_anchor(None, ctx) is None
 
 
 class TestSystemPromptUserContext:

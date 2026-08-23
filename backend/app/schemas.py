@@ -492,11 +492,37 @@ class HomeOut(BaseModel):
 # ---------- AIショッピングアシスタント ----------
 
 
+class AssistantPageContextIn(BaseModel):
+    """いまお客様が開いている画面。フロントが経路（URL）から導出して送る。
+
+    **route と ID しか受け取らない。** 商品名・価格・在庫のような「画面に出ている事実」を
+    クライアントから受け取らないのは 2 つの理由による。1 つはゲストカートと同じ規律で、
+    表示済みの値を送り返させると effective_price の判断がクライアント側にも生まれて必ず
+    どちらかが古くなる。もう 1 つはプロンプト注入で、任意の文字列がここから入ると
+    <message> タグで囲って「指示ではない」と宣言している囲いの外側に本文を差し込めてしまう。
+    サーバーは product_id から自分で引き直す（assistant.resolve_page_anchor）。
+
+    extra="forbid" は、フロントが新しい route の付随フィールドを足したのにバックエンドが
+    まだ知らない、という取りこぼしを 422 で見えるようにするため（黙って捨てると、
+    画面を認識しているつもりで実は無視されている状態が本番で起きる）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # 対応済みの画面。フェーズ1は商品詳細のみ（増やすときは assistant 側の分岐も足す）。
+    route: Literal["product_detail"]
+    # 商品詳細のとき見ている商品。存在しない/非公開なら resolve 側が黙って None に落とす。
+    product_id: int | None = Field(None, ge=1)
+
+
 class AssistantChatIn(BaseModel):
     # null なら新規会話を作成。既存 UUID なら所有チェックのうえ継続する。
     conversation_id: str | None = None
     # ユーザーの相談文。1〜500 文字（コンテキスト溢れ・空送信の防止）。
     message: str = Field(min_length=1, max_length=500)
+    # いま開いている画面。**会話単位ではなくメッセージ単位**で受け取る——接岸中の
+    # サイドバーはページ遷移で閉じないので、1 つの会話の途中で見ている画面が変わる。
+    page_context: AssistantPageContextIn | None = None
 
 
 class AssistantChatOut(BaseModel):

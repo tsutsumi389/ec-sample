@@ -141,11 +141,16 @@ def chat(
 
     # LLM 応答（失敗時はフォールバック）を生成する。ここは 500 を出さない。
     # ログインユーザーは行動履歴をプロンプトに注入する。ゲストは None で従来どおり。
+    # page_context（いま開いている画面）は**メッセージごと**に受け取る。接岸したサイドバーは
+    # ページ遷移で閉じないので、1 つの会話の途中で見ている画面が変わる（会話に紐づけると
+    # 3 画面渡り歩いたあとの「これ」が最初の商品を指し続ける）。商品の実体はサービス側が
+    # product_id から引き直す（クライアントの申告した商品名を信じない）。
     result = assistant.generate_reply(
         db,
         payload.message,
         history,
         user_id=current_user.id if current_user is not None else None,
+        page_context=payload.page_context,
     )
 
     # assistant メッセージを永続化する（提案商品IDと生成元を保存）。

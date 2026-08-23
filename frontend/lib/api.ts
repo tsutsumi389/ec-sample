@@ -1,4 +1,9 @@
-import type { AssistantChatResponse, AssistantMessage, ProductQuestion } from './types';
+import type {
+  AssistantChatResponse,
+  AssistantMessage,
+  AssistantPageContext,
+  ProductQuestion,
+} from './types';
 import { getVisitorId } from './visitor';
 
 // 計測用の送信（lib/analytics.ts）が keepalive 付きの独自 fetch を使うため公開する。
@@ -174,10 +179,19 @@ export const api = {
   // AIショッピングアシスタント。未ログインでも呼べる（会話は端末の localStorage で継続）。
   assistant: {
     // conversation_id が null なら新規会話を作成して返す。
-    chat: (conversationId: string | null, message: string): Promise<AssistantChatResponse> =>
+    // pageContext は「いま開いている画面」。メッセージごとに添える（会話に紐づけない）。
+    chat: (
+      conversationId: string | null,
+      message: string,
+      pageContext: AssistantPageContext | null,
+    ): Promise<AssistantChatResponse> =>
       request<AssistantChatResponse>('/assistant/chat', {
         method: 'POST',
-        body: JSON.stringify({ conversation_id: conversationId, message }),
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          message,
+          page_context: pageContext,
+        }),
       }),
     // ウィジェット再オープン時の履歴復元用。会話が無効なら 404。
     messages: (conversationId: string): Promise<AssistantMessage[]> =>

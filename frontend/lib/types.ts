@@ -286,6 +286,19 @@ export type AssistantRole = 'user' | 'assistant';
 export type AssistantProduct = RecommendationItem;
 
 /**
+ * POST /assistant/chat に添える「いま開いている画面」。
+ * 経路から導出したものだけを送る（導出は lib/assistantPageContext.ts の
+ * derivePageContext が唯一の出どころ）。商品名・価格のような画面に出ている事実は
+ * 送らず、サーバーが product_id から引き直す。
+ * **会話単位ではなくメッセージ単位**——接岸したサイドバーはページ遷移で閉じないので、
+ * 1 つの会話の途中で見ている画面が変わる。
+ */
+export interface AssistantPageContext {
+  route: 'product_detail';
+  product_id: number;
+}
+
+/**
  * POST /assistant/chat のレスポンス。
  * source==='fallback' はキーワード検索フォールバックの応答。
  */

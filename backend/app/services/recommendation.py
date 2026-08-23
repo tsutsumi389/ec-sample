@@ -493,6 +493,10 @@ def get_neighbors_of(
             Product.status.in_(LISTED_STATUSES),
             Product.id.notin_(excluded),
         )
+        # カテゴリ名を読む呼び出し側（assistant の候補カタログ行）のための eager load。
+        # ProductOut 経由で返すホームのレーンには効かないが（あちらは category_id しか
+        # 持たない）、付けない側で遅延ロードが件数ぶん走るほうが害が大きい。
+        .options(selectinload(Product.category))
         .order_by(ProductEmbedding.embedding.cosine_distance(target.embedding))
         .limit(limit)
     )

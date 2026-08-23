@@ -9,10 +9,11 @@ import Spinner from '@/components/Spinner';
 import TypingDots from '@/components/TypingDots';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ArrowDownIcon, ArrowPathIcon, PaperAirplaneIcon, XMarkIcon } from '@/components/Icons';
-import { btn, chip, iconBtn } from '@/lib/buttonStyles';
+import { btn, chip, FOCUS_RING, iconBtn } from '@/lib/buttonStyles';
 import { trapTab } from '@/lib/focusTrap';
 import { fetchCategories } from '@/lib/categories';
 import { withWordBreaks } from '@/lib/wordBreak';
+import { useAssistantPageContext } from '@/lib/assistantPageContext';
 import AssistantProductCard from '@/components/assistant/AssistantProductCard';
 import {
   ASSISTANT_DEFAULT_WIDTH,
@@ -39,6 +40,16 @@ const SUGGESTIONS = [
   '来客用の食器',
   '毎日使えるマグカップ',
   '新生活の準備におすすめ',
+];
+
+// 商品ページを見ているときのサジェスト chip。SUGGESTIONS と差し替えで使う（並べない）。
+// 「これ」が目の前の商品を指せることは、文言でそう書いてある chip が一番早く伝わる。
+// 定数として持つのは ChipGroup の memo 境界のため（描画ごとに配列を作ると bail out しない）。
+const PRODUCT_SUGGESTIONS = [
+  'これに似た商品は？',
+  'もっと安い代替は？',
+  'これに合わせるなら？',
+  'これはギフトに向く？',
 ];
 
 // ウェルカムに並べるカテゴリ chip の数。多すぎると chip の列が挨拶を押し下げる。
@@ -198,6 +209,14 @@ export default function AssistantPanel({
   // これが無いと、送信中にリセットしても応答が返った時点で会話IDが復活し、
   // 空のスレッドに「問いの無い回答」だけが積まれる。
   const sessionRef = useRef(0);
+  // いま開いている画面。経路の判定・ピルのラベル・取り下げは lib/assistantPageContext.ts が持つ
+  // （ページ側に名乗らせないのは、画面を1つ足した人が呼び忘れても誰も気づけないため）。
+  // ここは受け取って描くだけ——画面の種類ごとの都合をこの部品に溜めない。
+  const {
+    context: activeContext,
+    label: anchorName,
+    dismiss: dismissContext,
+  } = useAssistantPageContext();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -364,7 +383,7 @@ export default function AssistantPanel({
       try {
         // conversationId は state から読む。send は必ずイベントハンドラ経由で呼ばれ、
         // その時点の描画のクロージャが渡るので、ID が古いことはない。
-        const res = await api.assistant.chat(conversationId, trimmed);
+        const res = await api.assistant.chat(conversationId, trimmed, activeContext);
         if (sessionRef.current !== session) return;
         applyConversationId(res.conversation_id);
         // 型上は必ず配列だが、古いバックエンドでの欠損に備えて防御的に畳んでおく。
@@ -427,7 +446,7 @@ export default function AssistantPanel({
         }
       }
     },
-    [sending, conversationId, applyConversationId],
+    [sending, conversationId, applyConversationId, activeContext],
   );
 
   const handleSubmit = (e: FormEvent) => {
@@ -704,7 +723,15 @@ export default function AssistantPanel({
                     {WELCOME_MESSAGE}
                   </div>
 
-                  <ChipGroup label="SUGGESTED" items={SUGGESTIONS} onPick={handleSuggestion} />
+                  {/* 商品ページを見ているなら「これ」で指せることが伝わる chip に差し替える。
+                      並べて両方出さないのは、最初の1文を選ぶ場面で粒が10個になると
+                      選ぶこと自体が仕事になるため。定数どうしの差し替えなので
+                      ChipGroup の memo は効いたまま。 */}
+                  <ChipGroup
+                    label="SUGGESTED"
+                    items={activeContext ? PRODUCT_SUGGESTIONS : SUGGESTIONS}
+                    onPick={handleSuggestion}
+                  />
                   {/* カテゴリは取得できたときだけ出る（0件なら ChipGroup が見出しごと畳む）。 */}
                   <ChipGroup label="CATEGORIES" items={categories} onPick={handleCategoryPick} />
 
@@ -871,6 +898,36 @@ export default function AssistantPanel({
             両者を併記すると支援技術に矛盾が届く。スクリーンリーダーのフォームモードには
             aria-disabled の要素を読み飛ばす実装があり、それではフォーカスを入力欄へ留めた意味が消える。
             送信中であることは上の status 領域が可聴で伝えている。 */}
+        {/* いま見ている画面のピル。**送っているものは必ず見えていて、必ず外せる**——
+            見えないまま前提が効くと、別の商品の話がしたい人に逃げ場が無くなる。
+            名前が引けていない間（通信中・一時的な失敗）は総称で出す。ピルを名前が
+            届くまで出さない作りにすると、送っているのに見えない時間が生まれる。 */}
+        {activeContext && (
+          <div
+            id="assistant-page-context"
+            className="mb-2 flex items-center gap-2 rounded-full bg-brand-50 py-1 pl-3 pr-1 ring-1 ring-inset ring-brand-200"
+          >
+            <span aria-hidden className="text-eyebrow uppercase font-num text-brand-700">
+              THIS PAGE
+            </span>
+            <span className="min-w-0 flex-1 truncate text-caption text-brand-900">
+              {/* sr-only 側で文として読ませ、目で見る側は商品名だけにする。 */}
+              <span className="sr-only">いま見ている商品を前提に相談しています: </span>
+              {anchorName ? withWordBreaks(anchorName) : 'いま見ている商品'}
+            </span>
+            {/* 造形は一覧の絞り込みピル（ProductListing の FilterChip）と同じ。iconBtn は
+                text-ink-soft / hover:bg-sunken で、brand 色のピルの中に灰色の hover が出る。
+                .hit で見た目 24px のまま実効 36px 角のタップ領域にする。 */}
+            <button
+              type="button"
+              onClick={dismissContext}
+              aria-label="いま見ている商品を前提から外す"
+              className={`hit inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-brand-600 transition-colors duration-fast ease-standard hover:bg-brand-100 hover:text-brand-800 ${FOCUS_RING}`}
+            >
+              <XMarkIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <input
             ref={inputRef}
@@ -879,7 +936,9 @@ export default function AssistantPanel({
             onChange={(e) => setInput(e.target.value)}
             readOnly={sending}
             maxLength={MAX_INPUT_LENGTH}
-            aria-describedby="assistant-input-hint"
+            // ピルは入力欄の前提そのものなので、説明として結び付ける。ピルが出ていないときは
+            // その id が解決しないだけで、文字数の案内だけが読まれる（分岐は要らない）。
+            aria-describedby="assistant-page-context assistant-input-hint"
             placeholder={sending ? 'AIが考えています…' : 'メッセージを入力'}
             // 本文バブルと違い text-sm のまま。text-body は行送り1.85なので、py-2.5＋罫と合わせると
             // 実高が約50pxになり、隣の送信ボタン（h-11=44px）と行内で高さが揃わない。
