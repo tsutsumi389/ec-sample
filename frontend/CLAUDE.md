@@ -2,7 +2,7 @@
 
 Next.js 側の固有規律。ここは `frontend/` 配下を触るときにだけ読み込まれる。
 
-商品の可視性・実売価格・ゲストカート・ログイン後の戻り先・計測（`ProductCard` の器1つ／ファネルの段）など **バックエンドと共有するドメイン規律はリポジトリ直下の `CLAUDE.md`** にあるので、そちらも必ず読むこと。
+リポジトリ全体の不変条件は直下の `CLAUDE.md`。**サーバー側と契約になっている規律（`Product.status` の絞り・`effective_price`・アシスタントへ送る画面の契約・ファネルの段）は `backend/CLAUDE.md`** にあり、そちらが唯一の源。
 
 - **アシスタントの開閉・幅は `lib/assistant-context.tsx` を通す**: 開閉状態・prefill・フォーカスの戻し先・**サイドバーの幅と接岸判定**は provider が持ち、`AssistantWidget` はパネルの描画と本文の押し出し・背景の `inert` を受け持つ。ウィジェット内部の `useState` に戻すと、行き止まりの画面（検索0件など）から `openAssistant()` で相談へ送れなくなる。ページから開くときは `returnFocusTo` に自分のボタンの ref を必ず渡すこと（渡さないと閉じたときフォーカスが画面の反対側の FAB へ飛ぶ）。**閉じた後のフォーカス復帰は effect で当てる**——FAB は開いている間 `display:none` で、`requestAnimationFrame` では再描画のコミット前に走って無言で外れる。`prefill` は入力欄に入れるだけで**自動送信しない**（サジェスト chip と同じ規律。予算や用途を書き足してから送れる状態にしておく）。
 - **アシスタントに渡す「いま見ている画面」は `lib/assistantPageContext.ts` が全部持つ**: 経路の判定（`derivePageContext` / `isProductDetail`）も、ピルのラベル・取り下げの状態（`useAssistantPageContext()`）もこのファイル1つ。`AssistantPanel` は受け取って描くだけで、画面の種類ごとの都合を1000行超のチャット部品に溜めない（`lib/useAdminResource.ts` と同じ置き方）。**PDP かどうかの判定を別の正規表現で持たないこと**——`AssistantWidget` が FAB を固定購入バーの上へ逃がす判定も `isProductDetail()` を引く（別々に持つと「FAB は避けるのにコンテキストは送らない」食い違いが黙って生まれる）。**provider（`useAssistant()`）に足さないこと**——あの value は滅多に変わらない前提で分割してあり、遷移のたびに変わる値を混ぜると `openAssistant` しか使っていない `ProductListing` を巻き込む。**送っているものは必ずピルとして見えていて、必ず「×」で外せる**状態にすること（見えない前提が効くと、別の商品の話がしたい人に逃げ場が無くなる）。外した記憶は route と ID の鍵で持ち、別の商品ページへ移れば自動で復帰する。ピルの商品名は `GET /products/{id}` で引く（ページ本体が持っている商品オブジェクトを配ると、パネルが「どのページに何が載っているか」を知ることになる。PDP 自身も同じ取得をするので、接岸中は1往復ぶん重なる）。404 のときだけ送信ごと取り下げ、通信断は名前が出ないだけで送る。**「×」で外した場合と 404 の場合は同じ1つの state で持つ**（どちらも「この画面は前提にしない／次の商品で戻す」で挙動が同じ。分けると同じ規則を2度書くことになる）。検索結果など**クエリ文字列を要する画面を足すときは `useSearchParams()` の Suspense 境界**が要る（`usePathname()` だけなら不要）。
@@ -16,3 +16,11 @@ Next.js 側の固有規律。ここは `frontend/` 配下を触るときにだ�
 - **明朝は 700 のみ・900 を指定しない**: Zen Old Mincho は 700 だけ収録している。持たないウェイトを指定するとブラウザが合成ボールドで太らせ、明朝の線が潰れる。`text-display` も 700 で組む。
 - **明朝に `palt` は効かない**: 配信中の Zen Old Mincho サブセットに GSUB/GPOS が無く、`palt`/`pkna`/`kern` はすべて無効（実測済み）。カタカナのアキは `lib/wordBreak.ts` の `withWordBreaks()` が付ける `.kana` と `--kana-track` で詰める。
 - **可変長の和文は `withWordBreaks()` を通す**: `word-break: auto-phrase` は Chromium で効かないため、`Intl.Segmenter` で語境界に `<wbr>` を挿すのが唯一の頼り。商品名・カテゴリ名・見出しに素の文字列を直接描画しないこと（語中改行が出る）。
+- **未ログインのカートは端末が持つ**: ゲストのカートは `lib/guestCart.ts` が localStorage（`hibino:guest-cart`）に**商品IDと数量だけ**を保存する。価格・購入可否・在庫の判断は `POST /cart/preview`（backend の `services/cart.py` の `resolve_guest_lines`）が返す値を使い、クライアントで金額を組まないこと（`effective_price` の規律が二重実装になり、必ずどちらかが古くなる）。ログイン・会員登録の直後に `POST /cart/merge` でサーバーのカートへ合算する。**ゲストカートの識別に `visitor_id` を使ってはならない**（計測専用であり、所有の判断には使わない）。ゲストのカート投入だけはサーバーを通らないためフロントが `add_to_cart` を記録し、**マージ時には記録しない**（足すと同じ投入が二重に数えられる）。
+- **ログイン後の戻り先は必ず引き継ぐ**: `?redirect=` を login・register の双方で受け渡す（`lib/redirect.ts`）。新しくログインへ送る導線を足すときは `withRedirect()` で現在地を付け、受け取り側は必ず `safeRedirect()` を通す（先頭 `/` のみ許可＝オープンリダイレクト対策）。「カートに入れた → ログイン → トップに着く」経路を作らないこと。
+- **商品カードの計測は器に1つだけ**: クリック・表示は `ProductCard` の `data-track-click="product_card"` / `data-track-view` が全画面ぶん引き受ける（`AnalyticsTracker` が委譲で拾う）。一覧・レコメンド・ホームのレーンなど呼び出し側に個別の計測を書かないこと。
+- **レビューの星の分布はフロントで数える**: `GET /products/{id}/reviews` はページングせず全件返すので、`ReviewSection` が取得済みの配列を数えて分布を出す（集計APIを足さない）。件数が数百を超えてサーバー集計が要る規模になったら、その前に一覧そのものを直すこと。
+
+## 検証
+
+変更後は `make lint` を通す。

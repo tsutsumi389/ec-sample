@@ -2,7 +2,7 @@
 
 `/mcp`（MCP サーバー）の実装規律。ここは `app/mcp_server/` 配下を触るときにだけ読み込まれる。
 
-プロジェクト全体の規律はリポジトリ直下の `CLAUDE.md` にある。特に **「MCP サーバー（`/mcp`）は `/api` 配下でない唯一の例外」（`main.py` でのマウント方法と lifespan）はそちらに残してある**ので、`main.py` を触るときは直下の `CLAUDE.md` を見ること。iframe の中で描画される View そのものは `mcp-apps/CLAUDE.md`。
+backend 全体の規律は `backend/CLAUDE.md`。特に **「MCP サーバー（`/mcp`）は `/api` 配下でない唯一の例外」（`main.py` でのマウント方法と lifespan）はそちらに残してある**ので、`main.py` を触るときは `backend/CLAUDE.md` を見ること。iframe の中で描画される View そのものは `mcp-apps/CLAUDE.md`、リポジトリ全体の不変条件は直下の `CLAUDE.md`。
 
 - **MCP ツールは既存のルーター関数へ委譲する**: 在庫・購入可否・金額の判定を `mcp_server/` に書き写さないこと。`tools.py` / `checkout.py` は `routers/products.py`・`cart.py`・`orders.py`・`addresses.py` の関数をキーワード引数で直接呼び、`services/cart.py` の判定をそのまま使う（`views.py` は整形だけを持つ純関数）。ツールを足すときも同じ——REST に無い操作を MCP のためだけに実装すると、同じ判定が二重になり必ず片方が古くなる。ツールは素の `def` で書く（SDK が同期関数をワーカースレッドへ逃がす。`async def` にするとこの保護が外れ、psycopg2 のブロッキング I/O がイベントループを塞ぐ）。
 - **`place_order` に金額・配送先・クーポンの引数を足さない**: 引数は `confirm_token` ただ1つ。渡せる値が無いこと自体が安全弁の本体で、引数を足した瞬間にモデルがそれを書き換える経路ができる。トークンは `preview_checkout` が発行する HMAC 署名（鍵は `SECRET_KEY` からの派生。環境変数を2本目に増やすと fail closed の検査・`make secret`・compose の受け渡しが二重になり、忘れたときに「無ければ SECRET_KEY にフォールバック」と書きたくなる）。指紋には `(cart_item_id, product_id, quantity, effective_price)`・支払額・クーポン・保存される住所文字列・**直近の注文ID**が入る（＝注文が1本でも確定すれば未使用のトークンは全部死ぬ＝二重注文にならない）。**在庫と `status` は指紋に入れない**——`create_order` が行ロック下で必ず再検査する唯一の源であり、ここに入れると他人が1個買っただけでユーザーに無関係なやり直しを強いる。
