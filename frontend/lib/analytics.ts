@@ -50,7 +50,6 @@ interface QueuedEvent {
 
 // この件数に達したら即送信する。サーバー側の受信上限（50件）より小さくしておく。
 const MAX_BATCH = 20;
-// 溜まりきらないイベントを送るまでの待ち時間。
 const FLUSH_INTERVAL_MS = 5000;
 
 let queue: QueuedEvent[] = [];
@@ -83,7 +82,6 @@ async function send(events: QueuedEvent[]): Promise<void> {
   }
 }
 
-/** 溜まっているイベントを即座に送信する。 */
 export function flush(): void {
   if (flushTimer !== null) {
     clearTimeout(flushTimer);
@@ -148,9 +146,8 @@ export function trackImpression(elementKey: string, props?: Record<string, unkno
  * 商品カードの計測属性。器へスプレッドして使う:
  * `<article {...productCardTracking(product.id, 'related')}>`
  *
- * AnalyticsTracker が読む属性の綴りと props の形は tracker と同じ層に置く。
- * ProductCard を使えない器（関連商品・アシスタント・ホームの表紙）がそれぞれ属性を
- * 手で写しており、**表紙だけ `data-track-view` が抜けて impression が記録されていなかった**
+ * ProductCard を使えない器（関連商品・アシスタント・ホームの表紙）がそれぞれ属性を手で
+ * 写しており、**表紙だけ `data-track-view` が抜けて impression が記録されていなかった**
  * ——画面には何も現れないので、集計を見た人が「この枠は効いていない」と誤読するまで
  * 気づけない類の欠落。属性名を変えたいときもここ1箇所で済む。
  *

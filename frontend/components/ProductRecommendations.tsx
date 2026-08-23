@@ -11,12 +11,8 @@ import { ArrowRightIcon } from '@/components/Icons';
 import { MOTIFS, type MotifName } from '@/components/BrandMotifs';
 
 /**
- * 列組みは **件数によらず 4 列で固定**する。
- *
- * 以前は件数に応じて `lg:mx-auto lg:w-1/2` のように ul ごと版面の中央へ絞っていた。
- * カード寸法は一定に保てたが、見出し・説明文が版面左端（x=176）に立つのに対して
- * カードだけが中央（x=448）に寄り、1つの帯に柱が2本立っていた。
- * 4列固定なら寸法も一定のまま、左端は見出しと同じ柱に乗る。
+ * 列組みは **件数によらず 4 列で固定**する。件数に応じて ul ごと版面の中央へ絞ると、
+ * 見出し・説明文が版面左端に立つのにカードだけが中央へ寄り、1つの帯に柱が2本立つ。
  * 余った列は「もっと見る」の札で埋める（下の MORE_TILE_SPAN）。
  */
 const goesWellGrid = 'grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-4';
@@ -61,10 +57,8 @@ interface ProductRecommendationsProps {
  * 商品詳細ページに表示する「合わせておすすめ」(最大4件)。
  * GET /products/{id}/recommendations の結果が0件の場合は何も表示しない。
  *
- * 面について:
- * PDP は「扉（沈んだ地）→ 主部（生成り）」のあと最後まで生成り1色で、
- * 3,000px 超に面の交替がまったく無かった。ホームのランキングと同じ
- * 深緑のフルブリード帯をここに1本置き、同じ判型記号でページ後半に段落を作る。
+ * 深緑のフルブリード帯にしてあるのは、PDP が扉のあと最後まで生成り1色で 3,000px 超に
+ * 面の交替が無いため。ホームのランキングと同じ判型記号でページ後半に段落を作る。
  */
 export default function ProductRecommendations({
   productId,

@@ -24,14 +24,12 @@ const GUIDE_ITEMS: { term: string; detail: string }[] = [
 export default function Footer() {
   return (
     <footer>
-      {/* 奥付帯。全ページ共通のブランド反響として、本体より上に深緑の帯を置く。 */}
+      {/* 奥付帯。全ページ共通のブランド反響として、本体より上に置く。 */}
       <div className="on-dark bg-invert band-sm">
         <div className="wrap-wide flex flex-col items-center gap-5 text-center">
           <div className="flex items-end gap-8 text-brand-300" aria-hidden="true">
-            {/* 3点の高さは同じ（h-14）。BrandMotifs の viewBox を 120×120 の正方形・
-                接地線 y=108 に統一したので、同じ数字を渡せば光学サイズも接地も揃う。
-                個別に h-16 / h-12 / h-14 と手当てしていた頃は、同じ3点セットが
-                署名帯・フッター・ログイン・カテゴリ札で4通りの大小関係になっていた。 */}
+            {/* 3点の高さは同じ数字を渡す。BrandMotifs の viewBox が正方形・接地線 y=108 に
+                統一されているので、それだけで光学サイズも接地も揃う。 */}
             <KettleMotif className="pointer-events-none select-none h-14 opacity-60" />
             <CupMotif className="pointer-events-none select-none h-14 opacity-60" />
             <PlantMotif className="pointer-events-none select-none h-14 opacity-60" />
@@ -40,9 +38,8 @@ export default function Footer() {
             HIBINO — 日々の暮らしの道具店
           </p>
           {/* 標語。全ページ共通で最も目に付く1行なので、熟語の途中（「すこし機／嫌が」）で
-              折れないよう改行位置を版として固定する。jp-name の語句境界制御に加え、
-              読点で意味の切れる2節に分けて各節を nowrap にし、
-              どのブラウザ・どの幅でも「使うたびに、／すこし機嫌がよくなる道具を。」で割る。 */}
+              折れないよう改行位置を版として固定する。jp-name に加えて読点で切れる2節を
+              それぞれ nowrap にし、どのブラウザ・どの幅でも同じ位置で割る。 */}
           <p className="font-mincho text-h3 text-on-dark jp-head jp-name">
             <span className="inline-block whitespace-nowrap">使うたびに、</span>
             <span className="inline-block whitespace-nowrap">すこし機嫌がよくなる道具を。</span>
@@ -50,7 +47,6 @@ export default function Footer() {
         </div>
       </div>
 
-      {/* 本体 */}
       <div className="bg-surface text-body text-ink-muted">
         <div className="wrap-wide band">
           {/* 390px では 4ブロックが1列に積まれ、フッター本体だけで 978px（＝1.1画面）あった。
@@ -58,7 +54,6 @@ export default function Footer() {
               ブランド説明と GUIDE は行が長いので 640px 未満だけ2列ぶんの幅を取り、
               sm 以上は従来どおり4ブロックが2列に並ぶ（640〜1023 で行数を増やさない）。 */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:gap-x-8 lg:grid-cols-4">
-            {/* ブランド */}
             <div className="col-span-2 sm:col-span-1">
               {/* py-2 は見た目の余白ではなくタップ域（文字丈 28px → 44px）。 */}
               <Link
@@ -84,12 +79,10 @@ export default function Footer() {
               </p>
             </div>
 
-            {/* お買い物 */}
             <div>
               <h2 className={columnHeadClass}>SHOPPING</h2>
               <ul className="space-y-3">
                 <li>
-                  {/* 一覧・検索は /products に独立している（トップは特集ページ）。 */}
                   <Link href="/products" className={footerLinkClass}>
                     商品一覧
                   </Link>
@@ -112,7 +105,6 @@ export default function Footer() {
               </ul>
             </div>
 
-            {/* アカウント */}
             <div>
               <h2 className={columnHeadClass}>ACCOUNT</h2>
               <ul className="space-y-3">

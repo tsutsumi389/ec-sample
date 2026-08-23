@@ -42,8 +42,7 @@ def visitors(count: int, prefix: str = "visitor") -> list[str]:
 
 class TestAssignVariant:
     def test_is_deterministic(self):
-        # 同じ訪問者・同じ実験なら何度呼んでも同じ枝でなければならない
-        # （毎回変わると同じ人が両方の体験を見てしまい、結果を解釈できなくなる）。
+        # 毎回変わると同じ人が両方の体験を見てしまい、結果を解釈できなくなる。
         experiment = build_experiment()
         first = experiment_service.assign_variant(experiment, "visitor-42")
         for _ in range(10):
@@ -65,7 +64,6 @@ class TestAssignVariant:
         assert assigned == {"v0"}
 
     def test_split_is_close_to_weights(self):
-        # 50/50 の配分がおおむね守られること（±2 ポイント以内）。
         experiment = build_experiment()
         counts = {"v0": 0, "v1": 0}
         for visitor in visitors(10000):
@@ -100,7 +98,7 @@ class TestAssignVariant:
         assert abs(counts["v0"] / total - 0.5) < 0.03
 
     def test_variant_order_does_not_change_assignment(self):
-        # 枝の並び順（DB の取得順）が変わっても割り当てが変わらないこと。
+        # 枝の並び順は DB の取得順で変わりうる。
         experiment = build_experiment()
         expected = {
             visitor: experiment_service.assign_variant(experiment, visitor).key
@@ -111,8 +109,8 @@ class TestAssignVariant:
             assert experiment_service.assign_variant(experiment, visitor).key == variant_key
 
     def test_different_salt_reshuffles_visitors(self):
-        # salt が違えば同じ訪問者でも割り当てが変わる。これが無いと、ある実験で対照群に
-        # 入った人が別の実験でも対照群に寄る（キャリーオーバー相関）。
+        # これが無いと、ある実験で対照群に入った人が別の実験でも対照群に寄る
+        # （キャリーオーバー相関）。
         first = build_experiment(salt="salt-1")
         second = build_experiment(salt="salt-2")
         same = sum(
@@ -164,7 +162,7 @@ class TestSrmCheck:
         assert result.is_mismatch is False
 
     def test_severe_imbalance_is_flagged(self):
-        # 50/50 のはずが 70/30 に偏っている状態。割り当てか計測の不具合を疑うべき。
+        # 割り当てか計測の不具合を疑うべき偏り。
         experiment = build_experiment()
         result = experiment_report.check_srm(experiment, {"v0": 7000, "v1": 3000})
         assert result.is_mismatch is True

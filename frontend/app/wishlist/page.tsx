@@ -89,7 +89,6 @@ export default function WishlistPage() {
 
   return (
     <>
-      {/* 扉。全ページ共通の PageMasthead に寄せる（幅は本文と同じ wrap ＝ width="default"）。 */}
       <PageMasthead
         eyebrow="WISHLIST"
         title="お気に入り"

@@ -1,16 +1,7 @@
-/* ---- 検索結果カード一覧（search）固有のスタイル ---------------------------
-   **両 View に同じ宣言で存在するものは shared/theme.css が持つ。** ここに置くのは
-   search にしか無いもの（グリッド・カード・並び替え・ページング）と、product と
-   値が違うもの（#app の max-width、.page-btn の padding）だけ。
-
-   規律は shared/theme.css と同じ:
-   - spacing（padding / margin / gap / grid の寸法）はホストから配られない変数なので
-     固定 px で書く（仕様書 Theming 節: "Spacing intentionally excluded"）。
-   - 色・書体・角丸・影・線幅は必ず var(--x, light-dark(明, 暗)) を経由する。変数名は
-     SDK が受け付ける 76 個から選ぶ（それ以外の名前を発明してもフォールバックしか
-     当たらない）。
-   - [hidden] の指定は要らない。shared/theme.css の `[hidden] { display: none !important }`
-     が display: flex / grid ごと一括で伏せる。 */
+/* 検索結果カード一覧（search）固有のスタイル。
+   **両 View に同じ宣言で存在するものと、余白・変数の使い方の規律は shared/theme.css が
+   持つ。** ここに置くのは search にしか無いもの（グリッド・カード・並び替え・ページング）と、
+   product と値が違うもの（#app の max-width、.page-btn の padding）だけ。 */
 
 /* padding: 16px と margin: 0 auto は shared/theme.css が持つ。max-width だけが
    View ごとに違う（search 720px / product 560px）。 */
@@ -80,8 +71,8 @@
 
 .card:disabled { opacity: .6; cursor: default; }
 
-/* 買えない商品は理由の文字を一段強く見せる。**強調するだけで文言は作らない**——
-   availability の文言はサーバー（services/cart.py）が唯一の源。 */
+/* 買えない商品は理由の文字を一段強く見せる。**強調するだけで文言は作らない**（文言は
+   サーバーの services/cart.py が唯一の源）。 */
 .card[data-purchasable="false"] .card-availability { font-weight: var(--font-weight-medium, 500); }
 
 .card-body {
@@ -92,8 +83,7 @@
   flex: 1;
 }
 
-/* .card-category は shared/theme.css が .panel-category / .panel-sku とまとめて持つ
-   （3か所とも同じ宣言だった）。 */
+/* .card-category は shared/theme.css が .panel-category / .panel-sku とまとめて持つ。 */
 
 .card-name {
   font-size: var(--font-text-sm-size, 13px);
@@ -124,8 +114,7 @@
   color: var(--color-text-secondary, light-dark(#52525b, #d4d4d8));
 }
 
-/* margin-top: auto でカードの高さが揃わないときも最下段へ落とす。
-   色分け（[data-ok]）は shared/theme.css が持つ。 */
+/* 高さの揃わないカードでも最下段へ落とす。色分け（[data-ok]）は shared/theme.css が持つ。 */
 .card-availability {
   margin-top: auto;
   padding-top: 6px;
@@ -140,8 +129,8 @@
   margin-top: 18px;
 }
 
-/* 角丸・枠・地色・cursor・無効時は shared/theme.css。**padding だけが product 側
-   （8px 16px）と違う**ので、ここに残すのはこの1行だけ。寄せないこと。 */
+/* 角丸・枠・地色・cursor・無効時は shared/theme.css。**padding だけが product 側（8px 16px）と
+   違う**ので、ここに残すのはこの1行だけ。寄せないこと。 */
 .page-btn {
   padding: 6px 14px;
 }

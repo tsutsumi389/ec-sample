@@ -91,7 +91,7 @@ class TestProductBrief:
         assert brief.availability == "現在購入できません"
 
     def test_category_name_none_when_unmapped(self):
-        # カテゴリ未設定の商品で「カテゴリ名を捏造しない」ことを固定する。
+        # カテゴリ名を捏造しない。
         assert views.to_product_brief(make_product(), None).category is None
 
 
@@ -316,7 +316,6 @@ class TestOrderViews:
         )
 
     def test_order_detail_uses_snapshot_name_and_price(self):
-        # 注文明細はスナップショット。商品マスタを引き直さない形であること。
         line = views.to_order_detail(self.make_detail()).items[0]
         assert line.product_name == "琺瑯ケトル（当時の名前）"
         assert line.price == 4000
@@ -326,8 +325,7 @@ class TestOrderViews:
         assert detail.total_amount == 7000 and detail.discount_amount == 1000
 
     def test_order_detail_masks_the_phone_number(self):
-        # get_order は「注文状況を確認して」の一言で呼ばれる。毎回ログに電話番号を
-        # 展開しないこと（番地は確認に要るので残す）。
+        # get_order は「注文状況を確認して」の一言で呼ばれる。毎回ログに電話番号を展開しない。
         detail = views.to_order_detail(self.make_detail())
         assert "03-1234-5678" not in detail.shipping_address
         assert "神宮前1-2-3" in detail.shipping_address

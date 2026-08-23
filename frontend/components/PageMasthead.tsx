@@ -5,10 +5,7 @@ import { withWordBreaks } from '@/lib/wordBreak';
 
 /**
  * ページの「扉」。沈んだ地のフルブリード帯 ＋ 裁ち落とした線画 ＋ eyebrow ＋ 明朝の h1。
- *
- * これまで /products だけがこの造形を持ち、/cart /orders /login /wishlist /account は
- * 素の地に h1 が置かれるだけで、章ごとに扉の様式が4通りに割れていた。全ページの扉を
- * この1コンポーネントに畳み込み、判型記号を1つにする。
+ * 全ページの扉はこれを通す（素の h1 を置くと章ごとに扉の様式が割れる）。
  *
  * 使い方:
  *   <PageMasthead eyebrow="CART" title="カート" width="default" motif="kettle" />
@@ -50,9 +47,7 @@ export default function PageMasthead({
   subtitle?: string | null;
   /** 見出しの右端に置く要素（件数など）。 */
   right?: ReactNode;
-  /** 右上で裁ち落とす線画。'none' で消す。 */
   motif?: MastheadMotif;
-  /** 見出しの上に置くパンくず。 */
   breadcrumbs?: BreadcrumbItem[];
   /** 帯の内側の版面幅。**続く本文と必ず揃えること。** */
   width?: MastheadWidth;
@@ -92,8 +87,8 @@ export default function PageMasthead({
             {eyebrow && (
               <p className="text-eyebrow uppercase font-num text-ink-muted">{eyebrow}</p>
             )}
-            {/* 可変長の和文。<wbr> を語境界に挿し（jp-name の keep-all と対）、
-                大見出しなので jp-display（balance ＋ カタカナの字送り補正）を併用する。 */}
+            {/* <wbr> を語境界に挿し（jp-name の keep-all と対）、大見出しなので
+                jp-display（balance ＋ カタカナの字送り補正）を併用する。 */}
             <h1
               className={`font-mincho text-h1 text-ink jp-head jp-name jp-display ${
                 eyebrow ? 'mt-3' : ''

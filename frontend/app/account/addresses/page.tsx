@@ -18,7 +18,6 @@ import { ArrowLeftIcon } from '@/components/Icons';
 import { FOCUS_RING, btn } from '@/lib/buttonStyles';
 import { withRedirect } from '@/lib/redirect';
 
-/** 住所カード型のスケルトン。 */
 function AddressCardSkeleton() {
   return (
     <div className="rounded-xl bg-surface p-4 shadow-paper">
@@ -104,7 +103,6 @@ export default function AddressesPage() {
     setDeleting(true);
     try {
       await api.delete(`/addresses/${deleteTarget.id}`);
-      // 部分更新: 削除した住所をローカル state から取り除く。
       setAddresses((current) => current.filter((a) => a.id !== deleteTarget.id));
       showToast('住所を削除しました', { type: 'info' });
       setDeleteTarget(null);
@@ -122,7 +120,6 @@ export default function AddressesPage() {
     setSettingDefaultId(address.id);
     try {
       await api.put(`/addresses/${address.id}`, { is_default: true });
-      // 部分更新: 対象を既定に、他を非既定に切り替える。
       setAddresses((current) =>
         current.map((a) => ({ ...a, is_default: a.id === address.id }))
       );
@@ -139,7 +136,6 @@ export default function AddressesPage() {
 
   return (
     <>
-      {/* 扉。全ページ共通の PageMasthead に寄せる（幅は本文と同じ wrap ＝ width="default"）。 */}
       <PageMasthead
         eyebrow="ADDRESSES"
         title="住所帳"

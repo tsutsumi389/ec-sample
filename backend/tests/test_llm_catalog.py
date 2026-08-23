@@ -1,5 +1,3 @@
-"""llm_catalog の SID 正規化・照合ロジックのユニットテスト（DB 不要）。"""
-
 from types import SimpleNamespace
 
 from app.services import llm_catalog

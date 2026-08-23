@@ -43,7 +43,6 @@ export default function AnalyticsTracker() {
     track(EVENT_PAGE_VIEW);
   }, [pathname]);
 
-  // クリックの委譲収集。個々のボタンに onClick を足さなくても属性だけで拾える。
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
       const target = event.target;
@@ -85,10 +84,9 @@ export default function AnalyticsTracker() {
       });
     };
 
-    // 走査は文書全体の querySelectorAll なので、DOM が動くたびに素で走らせない。
-    // 検索サジェストの開閉・トーストの出入り・ドロワーの開閉はどれもノードの増減を起こすので、
-    // 間引かないとキー入力1打ごとに全文書スキャンが挟まる。同じフレーム内の変更は
-    // まとめて1回のスキャンで拾えるため、取りこぼしは起きない。
+    // 走査は文書全体の querySelectorAll なので、DOM が動くたびに素で走らせない
+    // （サジェストの開閉もトーストの出入りもノードの増減なので、間引かないとキー入力
+    // 1打ごとに全文書スキャンが挟まる）。同じフレーム内の変更は1回のスキャンで拾える。
     let scanFrame = 0;
     const queueScan = () => {
       if (scanFrame) return;

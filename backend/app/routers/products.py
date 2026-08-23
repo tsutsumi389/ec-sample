@@ -47,10 +47,9 @@ def list_products(
     db: Session = Depends(get_db),
 ) -> ProductListOut:
     conditions = [Product.status.in_(LISTED_STATUSES)]
-    # 検索はハイブリッド（キーワード + セマンティック）。まずクエリを埋め込み、成功したら
-    # 「商品名の部分一致」または「意味的に近い商品」のどちらかにヒットすれば拾う。
-    # 部分一致だけでは表記揺れや雰囲気検索（例: 雨の日に便利なもの）を取りこぼすため。
-    # Ollama 停止等で埋め込めない場合は query_vec が None になり、従来の ILIKE のみに
+    # 検索はハイブリッド（キーワード + セマンティック）。部分一致だけでは表記揺れや
+    # 雰囲気検索（例: 雨の日に便利なもの）を取りこぼすため、意味的に近い商品も拾う。
+    # 埋め込めない場合（Ollama 停止等）は query_vec が None になり、従来の ILIKE のみに
     # フォールバックして検索を止めない。
     query_vec = embedding.embed_query(search) if search else None
     # 意味的候補の商品ID（距離の近い順）。空なら意味的候補は使わなかったということで、
@@ -60,15 +59,11 @@ def list_products(
     if search:
         if query_vec is not None:
             semantic_distance = ProductEmbedding.embedding.cosine_distance(query_vec)
-            # 距離の絶対値はクエリの具体度でスケールが変わる（具体的なクエリは全体に近く、
-            # 抽象的なクエリは全体に遠く出る）ため、固定閾値だけでは具体的なクエリで
-            # ノイズを拾い、抽象的なクエリで取りこぼす。そこで最近傍距離 d_min を測り、
-            # 「最も近い商品からマージン以内」の相対基準で足切りする（絶対上限は最後の砦）。
-            #
-            # 候補は 1 回のスキャンで確定させて ID 列として持つ。ANN インデックスが無く
-            # コサイン距離は全件計算なので（0002 に HNSW を張っていない）、min() の測定と
-            # 件数クエリと本体クエリでサブクエリを 3 回展開すると同じ全件スキャンを 3 回払う。
-            # 距離昇順に並べてあるので先頭が d_min そのものになり、足切りは Python 側で済む。
+            # 距離の絶対値はクエリの具体度でスケールが変わるため、固定閾値だけでは具体的な
+            # クエリでノイズを拾い、抽象的なクエリで取りこぼす。最近傍距離 d_min からマージン
+            # 以内という相対基準で足切りする（絶対上限は最後の砦）。候補は 1 回のスキャンで
+            # 確定させる——0002 に HNSW が無くコサイン距離は全件計算なので、min() の測定・
+            # 件数・本体でサブクエリを 3 回展開すると同じ全件スキャンを 3 回払う。
             rows = db.execute(
                 select(ProductEmbedding.product_id, semantic_distance.label("distance"))
                 .order_by(semantic_distance)
@@ -87,7 +82,6 @@ def list_products(
                 )
             )
         else:
-            # 埋め込み不可（Ollama 停止等）or 最近傍が遠すぎる → 従来の部分一致のみ。
             conditions.append(Product.name.ilike(f"%{search}%"))
     if category_id is not None:
         conditions.append(Product.category_id == category_id)
@@ -123,13 +117,11 @@ def list_products(
     elif sort == "rating":
         stmt = stmt.order_by(rating_subq.c.avg_rating.desc().nullslast(), Product.id)
     elif sort == "recommended":
-        # おすすめ順。ログインユーザーはプロフィールベクトルとのコサイン近傍で並べ替え、
-        # プロフィールが作れない場合（未ログイン・行動ゼロ・埋め込み欠損）は人気順に落とす。
-        # 一覧なので購入済み商品も除外せず、並び順だけを変える（レコメンド枠の候補抽出とは
-        # 目的が違い、ここでは「品揃え全体を好みに寄せて見せる」ため除外しない）。
-        # 既知の制約: プロフィールはリクエスト毎に再計算され、時間減衰でベクトルが
-        # わずかに動くため、ページ間で近接タイの商品が重複/欠落し得る。厳密な整合には
-        # プロフィールの短期キャッシュが要るが、サンプル規模では許容する。
+        # おすすめ順。プロフィールが作れない場合（未ログイン・行動ゼロ・埋め込み欠損）は
+        # 人気順に落とす。レコメンド枠の候補抽出と違い購入済みを除外しないのは、ここでは
+        # 「品揃え全体を好みに寄せて見せる」のが目的で並び順しか変えないため。
+        # 既知の制約: プロフィールはリクエスト毎に再計算され時間減衰でベクトルが動くため、
+        # ページ間で近接タイの商品が重複/欠落し得る（サンプル規模では許容する）。
         profile = (
             recommendation.build_profile(db, current_user.id) if current_user else None
         )
@@ -145,7 +137,6 @@ def list_products(
         else:
             # 人気順フォールバック。「何が売れたか」の定義は get_popular_products と共有する
             # （services/recommendation.py の purchase_count_subquery）。
-            # 注文数 desc → 平均評価 desc → 新着 desc。
             popularity_subq = recommendation.purchase_count_subquery()
             stmt = stmt.outerjoin(
                 popularity_subq, popularity_subq.c.product_id == Product.id
@@ -156,15 +147,11 @@ def list_products(
                 Product.id.desc(),
             )
     elif semantic_ids:
-        # sort 未指定 かつ 意味的候補を実際に使ったときだけ「関連度順」で並べる。
-        # 名前に一致した商品を意味的ヒットより先に見せたいので、まず名前一致(0)を優先し、
-        # 次に意味的な近さの順、最後に id で安定化する。
-        # 近さは semantic_ids の並び（= 上のスキャンで距離昇順に確定済み）をそのまま使い、
-        # ORDER BY で距離を計算し直さない。ここで cosine_distance を書くと、候補を 1 回の
-        # スキャンで確定させた意味が消え、しかも OFFSET/LIMIT の前に評価されるので
-        # 「返す 12 件」ではなくヒット全件ぶんの 768 次元計算をもう一度払うことになる。
-        # 名前だけで一致して意味的候補に入らなかった商品は位置が NULL になり、
-        # 名前一致グループの末尾に回る。
+        # sort 未指定 かつ 意味的候補を実際に使ったときだけ「関連度順」で並べる。名前一致(0)を
+        # 意味的ヒットより先に出し、次に意味的な近さ、最後に id で安定化する。近さは
+        # semantic_ids の並び（上のスキャンで距離昇順に確定済み）をそのまま使い、ORDER BY で
+        # 距離を計算し直さない——cosine_distance をここに書くと OFFSET/LIMIT の前に評価され、
+        # 「返す 12 件」ではなくヒット全件ぶんの 768 次元計算をもう一度払う。
         relevance_rank = case((Product.name.ilike(f"%{search}%"), 0), else_=1)
         semantic_rank = func.array_position(
             literal(semantic_ids, ARRAY(Integer)), Product.id
@@ -243,8 +230,6 @@ def suggest_products(
         .all()
     )
 
-    # ダイレクト候補（商品本体）。suggestions と同じパターン・同じ関連度順で最大3件。
-    # 埋め込みや集計は挟まない軽量クエリのみ。effective_price はモデルのプロパティを使う。
     product_rows = (
         db.execute(select(Product).where(*matches).order_by(*relevance).limit(3))
         .scalars()
@@ -330,7 +315,6 @@ def list_product_recommendations(
     if neighbors:
         return product_view.to_product_outs(db, neighbors)
 
-    # 埋め込みが無い（または近傍ゼロ）→ /related と同じ同カテゴリフォールバック。
     return product_view.to_product_outs(
         db, recommendation.same_category_products(db, product, limit)
     )

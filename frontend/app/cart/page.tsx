@@ -121,7 +121,6 @@ export default function CartPage() {
   const [submitting, setSubmitting] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
-  // 削除確認ダイアログ
   const [removeTarget, setRemoveTarget] = useState<CartRow | null>(null);
   const [removing, setRemoving] = useState(false);
 
@@ -129,12 +128,10 @@ export default function CartPage() {
   // 左カラムの入力欄までフォーカスを移してエラーの所在を明示する。
   const addressRef = useRef<HTMLTextAreaElement>(null);
 
-  // 住所帳
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addressesLoaded, setAddressesLoaded] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState<number | 'manual'>('manual');
 
-  // クーポン
   const [couponOpen, setCouponOpen] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [couponValidating, setCouponValidating] = useState(false);
@@ -219,7 +216,6 @@ export default function CartPage() {
   };
 
   // 数量変更・削除でカート合計が変わったら、適用中クーポンを新しい小計で再検証する。
-  // 無効になった（最低購入額割れなど）場合はクーポンを解除して通知する。
   const revalidateAppliedCoupon = async (nextSubtotal: number) => {
     if (!appliedCoupon) return;
     const removeStaleCoupon = () => {
@@ -248,10 +244,9 @@ export default function CartPage() {
 
   /**
    * カートを変更する一連の流れ（変更 → 取り直し → 通知 → クーポン再検証）。
-   *
-   * 数量変更と削除で同じ骨格を2度書いていたため、売上に直結する後処理の順序が
-   * 2箇所に写っていた（片方だけ直すと「削除のときだけクーポンが古い額のまま残る」）。
-   * 進行フラグの上げ下げだけは呼び出し側が持つ（行単位／ダイアログ単位で粒度が違うため）。
+   * 後処理の順序を数量変更と削除に写すと、片方だけ直したときに
+   * 「削除のときだけクーポンが古い額のまま残る」。進行フラグの上げ下げだけは
+   * 呼び出し側が持つ（行単位／ダイアログ単位で粒度が違うため）。
    */
   const mutateCart = async (
     apply: () => Promise<unknown> | void,
@@ -295,7 +290,6 @@ export default function CartPage() {
   const handleQuantityChange = async (row: CartRow, quantity: number) => {
     if (quantity < 1) return;
     setUpdatingId(row.targetId);
-    // 宛先は行の出自で決まる（ログイン時はカート明細、ゲスト時は端末の控え）。
     await mutateCart(
       () =>
         user
@@ -359,7 +353,6 @@ export default function CartPage() {
     setCouponCode('');
   };
 
-  /** お届け先の入力欄まで送り、フォーカスを当てる（サマリーの予告行から呼ぶ）。 */
   const focusAddress = () => {
     addressRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     addressRef.current?.focus({ preventScroll: true });
@@ -446,7 +439,6 @@ export default function CartPage() {
 
   return (
     <>
-      {/* 扉。全ページ共通の PageMasthead に寄せる（幅は本文と同じ wrap ＝ width="default"）。 */}
       <PageMasthead
         eyebrow="CART"
         title="カート"
@@ -505,7 +497,6 @@ export default function CartPage() {
 
         {!loading && rows && rows.length > 0 && (
           <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-x-10">
-            {/* 左: 明細 + クーポン + お届け先 */}
             <div className="lg:col-span-7">
               <SectionHead title="ご注文の品" eyebrow="ITEMS" />
 
@@ -536,8 +527,6 @@ export default function CartPage() {
                             href={`/products/${row.product.id}`}
                             className={`text-h3 text-ink jp-name transition-colors duration-fast hover:text-brand-700 ${FOCUS_RING} rounded`}
                           >
-                            {/* 素の商品名を書かない。<wbr> を語句境界だけに挿し、
-                                「ブルートゥースス／ピーカー」のような語中改行を止める。 */}
                             {withWordBreaks(row.product.name)}
                           </Link>
                           {/* 単価は数量が2以上のときだけ出す。数量1では「¥2,680 × 1」と
@@ -550,8 +539,7 @@ export default function CartPage() {
                               {row.quantity}
                             </p>
                           )}
-                          {/* 在庫で数量を丸めた・いま買えない、という申し送り。金額の変化を
-                              黙って起こさず、必ず理由をその行に書く。 */}
+                          {/* 金額の変化を黙って起こさず、必ず理由をその行に書く。 */}
                           {row.notice && (
                             <p role="status" className="mt-1.5 text-caption text-critical-600">
                               {row.notice}
@@ -690,7 +678,6 @@ export default function CartPage() {
                 )}
               </div>
 
-              {/* 配送先住所 */}
               <div className="mt-8 rounded-xl bg-surface p-5 shadow-paper md:p-6">
                 <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
                   <span className="block">
@@ -840,8 +827,7 @@ export default function CartPage() {
                   </div>
                 </dl>
 
-                {/* 押してから弾かれる順序にしないための予告。
-                    デスクトップではお届け先が左カラム（CTA の遥か下）にあるため、
+                {/* デスクトップではお届け先が左カラム（CTA の遥か下）にあるため、
                     「まだ確定できない」ことと入力欄への近道を CTA の直上に置く。 */}
                 {!guestCheckout && addressMissing && (
                   <div className="mt-6 rounded-lg bg-sunken px-4 py-4">

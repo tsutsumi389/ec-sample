@@ -1,28 +1,19 @@
-/* ---- 商品詳細パネル（get_product view）固有のスタイル ----------------------
-   **両 View に同じ宣言で存在していたものは src/shared/theme.css が持つ。**
-   ここに置くのは product にしか無いもの（.panel-* / .specs-* / .spec-*）と、
-   search と値が違うもの（#app の max-width、.header の並べ方、.page-btn の
-   padding）だけ。main.tsx が theme.css → このファイルの順に import するので、
-   同じセレクタを書けばこちらが勝つ。
+/* 商品詳細パネル（get_product view）固有のスタイル。
+   **両 View に同じ宣言で存在していたものと、余白・変数の使い方の規律は
+   src/shared/theme.css が持つ。** ここに置くのは product にしか無いもの
+   （.panel-* / .specs-* / .spec-*）と、search と値が違うもの（#app の max-width、
+   .header の並べ方、.page-btn の padding）だけ。main.tsx が theme.css → このファイルの
+   順に import するので、同じセレクタを書けばこちらが勝つ。 */
 
-   規律は theme.css と同じ:
-   - **余白（padding / margin / gap）は固定 px で書く。** spacing はホストから
-     配られない前提の変数（Apps の仕様書 Theming 節: "Spacing intentionally
-     excluded"）なので、var() を通しても永久にフォールバックしか当たらない。
-   - **色・書体・角丸・影・線幅は必ず var(--x, light-dark(明, 暗)) を経由する。**
-     変数名はホストが流し込める 76 個から選ぶ（新しい名前を発明しない）。
-   - [hidden] の指定は要らない。theme.css の `[hidden] { display: none !important }` が
-     display: flex ごと一括で伏せる。 */
-
-/* max-width だけが View ごとに違う（search 720px / product 560px）。padding と
-   margin: 0 auto は theme.css 側にあり、padding は safe area のインセットを
-   calc() で足し込む式になっているので**こちらに書き写さないこと**。 */
+/* max-width だけが View ごとに違う（search 720px / product 560px）。padding と margin: 0 auto
+   は theme.css 側にあり、padding は safe area のインセットを calc() で足し込む式になって
+   いるので**こちらに書き写さないこと**。 */
 #app {
   max-width: 560px;
 }
 
-/* 見出し（商品名）と「再読み込み」を両端に置く。search の View は並び替えの行を
-   下に積むので column だが、こちらは横1行。 */
+/* 見出し（商品名）と「再読み込み」を横1行の両端に置く（search の View は並び替えの行を
+   下に積むので column）。 */
 .header {
   display: flex;
   align-items: flex-start;
@@ -40,8 +31,7 @@
   gap: 6px;
 }
 
-/* .panel-category / .panel-sku は theme.css が .card-category とまとめて持つ
-   （3か所とも同じ宣言だった）。 */
+/* .panel-category / .panel-sku は theme.css が .card-category とまとめて持つ。 */
 
 .panel-name {
   margin: 0;
@@ -58,10 +48,9 @@
 }
 
 .panel-price {
-  /* 価格だけは商品名（--font-heading-sm-size）より一段大きく見せたいが、固定 px で
-     書くとホストが配るフォントサイズ変数（applyHostStyleVariables）に追随せず、
-     文字を拡大している利用者の画面でここだけ取り残される。倍率で持たせて、
-     他の宣言と同じく必ずホスト変数を経由させる。 */
+  /* 価格だけは商品名（--font-heading-sm-size）より一段大きく見せたいが、固定 px で書くと
+     ホストが配るフォントサイズ変数に追随せず、文字を拡大している利用者の画面でここだけ
+     取り残される。倍率で持たせて、必ずホスト変数を経由させる。 */
   font-size: calc(var(--font-heading-sm-size, 18px) * 1.22);
   font-weight: var(--font-weight-bold, 700);
 }
@@ -77,10 +66,9 @@
   color: var(--color-text-secondary, light-dark(#52525b, #d4d4d8));
 }
 
-/* availability は「購入できます」/ 買えない理由の完成文がサーバーから来る
-   （backend の services/cart.py の availability_reason_for_status が唯一の源）。
-   **View が持つのは見た目だけで、文言は自作しない。** ここは字の大きさと太さ、
-   成功色／危険色の切り替え（theme.css の [data-ok] 側）に限る。 */
+/* **View が持つのは見た目だけで、文言は自作しない**——「購入できます」/ 買えない理由の
+   完成文はサーバー（services/cart.py の availability_reason_for_status）が唯一の源。
+   成功色／危険色の切り替えは theme.css の [data-ok] 側。 */
 .panel-availability {
   font-size: var(--font-text-sm-size, 13px);
   font-weight: var(--font-weight-medium, 500);
@@ -102,9 +90,8 @@
   font-weight: var(--font-weight-semibold, 600);
 }
 
-/* specs は "ラベル: 値" に潰した文字列の配列（views.ProductDetail.specs）。
-   label/value に分割しての表形式にはしない——CLAUDE.md の「label/value の
-   2キーを増やさない」規律に、表示側も倣う。 */
+/* specs は "ラベル: 値" に潰した文字列の配列（views.ProductDetail.specs）。View 側で
+   分割し直して表形式にはしない——潰す前の label / value は契約に含まれていない。 */
 .spec-list {
   margin: 0;
   padding: 0;
@@ -128,8 +115,8 @@
 
 .panel-actions { margin-top: 12px; }
 
-/* 角丸・枠・地色・cursor・無効時は theme.css。**padding だけが search の View
-   （6px 14px）と違う**ので、ここに残すのはこの1行だけ。 */
+/* 角丸・枠・地色・cursor・無効時は theme.css。**padding だけが search の View（6px 14px）と
+   違う**ので、ここに残すのはこの1行だけ。 */
 .page-btn {
   padding: 8px 16px;
 }

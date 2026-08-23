@@ -1,10 +1,8 @@
 import type { SVGProps } from 'react';
 
 /**
- * Heroicons outline 風の共通アイコン集。
- * - stroke 1.5px / currentColor / fill なし
- * - デフォルトサイズ w-4 h-4（className で上書き可能）
- * - 装飾用途を想定し aria-hidden="true" をデフォルト付与
+ * Heroicons outline 風の共通アイコン集。装飾用途を想定して aria-hidden="true" を既定で
+ * 付ける（意味を持つアイコンは呼び出し側で外し、ラベルを与えること）。
  */
 type IconProps = SVGProps<SVGSVGElement>;
 

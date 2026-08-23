@@ -1,10 +1,9 @@
 """商品カードの組み立て（ProductOut / RecommendationItemOut）。
 
-一覧・商品ページ・レコメンド・ホームのレーン・アシスタントの提案カードは、どれも同じ形の
-カードを返す。組み立てはここ 1 箇所に置き、ルーターには置かない——ルーターに置くと他の
-ルーターやサービスが `app.routers.*` を import する羽目になり、services → routers →
-services の逆流を招く（実際、置き場所が products ルーターだったあいだ、ホームだけが
-呼べずに同じ組み立てを手書きしていた）。
+組み立てはここ 1 箇所に置き、ルーターには置かない——ルーターに置くと他のルーターや
+サービスが `app.routers.*` を import する羽目になり、services → routers → services の
+逆流を招く（実際、置き場所が products ルーターだったあいだ、ホームだけが呼べずに同じ
+組み立てを手書きしていた）。
 
 評価（平均・件数）はカードに載るが商品テーブルには無い。並べる件数が先に確定している
 場所では rating_map() で 1 クエリにまとめて引くこと。1 件ずつ rating_stats() を呼ぶと
@@ -21,7 +20,6 @@ from app.schemas import ProductOut, RecommendationItemOut
 
 # 商品ごとの (平均評価, レビュー数)。
 RatingStats = tuple[float | None, int]
-# レビューが 1 件も無い商品の値。表現を変えるならここ 1 箇所で足りる。
 NO_REVIEWS: RatingStats = (None, 0)
 
 

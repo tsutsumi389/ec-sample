@@ -25,9 +25,8 @@ function Star({ fillRatio, sizeClass }: StarProps) {
   return (
     // グラデーションの currentColor は <stop> が継承した色で解決されるため、
     // 満星の色は path ではなく svg 自身に置く必要がある。
-    // 色は柿渋ランプの1段弱い accent-300。最も強い柿渋（accent-400/700 のベタ・文字）は
-    // 「割引」「残りN点」＝購入を急ぐ理由だけに残し、評価はその一段下に置く。
-    // カード1枚の中で最も強い色が常にセールだけになるようにするための規律。
+    // 色は柿渋ランプの1段弱い accent-300。最も強い柿渋は「割引」「残りN点」＝購入を急ぐ理由
+    // だけに残す（カード1枚の中で最も強い色が常にセールだけになるようにするため）。
     <svg viewBox="0 0 24 24" className={`${sizeClass} text-accent-300`} aria-hidden="true">
       <defs>
         <linearGradient id={gradientId}>

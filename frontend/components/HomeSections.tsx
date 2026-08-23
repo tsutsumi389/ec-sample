@@ -18,7 +18,6 @@ const MAX_LANES = 5;
 /**
  * ランキング帯を除いた「通常レーン」の上限。
  * ここを緩めると同じ造形のレーンが5本続き、4,000px 以上リズムが変化しない誌面になる。
- * 通常レーンは1本目を lane（生成り地）、2本目を quiet（沈んだ地）にして面を交替させる。
  */
 const MAX_PLAIN_LANES = 2;
 
@@ -26,12 +25,10 @@ const MAX_PLAIN_LANES = 2;
  * ホームの別の器が描くので、レーンにはしないセクションの key。
  * 新着は app/page.tsx 末尾の NewArrivals グリッドが担う。
  *
- * ⚠ 判定に表示文字列（section.title）を混ぜないこと。以前は
- * `key === 'new_arrivals' || title === '新着アイテム'` の二段構えで、
- * 「将来 key が変わっても title で拾える」保険のつもりだった。実際には
- * バックエンドが表題を変えた瞬間に無言で効かなくなり（＝同じ商品がホームに二度出る）、
- * 逆に別レーンがたまたま同じ表題を名乗ると原因不明の消失になる。どちらも型でもテストでも
- * 捕まらない。key は lib/types.ts が「同一レスポンス内で一意」と契約している唯一の識別子。
+ * ⚠ 判定に表示文字列（section.title）を混ぜないこと。バックエンドが表題を変えた瞬間に
+ * 無言で効かなくなり（＝同じ商品がホームに二度出る）、逆に別レーンがたまたま同じ表題を
+ * 名乗ると原因不明の消失になる。どちらも型でもテストでも捕まらない。key は lib/types.ts が
+ * 「同一レスポンス内で一意」と契約している唯一の識別子。
  */
 const LANES_RENDERED_ELSEWHERE = ['new_arrivals'];
 
@@ -44,8 +41,8 @@ const LANE_LABEL: Record<string, string> = {
 };
 
 /**
- * 「No.02 — FOR YOU」の形に組む。表紙が No.01 を名乗るので、レーンは 02 から続ける
- * （号数の約束を誌面の中で回収する）。uppercase は SectionHead 側で当たる。
+ * 「No.02 — FOR YOU」の形に組む。表紙が No.01 を名乗るので、レーンは 02 から続ける。
+ * uppercase は SectionHead 側で当たる。
  *
  * 号数はレーンで終わらせない。ホーム末尾の「カテゴリから探す」「新着アイテム」も
  * 続き番号を名乗る（app/page.tsx が onLaneCount で受け取った本数から算出する）。
@@ -62,12 +59,8 @@ function laneEyebrow(key: string, order: number): string {
 
 /**
  * 出すレーンを選ぶ。ここが誌面のリズムを決める唯一の場所。
- *  - 新着はページ下部の NewArrivals グリッドが担うのでレーンにしない
- *    （LANES_RENDERED_ELSEWHERE の key で弾く）
- *  - 通常レーンは MAX_PLAIN_LANES 本まで。残りは捨てる（「◯◯を見たあなたに」系が
- *    2本3本と続くと、同じ造形のレーンだけで 4,000px スクロールすることになる）
- *  - 既に出した商品は後続の通常レーンから落とす。ただし ranked は順位が意味を持つので
- *    間引かない（間引くと index+1 が実際の順位とずれる）
+ * 既に出した商品は後続の通常レーンから落とすが、ranked だけは間引かない
+ * （間引くと index+1 が実際の順位とずれる）。
  *
  * レンダリング前に本数を数えたい（＝号数を後続セクションへ渡したい）ので、
  * コンポーネントの外の純関数にしてある。
@@ -104,9 +97,8 @@ function selectLanes(sections: HomeSection[]) {
 }
 
 /**
- * ビルボードの高さを予約するスケルトン。読み込み後の段差を防ぐ。
- * 空の矩形ではなく表紙と同じ骨格（深緑の地・左の見出し列・右の額装）で置くことで、
- * 差し替わった瞬間に版面が動かないようにしている。
+ * ビルボードの高さを予約するスケルトン。空の矩形ではなく表紙と同じ骨格（深緑の地・
+ * 左の見出し列・右の額装）で置き、差し替わった瞬間に版面が動かないようにする。
  */
 export function BillboardSkeleton() {
   // 明滅のトークンは Skeleton.tsx の PULSE（根拠もそちらに一本化してある）。地色だけが違う。
@@ -135,8 +127,8 @@ export function BillboardSkeleton() {
 }
 
 /**
- * レーン1本分のスケルトン。版面（wrap-wide）とカード幅は ProductLane と揃える。
- * 差し替わった瞬間に紙の左端やカードの列が動かないようにするための骨格。
+ * レーン1本分のスケルトン。版面（wrap-wide）とカード幅は ProductLane と揃える
+ * （差し替わった瞬間に紙の左端やカードの列を動かさないため）。
  */
 function LaneSkeleton({ variant = 'lane' }: { variant?: 'lane' | 'ranked' }) {
   const ranked = variant === 'ranked';
@@ -168,12 +160,10 @@ function LaneSkeleton({ variant = 'lane' }: { variant?: 'lane' | 'ranked' }) {
  * - ゲストのパーソナライズは localStorage の閲覧履歴を recently_viewed_ids として送ることで効かせる。
  * - 取得失敗時はブランドヒーローだけを出し、画面を壊さない。
  *
- * 誌面としての並び（この順に固定）:
- *   表紙（深緑・HomeBillboard / BrandHero） → 署名帯（沈んだ地・SignatureBand）
- *   → レーン（生成り地） → ランキング帯（深緑） → レーン（沈んだ地）。
- * 署名帯は取得状態によらず必ず出す。読み込み中でも「日々帖の見開き」が成立し、
- * レーンが差し替わっても上半分が動かないため。
- * 面が 深緑→沈み→生成り→深緑→沈み と入れ替わることが、このホームの唯一のリズム装置。
+ * 誌面としての並びはこの順に固定する: 表紙（深緑） → 署名帯（沈んだ地） →
+ * レーン（生成り地） → ランキング帯（深緑） → レーン（沈んだ地）。面が入れ替わることが
+ * このホームの唯一のリズム装置。署名帯は取得状態によらず必ず出す（読み込み中でも
+ * 「日々帖の見開き」が成立し、レーンが差し替わっても上半分が動かない）。
  */
 export default function HomeSections({
   /** 実際に描画したレーンの本数を親へ返す。ホーム末尾の号数（No.05 / No.06）の起点になる。 */
@@ -188,8 +178,8 @@ export default function HomeSections({
 
   // user を依存に入れ、ログイン状態が変わったら取り直す（パーソナライズが切り替わるため）。
   // ただし認証が確定するまでは引かない。AuthProvider は null → 確定 の2段階で user を
-  // 決めるので、待たないとログイン済みの訪問者はホームを開くたびに /home（このサイトで
-  // 最も重い口）を2本投げ、1本目のゲスト向けレスポンスを捨ててスケルトンに巻き戻る。
+  // 決めるので、待たないとログイン済みの訪問者は /home（このサイトで最も重い口）を
+  // 2本投げ、1本目のゲスト向けレスポンスを捨ててスケルトンに巻き戻る。
   useEffect(() => {
     if (authLoading) return;
     let cancelled = false;
@@ -243,8 +233,7 @@ export default function HomeSections({
     );
   }
 
-  // 取得に失敗したときはレーンを諦め、ブランドヒーローだけ出す。
-  // 下の商品一覧（NewArrivals）は独立に動くので、ホームとして成立する。
+  // 失敗時はレーンを諦める。下の商品一覧（NewArrivals）は独立に動くのでホームは成立する。
   if (failed) {
     return (
       <>
@@ -270,7 +259,6 @@ export default function HomeSections({
           key={section.key}
           title={section.title ?? 'おすすめ'}
           subtitle={section.subtitle}
-          // 表紙が No.01 なので、レーンは 02 から続ける。
           eyebrow={laneEyebrow(section.key, i + 2)}
           items={section.items}
           variant={variant}

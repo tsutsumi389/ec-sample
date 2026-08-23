@@ -46,7 +46,6 @@ const PREFECTURES = [
   '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県',
 ];
 
-/** テキスト入力の共通クラス（focus リングと accent 色を統一）。 */
 const inputClass = (hasError?: boolean) =>
   `h-11 w-full rounded-md border bg-surface px-3 text-body accent-brand-600 transition-colors duration-fast ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:border-brand-600 ${
     hasError ? 'border-critical-400' : 'border-line-input'
@@ -59,8 +58,7 @@ interface ZipCloudResult {
 }
 
 /**
- * 「ラベル ＋ 必須マーク ＋ 入力欄 ＋ エラー行」の1組。
- * 同じ19行が5つの項目で写されていたので、器だけをここに閉じる（入力欄そのものは
+ * 「ラベル ＋ 必須マーク ＋ 入力欄 ＋ エラー行」の1組。器だけを閉じる（入力欄そのものは
  * type / inputMode / placeholder が項目ごとに違うので children で受ける）。
  */
 function Field({

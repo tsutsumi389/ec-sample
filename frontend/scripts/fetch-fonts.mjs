@@ -1,13 +1,10 @@
 /**
  * Google Fonts の woff2 を public/fonts/ に取り込み、app/fonts.css を生成する。
  *
- * なぜ next/font/google を使わないか:
- *   next/font は和文フォントの unicode-range スライス（1ウェイトあたり約124個）を
- *   ビルド時に一斉ダウンロードする。このプロジェクトの frontend コンテナには IPv6 の
- *   経路が無く、同時接続が増えると ENETUNREACH / ETIMEDOUT で大量に失敗する。
- *   しかも next/font は失敗してもビルドを通し、**黙ってフォールバックに落ちる**ため
- *   「見出しが明朝になっていない」ことに気づきにくい。
- *   自己ホストすれば取得は1回きりで、以降のビルドはネットワークに依存しない。
+ * next/font/google を使わない理由は frontend/CLAUDE.md（和文は 1ウェイトあたり約124個の
+ * unicode-range スライスに分かれ、IPv6 経路の無い frontend コンテナでは一斉取得が大量に
+ * 失敗する。しかも next/font は失敗しても黙ってフォールバックでビルドを通す）。
+ * 自己ホストすれば取得は1回きりで、以降のビルドはネットワークに依存しない。
  *
  * 使い方（ホスト側で実行する。コンテナ内からは上記の理由で失敗する）:
  *   node frontend/scripts/fetch-fonts.mjs
@@ -49,7 +46,6 @@ async function fetchWithRetry(url, tries = 5) {
   throw new Error(`failed after ${tries} tries: ${url} (${lastErr?.message})`);
 }
 
-/** items を並列度 limit で処理する。 */
 async function mapLimit(items, limit, fn) {
   const out = new Array(items.length);
   let next = 0;
@@ -99,7 +95,7 @@ for (const { family, weights, variable, slug } of FAMILIES) {
   console.log(`${family}: ${rewritten.length} slices`);
 }
 
-// CSS 変数はここで定義する（next/font が body に付けていた役割の置き換え）。
+// CSS 変数はここで定義する（globals.css / tailwind.config.ts が var() で参照する）。
 css += `
 :root {
   --font-sans-jp: 'Noto Sans JP';

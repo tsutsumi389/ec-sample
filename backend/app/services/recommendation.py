@@ -61,10 +61,8 @@ _MIN_DECAY = 0.05
 def _decay_factor(occurred_at: datetime | None, now: datetime) -> float:
     """行動の発生時刻から時間減衰係数（0〜1）を求める純関数。
 
-    occurred_at が None のときは 1.0（カートなどタイムスタンプを持たない行動は
-    「今まさにある関心」とみなして減衰させない）。半減期は _HALF_LIFE_DAYS 日で、
-    それだけ経つと重みが半分になる。下限 _MIN_DECAY を設けて古い行動も完全には
-    消さない（過去の購入もわずかに好みへ効かせるため）。
+    occurred_at が None のときは 1.0（カートなどタイムスタンプを持たない行動は「今まさに
+    ある関心」とみなして減衰させない）。半減期 _HALF_LIFE_DAYS 日、下限 _MIN_DECAY。
     """
     if occurred_at is None:
         return 1.0
@@ -78,8 +76,6 @@ def _decay_factor(occurred_at: datetime | None, now: datetime) -> float:
 
 @dataclass
 class Profile:
-    """ユーザの行動から作ったプロフィール。"""
-
     profile_hash: str
     profile_vec: np.ndarray
     # (種別, product_id, weight) の行動一覧（履歴プロンプト用）。
@@ -214,12 +210,10 @@ def build_profile(db: Session, user_id: int) -> Profile | None:
     if not behaviors:
         return None
 
-    # profile_hash は種別:product_id をソートして連結した文字列の sha256。
-    # 重みや発生時刻は意図的にハッシュに含めない。含めると時間減衰で毎瞬ハッシュが
-    # 変わり、行動が増減していなくてもキャッシュが陳腐化し続けて再生成が止まらなくなる。
-    # 「どの商品にどの種別で関わったか」の集合が変わったときだけ再生成させる。
-    # なお view もハッシュに入るため、新しい商品を閲覧するとキャッシュが陳腐化し
-    # LLM 再生成が走る。これは閲覧に追従しておすすめを更新するための意図的な挙動
+    # profile_hash は種別:product_id をソートして連結した sha256。重みや発生時刻は意図的に
+    # 含めない——含めると時間減衰で毎瞬ハッシュが変わり、行動が増減していなくてもキャッシュが
+    # 陳腐化し続けて再生成が止まらない。view も入るので新しい商品を見るとキャッシュが陳腐化し
+    # LLM 再生成が走るが、これは閲覧に追従するための意図的な挙動
     # （多重起動は BackgroundTasks + advisory ロック側で防いでいる）。
     keys = sorted(f"{kind}:{pid}" for kind, pid, _ in behaviors)
     profile_hash = hashlib.sha256("|".join(keys).encode("utf-8")).hexdigest()
@@ -264,16 +258,13 @@ def load_ready_recommendations(
 ) -> list[UserRecommendation]:
     """LLM 生成キャッシュを鮮度判定つきで読む。戻り値は rank 順の行（陳腐化なら空）。
 
-    鮮度は「state=ready かつ profile_hash が現在の行動ハッシュと一致」。ホーム
-    （services/home_page.py の build_context）と /recommendations/home の双方がこの
-    1 箇所を使う。判定を各所に書くと、片方だけ規則が変わったときに同じユーザーへ
-    別世代のキャッシュを配ることになる。RecommendationState を所有するこのモジュールが
-    鮮度の唯一の源であるべきなので、判定はここに置く。
+    鮮度は「state=ready かつ profile_hash が現在の行動ハッシュと一致」。ホームと
+    /recommendations/home の双方がこの 1 箇所を使う——各所に書くと、片方だけ規則が
+    変わったときに同じユーザーへ別世代のキャッシュを配ることになる。
 
     可視性は SQL 側で絞る（生成後に非公開化された商品はここで落ちる）ので、呼び出し側が
     status を確かめ直す必要はない。「再生成すべきか」は空リストと profile の有無から
-    呼び出し側が決める（プロフィールが作れないなら生成しても失敗するだけなので起動しない）
-    ——別の戻り値にすると同じ規則が呼び出し側の条件と二重に書かれる。
+    呼び出し側が決める——別の戻り値にすると同じ規則が呼び出し側の条件と二重に書かれる。
     """
     state = db.get(RecommendationState, user_id)
     fresh = (
@@ -359,7 +350,7 @@ def get_popular_products(
     """人気順の商品を返す（LLM フォールバック / 未ログイン時に使う）。
 
     集計: status != 'cancelled' の注文の order_items を集計し
-    購入数 desc → 平均評価 desc → Product.created_at desc。
+    購入数 desc → 平均評価 desc → Product.created_at desc → Product.id desc。
     LISTED_STATUSES のみ。exclude_ids は購入済み + カート内を想定。
     """
     purchase_subq = purchase_count_subquery()
@@ -639,7 +630,6 @@ def generate_for_user(db_session_factory: sessionmaker, user_id: int) -> None:
             _set_state(db, user_id, status="failed", profile_hash=profile.profile_hash)
             return
 
-        # 当該ユーザの旧キャッシュを削除して差し替える。
         db.query(UserRecommendation).filter(
             UserRecommendation.user_id == user_id
         ).delete()

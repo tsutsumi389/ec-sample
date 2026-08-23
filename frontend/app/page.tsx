@@ -33,9 +33,8 @@ const FEATURED_MIN_ITEMS = 5;
 const LEGACY_LISTING_PARAMS = ['search', 'category_id', 'sort', 'min_price', 'max_price', 'page'];
 
 /**
- * 旧URL互換リダイレクト。/?search=...&category_id=... のような一覧系パラメータ付きの
- * トップページアクセスは、クエリごと /products に付け替える。
- * useSearchParams を使うため Suspense 配下に置くこと。
+ * 旧URL互換リダイレクト。一覧系パラメータ付きのトップページアクセスをクエリごと
+ * /products に付け替える。useSearchParams を使うため Suspense 配下に置くこと。
  */
 function LegacyListingRedirect() {
   const router = useRouter();
@@ -54,11 +53,8 @@ function LegacyListingRedirect() {
 /**
  * 新着セクション。フィルタもページネーションも持たない「見せるだけ」のグリッドで、
  * 続きは /products に任せる。id="products" は BrandHero の「#products」CTA の飛び先として維持。
- *
- * 造形の意図: 先頭 1 枚だけを 2×2 の大判にした非対称グリッド。等間隔に並べると
- * 「カタログの在庫一覧」に見えるため、行送り（gap-y）を列間（gap-x）の 2 倍に取り、
- * 誌面の行間を作っている。最終セルは深緑の「巻末の札」で、グリッドの穴埋めと
- * 一覧への導線を兼ねる。
+ * 先頭 1 枚だけを 2×2 の大判にするのは、等間隔に並べると「カタログの在庫一覧」に
+ * 見えるため（行送りも列間の 2 倍に取る）。
  */
 function NewArrivals({ order }: { order: number }) {
   const [products, setProducts] = useState<Product[]>([]);
@@ -98,12 +94,8 @@ function NewArrivals({ order }: { order: number }) {
 
   return (
     // sticky ヘッダーの下に見出しが潜らないよう、アンカー到達位置をヘッダー高さぶん下げる。
-    //
-    // 地は沈んだ面（bg-sunken）＋上下ヘアライン（.edge-y）。
-    // r2 では「カテゴリから探す」以降が最後まで生成り1色で、PC 1,904px / SP 2,718px の
-    // あいだ面がまったく変わらなかった（ページ後半4割でリズム装置が止まっていた）。
-    // 直前のカテゴリ帯を生成りのまま残し、ここを沈めることで交替を巻末まで続ける。
-    // カードは bg-surface なので、沈んだ地の上ではむしろ浮きが強くなる。
+    // 地は沈んだ面（bg-sunken）＋上下ヘアライン（.edge-y）。直前のカテゴリ帯を生成りのまま
+    // 残し、ここを沈めることで面の交替を巻末まで続ける（カードは bg-surface なので浮きが強まる）。
     <section
       id="products"
       className="band-lg edge-y bg-sunken scroll-mt-[calc(var(--header-h)+1rem)]"
@@ -146,10 +138,8 @@ function NewArrivals({ order }: { order: number }) {
                   key={product.id}
                   className={`h-full min-w-0 animate-rise ${
                     // lg:min-h-0 は大判セルに必須。grid アイテムの既定 min-height:auto は
-                    // 中身の min-content 高を下限にするので、大判セルの図版（画像の
-                    // 固有比 1:1 × 幅 616px = 616px）が2行ぶんの行高を 315.8 → 349.4px へ
-                    // 押し上げ、同じ行の通常カードに 33.6px の余りが転嫁されていた
-                    // （実測 1440px: 通常カードの名前↔価格が 15.9 → 49.5px）。
+                    // 中身の min-content 高を下限にするので、大判セルの図版が2行ぶんの行高を
+                    // 315.8 → 349.4px へ押し上げ、同じ行の通常カードに 33.6px の余りが転嫁される。
                     // 行高は通常カードが決め、大判セルは与えられた高さに図版で合わせる。
                     featured && i === 0 ? 'lg:col-span-2 lg:row-span-2 lg:min-h-0' : ''
                   }`}
@@ -201,20 +191,16 @@ function NewArrivals({ order }: { order: number }) {
 export default function HomePage() {
   // 「日々帖」の号数。表紙が No.01、レーンが No.02… と続くので、
   // 巻末の2セクションは「レーン本数 + 2 / + 3」を名乗る。
-  // r2 ではレーンの No.04 のあと CATEGORIES / NEW ARRIVALS で番号が消え、
-  // 誌面の通し番号という約束が途中で切れていた。
   const [laneCount, setLaneCount] = useState(2);
 
   return (
     <>
-      {/* 旧 /?search=... 形式の互換リダイレクト。描画には関与しない。 */}
       <Suspense fallback={null}>
         <LegacyListingRedirect />
       </Suspense>
-      {/* 「最近見た商品」はレーン（key: recently_viewed）が担うため、ここでは出さない。
-          RecentlyViewed 自体は商品詳細ページで引き続き使われている。
-          並びは 表紙 → 署名帯 → レーン群（HomeSections）→ カテゴリ → 新着 で固定。
-          地の交替は 深緑 → 沈み → 生成り → 深緑 → 沈み → 生成り(カテゴリ) → 沈み(新着)。 */}
+      {/* 「最近見た商品」はレーン（key: recently_viewed）が担うため、ここでは出さない
+          （RecentlyViewed 自体は商品詳細ページで使う）。地の交替は
+          深緑 → 沈み → 生成り → 深緑 → 沈み → 生成り(カテゴリ) → 沈み(新着)。 */}
       <HomeSections onLaneCount={setLaneCount} />
       <CategoryTiles order={laneCount + 2} />
       <NewArrivals order={laneCount + 3} />

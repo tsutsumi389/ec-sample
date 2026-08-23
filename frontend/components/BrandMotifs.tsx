@@ -8,14 +8,10 @@ import type { SVGProps } from 'react';
  * **すべてのモチーフは viewBox="0 0 120 120" の正方形**で描く。字面枠は内側 96×96
  * （x/y ともに 12〜108）で、その中に線を収める。
  *
- * なぜ正方形に揃えるのか（r2 の実測）:
- *   旧版は viewBox が 160×120 / 88×100 / 82×114 とばらばらだったため、
- *   呼び出し側が `h-*` で高さを揃えると **ケトルだけが湯呑みの 2.2 倍幅・約 3 倍面積**
- *   になっていた。署名帯・フッター・ログイン・カテゴリ札の4箇所がそれぞれ別の高さで
- *   手当てしていた結果、同じ3点セットの大小関係がページごとに4通りに割れていた。
- *   viewBox が正方形なら `h-16` は必ず 64×64 の枠になり、光学サイズは呼び出し側の
- *   1つの数字だけで決まる。個別の高さテーブル（旧 CategoryTiles の MOTIF_HEIGHT /
- *   MOTIF_SCALE）はもう要らない。
+ * なぜ正方形に揃えるのか: viewBox が正方形なら `h-16` は必ず 64×64 の枠になり、
+ * 光学サイズは呼び出し側の1つの数字だけで決まる。viewBox がばらばらだった頃は、
+ * 同じ `h-*` を渡してもケトルだけが湯呑みの 2.2 倍幅・約3倍面積になり、置き場所ごとに
+ * 別の高さで手当てする羽目になっていた（図案ごとの高さテーブルはもう要らない）。
  *
  * 規律:
  * - fill:none / stroke:currentColor が既定。色は置く面に応じて `text-*` で継承させる。
@@ -38,20 +34,17 @@ const base = {
   'aria-hidden': true as const,
 };
 
-/**
- * ケトル。胴 → 蓋 → つまみ → 注ぎ口の順に描く。
- * 注ぎ口は胴の輪郭上から出て、口を1本の線で閉じる（宙に浮いた鉤形にしない）。
- */
+/** ケトル。注ぎ口は胴の輪郭上から出て、口を1本の線で閉じる（宙に浮いた鉤形にしない）。 */
 export function KettleMotif({ className = 'h-16', ...rest }: MotifProps) {
   return (
     <svg {...base} className={className} {...rest}>
-      {/* 胴。底は平ら、肩でわずかに絞る */}
+      {/* 胴 */}
       <path d="M30 108 V84 Q30 70 48 70 H72 Q90 70 90 84 V108 Z" />
-      {/* 蓋（胴のシルエットの内側に収める） */}
+      {/* 蓋 */}
       <path d="M44 70 q15 -9 28 0" />
       {/* つまみ */}
       <circle cx="58" cy="60" r="4" />
-      {/* 注ぎ口。胴の輪郭上から出て、先端の口を1本の線で閉じる */}
+      {/* 注ぎ口 */}
       <path d="M30 82 Q16 75 12 64 L19 57 Q27 66 40 71" />
       {/* 取っ手 */}
       <path d="M90 78 q16 2 16 12 q0 10 -16 12" />
@@ -95,7 +88,6 @@ export function PlantMotif({ className = 'h-16', ...rest }: MotifProps) {
 export function LanternMotif({ className = 'h-16', ...rest }: MotifProps) {
   return (
     <svg {...base} className={className} {...rest}>
-      {/* 吊り手 → 笠 → 火屋 → 台座 → 炎 */}
       <path d="M40 46 q20 -21 40 0" />
       <path d="M32 56 l8 -10 h40 l8 10 Z" />
       <path d="M38 56 h44 v42 h-44 Z" />
@@ -125,7 +117,6 @@ export function UmbrellaMotif({ className = 'h-16', ...rest }: MotifProps) {
 export function BroomMotif({ className = 'h-16', ...rest }: MotifProps) {
   return (
     <svg {...base} className={className} {...rest}>
-      {/* 柄 → 穂 → 結び → 穂先 */}
       <path d="M60 22 v44" />
       <path d="M43 66 h34 l11 42 h-56 Z" />
       <path d="M39 86 h42" />
@@ -152,10 +143,7 @@ export function FanMotif({ className = 'h-16', ...rest }: MotifProps) {
   );
 }
 
-/**
- * 図案の語彙。カテゴリ名 → モチーフの対応は呼び出し側（CategoryTiles）が持つ。
- * ここは「この誌面が持っている線画の全部」を1箇所に集める役だけ。
- */
+/** 図案の語彙。カテゴリ名 → モチーフの対応は呼び出し側（lib/categoryMotifs.ts）が持つ。 */
 export const MOTIFS = {
   kettle: KettleMotif,
   cup: CupMotif,

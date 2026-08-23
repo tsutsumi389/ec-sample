@@ -89,7 +89,6 @@ def create_order(
                     detail=f"{reason}: {product.name}",
                 )
 
-            # 実売価格を採用し、注文時点の価格として OrderItem にスナップショットする。
             unit_price = product.effective_price
             product.stock -= cart_item.quantity
             total_amount += unit_price * cart_item.quantity
@@ -132,10 +131,9 @@ def create_order(
 
     db.refresh(order)
 
-    # 購入をサーバー側で記録する。A/Bテストの主要指標であり、フロントの計測呼び出しに
-    # 依存させると離脱・通信断・実装漏れでそのまま成果の欠損になるため、注文が確定した
-    # この時点で確実に 1 件残す。value に注文金額を入れておくと、CV数と売上の両方を
-    # このイベント 1 種類から集計できる。
+    # 購入は注文が確定したこの時点でサーバー側が 1 件残す（フロントの計測呼び出しに
+    # 依存させると離脱・通信断・実装漏れがそのまま成果の欠損になる）。value に注文金額を
+    # 入れておくと、CV数と売上の両方をこのイベント 1 種類から集計できる。
     if visitor_id:
         analytics.record_server_event(
             db,

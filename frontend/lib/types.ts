@@ -73,9 +73,8 @@ export interface SuggestProduct {
 
 /**
  * GET /products/suggest のレスポンス。
- * - `suggestions`: 商品名にマッチした検索語候補の配列（従来どおり）。
- * - `products`: 商品ダイレクト候補（最大3件）。古いバックエンドでは欠損し得るため、
- *   受信側は `res.products ?? []` で必ず欠損に耐えること。
+ * `products`（商品ダイレクト候補・最大3件）は古いバックエンドでは欠損し得るため、
+ * 受信側は `res.products ?? []` で必ず欠損に耐えること。
  */
 export interface SuggestResponse {
   suggestions: string[];
@@ -244,18 +243,13 @@ export interface RecommendationItem {
   reason: string | null;
 }
 
-/**
- * ホーム（GET /home）のレーン描画形式。
- * バックエンドはこの3つ以外を返さない契約。
- */
+/** ホーム（GET /home）のレーン描画形式。バックエンドはこの3つ以外を返さない契約。 */
 export type HomeSectionLayout = 'hero' | 'ranked' | 'lane';
 
 /**
- * ホームの1レーン。
- * - `key` は同一レスポンス内で一意（React の key に使える）。`billboard` / `top10` /
- *   `byw:{product_id}` / `category:{category_id}` などの名前空間を持つ。
- * - `title` は layout==='hero' のときのみ null になり得る。
- * - `subtitle` は Phase 1 では常に null。
+ * ホームの1レーン。`key` は同一レスポンス内で一意（React の key に使える）。`billboard` /
+ * `top10` / `byw:{product_id}` / `category:{category_id}` などの名前空間を持つ。
+ * `title` は layout==='hero' のときのみ null になり得る。`subtitle` は Phase 1 では常に null。
  */
 export interface HomeSection {
   key: string;
@@ -280,9 +274,6 @@ export type AssistantSource = 'llm' | 'fallback';
 
 export type AssistantRole = 'user' | 'assistant';
 
-/**
- * チャット内で提案される商品。既存レコメンドの item 型（product + reason）と同型。
- */
 export type AssistantProduct = RecommendationItem;
 
 /**
@@ -319,8 +310,6 @@ export interface AssistantMessage {
   source?: AssistantSource | null;
   products?: AssistantProduct[] | null;
 }
-
-// ---------- A/Bテスト（実験）と行動ログ ----------
 
 export type ExperimentStatus = 'draft' | 'running' | 'paused' | 'completed';
 

@@ -1,14 +1,9 @@
 /**
- * backend から届くデータの形。
- *
- * **これは backend が持つ契約の写しであって、契約そのものではない。**
- * structuredContent は backend/app/mcp_server/views.py の pydantic モデルを
+ * backend から届くデータの形の写し。structuredContent は
+ * backend/app/mcp_server/views.py の pydantic モデルを
  * `model_dump(mode="json", by_alias=True)` した結果、_meta.ui は
  * backend/app/mcp_server/ui_assets.py の build_search_ui_items() /
  * build_product_ui_item() が組み立てた辞書がそのまま届く。
- * **変えるときは必ず backend 側が先で、ここはそれに追随するだけ。**
- * この型を直して backend が返す形が変わることは無い（TypeScript の型は実行時に
- * 何も検査しない。ここで嘘をつくと、View は嘘の形を信じたまま描画して壊れる）。
  *
  * pydantic の model_dump は既定値のフィールドも必ず出力する。したがって
  * `category: str | None = None` は「キーが無い」ではなく `"category": null` として
@@ -16,28 +11,26 @@
  */
 
 /**
- * views.ProductBrief — 検索結果1件ぶん。LLM が読む前提で軽くしてある
- * （**画像は入らない**。views.py の「重いものは一覧に出さない・画像は詳細ツールだけ」規律）。
+ * views.ProductBrief — 検索結果1件ぶん。**画像は入らない**
+ * （views.py の「重いものは一覧に出さない・画像は詳細ツールだけ」規律）。
  */
 export interface ProductBrief {
   id: number;
   name: string;
-  /** カテゴリ名。LLM は category_id を読めないので名前で返している。 */
+  /** LLM は category_id を読めないので名前で返している。 */
   category: string | null;
   /** 実売価格。金額の基準はこれ1本（sale_price があればそれ、無ければ price）。 */
   effective_price: number;
-  /** セール中のときだけ元値（= Product.price）。打ち消し表示の材料。非セールは null。 */
+  /** セール中のときだけ元値（= Product.price）。非セールは null。 */
   list_price: number | null;
   stock: number;
   /** draft / coming_soon / on_sale / suspended / discontinued / archived のいずれか。 */
   status: string;
   purchasable: boolean;
   /**
-   * 「購入できます」または買えない理由の完成文。
-   * **View で組み立て直さないこと。** 文言の唯一の源は backend の
-   * services/cart.py の availability_reason_for_status で、stock / status から
-   * 「在庫◯点」「販売終了」のような文言を View 側で新たに作ると、同じ判断が
-   * 二重に実装されて必ず片方が古くなる。View がやってよいのは色分けだけ。
+   * 「購入できます」または買えない理由の完成文。**View で組み立て直さないこと**——
+   * 文言の唯一の源は backend の services/cart.py の availability_reason_for_status で、
+   * View がやってよいのは色分けだけ。
    */
   availability: string;
   avg_rating: number | null;
@@ -52,8 +45,8 @@ export interface ProductSearchResult {
   limit: number;
   /**
    * 価格帯の申し送り（定価で評価している旨）、またはカテゴリ名が存在しないときの案内。
-   * 無ければ null。カテゴリ不一致のときは items が空・total が 0 になるので、
-   * 「0件」の表示と併せてここに理由が載る形になる。
+   * 無ければ null。カテゴリ不一致のときは items が空・total が 0 になり、「0件」の
+   * 表示と併せてここに理由が載る。
    */
   note: string | null;
 }
@@ -63,25 +56,18 @@ export interface ProductDetail extends ProductBrief {
   sku: string | null;
   /** 300 文字で切られる（超過時は末尾に "…"）。改行を含みうる自由文。 */
   description: string | null;
-  /**
-   * "重量: 320g" の形に潰した文字列の配列。
-   * **label / value の2キーに分けないこと**（backend 側の規律に表示側も倣う）。
-   */
+  /** "重量: 320g" の形に潰した文字列の配列。**label / value の2キーに分けないこと。** */
   specs: string[];
   /**
    * 相対パス（例 "/products/foo.svg"）。**描画には使わない**——iframe から見ると
    * 解決できるオリジンが無い。<img src> には _meta.ui 側の絶対URLを使う。
-   * ここに載っているのは LLM 向けの参考情報。
    */
   image_url: string | null;
 }
 
 /** _meta.ui.items[] の1件（ui_assets.build_search_ui_items）。 */
 export interface SearchUiItem {
-  /**
-   * structuredContent.items[].id と同じ値。
-   * **突き合わせは必ずこの id で行う**（配列の添字で対応づけないこと）。
-   */
+  /** structuredContent.items[].id と同じ値。**突き合わせは必ずこの id で行う**（添字で対応づけない）。 */
   id: number;
   /** FRONTEND_ORIGIN を前置した絶対URL。画像が無い商品は null。 */
   image_url: string | null;
@@ -98,10 +84,8 @@ export interface SearchUiMeta {
  * _meta.ui — get_product（ui_assets.build_product_ui_item）。単数のオブジェクト。
  *
  * image_url は structuredContent 側の image_url（相対パス）とは別物で、絶対URL化して
- * iframe の <img src> にそのまま使える値になっている。**同じ名前が両方に出るのは
- * 重複ではなく役割の違い**——前者は LLM 向けの参考情報、後者は描画専用。
- * search の ProductBrief は画像を一切持たないので、そちらとは事情が異なる。
- * page_url は structuredContent のどのフィールドにも対応が無い。
+ * iframe の <img src> にそのまま使える値。**同じ名前が両方に出るのは重複ではなく
+ * 役割の違い**——あちらは LLM 向けの参考情報、こちらは描画専用。
  */
 export interface ProductUiMeta {
   image_url: string | null;
@@ -111,10 +95,9 @@ export interface ProductUiMeta {
 /**
  * search_products の sort 引数（tools.search_products の signature の写し）。
  *
- * **配列が源で、型はそこから導出する。** 実行時の検査（search の View の isSortKey）が
- * 必要なので値の列は実体として要り、それと union 型を別々に書くと backend が並び順を
- * 足したときに片方だけ古くなる——しかも tsc は両者を突き合わせないので
- * `make mcp-typecheck` は緑のまま、新しい並び順が黙って既定へ落ちる。
+ * **配列が源で、型はそこから導出する。** 実行時の検査（isSortKey）に値の列が実体として
+ * 要るので、union 型を別に書くと backend が並び順を足したとき片方だけ古くなる——しかも
+ * tsc は両者を突き合わせないので、新しい並び順が緑のまま黙って既定へ落ちる。
  */
 export const SORT_KEYS = [
   "newest",

@@ -1,16 +1,10 @@
 /**
  * 検索結果カード一覧の状態と、ホスト（MCP Apps SDK）との配線。
  *
- * **画面の形は SearchView.tsx、判断はこのファイル**という分担にしてある。
- * ただし「判断」と言っても、購入可否の理由（availability）も価格帯の申し送り（note）も
- * サーバーが完成文で寄越すものをそのまま出すだけで、**文言を組み立て直す処理は
- * ここにも一切書かない**（同じ判断が backend の services/cart.py と二重になり、
- * 必ず片方が古くなる）。ここが持つのは「読み込み中か」「一度でも描けたか」
- * 「失敗をどちらの層に出すか」だけ。
- *
- * ホストとの接続手順（useApp / useHostStyles / safe area / 接続失敗の検出）は
- * shared/useHostApp.ts が持つ。**あの手順をここへ書き戻さないこと**——順序と締切の
- * 規律ごと1か所に閉じ込めてある。
+ * **画面の形は SearchView.tsx、判断はこのファイル**という分担にしてある。ただしその
+ * 「判断」に文言の組み立ては含まない——購入可否の理由（availability）も価格帯の申し送り
+ * （note）もサーバーの完成文をそのまま出す。ここが持つのは「読み込み中か」
+ * 「一度でも描けたか」「失敗をどちらの層に出すか」だけ。
  */
 
 import { useCallback, useEffect, useReducer } from "react";
@@ -64,19 +58,17 @@ interface SearchState {
   /** 「直近成功した検索」の並び順（= 画面に実際に出ている内容）。失敗では書き換えない。 */
   sort: SortKey;
   /**
-   * 直近成功時のページと件数。**ページ送りも総ページ数の計算もこちらを読む。**
-   * result の中にも同じ2つが入っているが、読む先を混ぜないこと——揃っているのは
-   * 下の "result" が両方を書き戻しているからで、片方だけ読む箇所が生まれると
-   * backend が limit を正規化した日に画面の半分だけが追随する。
+   * 直近成功時のページと件数。**ページ送りも総ページ数の計算もこちらを読む。** result の
+   * 中にも同じ2つが入っているが読む先を混ぜないこと——揃っているのは下の "result" が
+   * 両方を書き戻しているからで、backend が limit を正規化した日に画面の半分だけが追随する。
    */
   page: number;
   limit: number;
   loading: boolean;
   /**
    * 直近成功時の結果。**null であることが「まだ一度も描けていない」の唯一の表現**で、
-   * これが「初回の失敗は全面エラー / 2回目以降の失敗はバナー」の分岐そのもの
-   * （移植前の hasResult フラグに相当する）。失敗では絶対に null へ戻さないこと——
-   * 戻すと、一度描けた画面が再検索の失敗で消え、戻る先が無くなる。
+   * これが「初回の失敗は全面エラー / 2回目以降の失敗はバナー」の分岐そのもの。
+   * 失敗では絶対に null へ戻さないこと——戻すと、一度描けた画面が再検索の失敗で消える。
    */
   result: ProductSearchResult | null;
   /**
@@ -104,9 +96,7 @@ type SearchAction =
 
 /**
  * 起動直後は **loading: true** から始める。ホストから tool-input も tool-result も
- * 届いていない時点では、並び替えも再試行も押させてはならない（移植前はエントリ HTML の
- * `<select id="sort-select" disabled>` がこの役目を持っていた。骨組みが React へ移った
- * 以上、初期状態の側で表現する）。
+ * 届いていない時点では、並び替えも再試行も押させてはならない。
  */
 const INITIAL_STATE: SearchState = {
   base: {},
@@ -125,9 +115,8 @@ const INITIAL_STATE: SearchState = {
  * _meta.ui.items を id で引ける形にする。
  *
  * **突き合わせは id で行う。** backend（ui_assets.build_search_ui_items）は
- * structuredContent.items と同じ順序で組んでくれるが、順序に依存した対応づけ
- * （配列の添字）にすると、片方の並びが変わった日に「別の商品の画像とリンクを
- * 貼ったカード」が黙って出来上がる。
+ * structuredContent.items と同じ順序で組んでくれるが、配列の添字で対応づけると
+ * 片方の並びが変わった日に「別の商品の画像とリンクを貼ったカード」が黙って出来上がる。
  */
 function indexUiItems(items: SearchUiItem[]): ReadonlyMap<number, SearchUiItem> {
   const byId = new Map<number, SearchUiItem>();
@@ -154,8 +143,7 @@ function reducer(state: SearchState, action: SearchAction): SearchState {
 
     // 状態が確定するのは成功したこの時点だけ。**失敗では sort / page / limit を
     // 書き換えない**——これが「操作系の見た目は直近成功時のまま」を成立させている
-    // （移植前は resetControlsToConfirmed() が DOM を巻き戻していた仕事で、
-    // <select> が state.sort で制御されている今は書き換えないだけで足りる）。
+    // （<select> が state.sort で制御されているので、書き換えないだけで足りる）。
     case "result":
       return {
         ...state,
@@ -169,8 +157,8 @@ function reducer(state: SearchState, action: SearchAction): SearchState {
         initialError: null,
       };
 
-    // 失敗の見せ方を二層に振り分ける唯一の場所。**呼び出し側に書き写さないこと**——
-    // 移植前は4か所に開いて書いてあり、そのうち1か所だけ操作系の戻し方が違っていた。
+    // 失敗の見せ方を二層に振り分ける唯一の場所。**呼び出し側に書き写さないこと**
+    // （開いて書いていた頃は、4か所のうち1か所だけ操作系の戻し方が違っていた）。
     case "failure":
       return state.result !== null
         ? { ...state, loading: false, banner: action.message }
@@ -204,10 +192,9 @@ function isSortKey(value: unknown): value is SortKey {
 interface UseSearchViewResult {
   state: SearchState;
   /**
-   * 全面エラーが出ている間は null になる結果。**画面はこちらだけを読む。**
-   * 「全面エラーはグリッドとページングを丸ごと置き換え、バナーはそのどれにも触らない」
-   * という二層の分け方は、失敗の振り分け（reducer の failure）と対になる規律なので、
-   * 描画側の1行ではなくここで確定させる。
+   * 全面エラーが出ている間は null になる結果。**画面はこちらだけを読む。** 「全面エラーは
+   * グリッドとページングを丸ごと置き換え、バナーはそのどれにも触らない」という二層の
+   * 分け方は失敗の振り分け（reducer の failure）と対なので、描画側ではなくここで確定させる。
    */
   result: ProductSearchResult | null;
   /** 直近成功時の総ページ数。result からの派生値なので状態には持たない。 */
@@ -252,9 +239,8 @@ export function useSearchView(): UseSearchViewResult {
         const args = params?.arguments ?? {};
         dispatch({
           type: "tool-input",
-          // 空文字を「指定なし」として落とすのはここ1か所。**数値側に toArg を
-          // 掛け直さないこと**——readNumber が既に number | undefined まで絞っており、
-          // toArg の `=== ""` は数値に一致しないので何もしない（0 を守る仕掛けが
+          // 空文字を「指定なし」として落とすのはここ1か所。**数値側に toArg を掛け直さない
+          // こと**——toArg の `=== ""` は数値に一致しないので何もしない（0 を守る仕掛けが
           // 効くのは文字列を経由する入り口だけ）。
           base: {
             query: toArg(readString(args.query)),
@@ -297,19 +283,15 @@ export function useSearchView(): UseSearchViewResult {
     dispatch({ type: "initial-error", message: connectError });
   }, [connectError]);
 
-  // ---- 画面からの操作 ----------------------------------------------------
-
   const doSearch = useCallback(
     async (sortValue: SortKey, pageValue: number): Promise<void> => {
       const current = stateRef.current;
       // app が null なのは接続が終わるまで。ツールは撃てないので何もしない。
       if (app === null || current.loading) return; // 多重送信を避ける
       dispatch({ type: "request" });
-      // base は既にツール引数の形なので展開するだけ。
-      // satisfies にしてあるのは、callServerTool の arguments が
-      // Record<string, unknown> を要求するため（interface 型の値は暗黙の
-      // インデックスシグネチャを持たず、そのままでは渡せない）。型の検査は効かせつつ、
-      // 推論される型はオブジェクトリテラルのままにする。
+      // `:` ではなく satisfies にしてあるのは、callServerTool の arguments が
+      // Record<string, unknown> を要求するため（interface 型の値は暗黙のインデックス
+      // シグネチャを持たず、そのままでは渡せない）。型の検査はそのまま効く。
       const args = {
         ...current.base,
         sort: sortValue,
@@ -328,10 +310,9 @@ export function useSearchView(): UseSearchViewResult {
 
   const changeSort = useCallback(
     (value: string): void => {
-      // option は SORT_LABELS（SearchView.tsx）が SortKey 全件から作るので、実際に
-      // DEFAULT_SORT へ落ちることは無い。それでも isSortKey を通すのは、ツール引数へ
-      // 渡る値の型を SortKey 1本に保つため（string のまま持ち回すと、どこからでも
-      // 知らない並び順を入れられる）。
+      // option は SORT_LABELS（SearchView.tsx）が SortKey 全件から作るので実際に
+      // DEFAULT_SORT へ落ちることは無いが、それでも isSortKey を通すのは、ツール引数へ
+      // 渡る値の型を SortKey 1本に保つため（string のまま持ち回すと何でも入れられる）。
       void doSearch(isSortKey(value) ? value : DEFAULT_SORT, 1); // 並び替えたら1ページ目へ
     },
     [doSearch],

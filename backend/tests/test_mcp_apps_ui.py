@@ -1,16 +1,13 @@
 """MCP Apps 配線のユニットテスト（DB 不要）。
 
-ui_assets.py の純関数と、Apps 拡張そのものが持つ「設定ミスを検知する」契約を対象にする。
 apps_ui.py（Apps() への配線本体）はここでは import しない——app.mcp_server.tools 経由で
 app.routers から app.auth を import し、app.auth はモジュール読み込み時点で SECRET_KEY の
-fail closed 検査を実行する（未設定・短すぎ・既知の弱い値なら RuntimeError）。conftest.py が
-明言する「DB 不要の純ロジックテストのみ」を守るため、ここでは持ち込まない。
+fail closed 検査を実行するため（未設定・短すぎ・既知の弱い値なら RuntimeError）。
 
-View 本体（iframe の中身）は別プロジェクト mcp-apps/（TypeScript + Vite）が持ち、
-backend はそのビルド成果物（ui/dist/*.html）を読むだけになった。したがってここで固定
-するのは「読めないとき・壊れているときにどう振る舞うか」であって、HTML の中身ではない。
-実物の dist を読むテストは置かない——dist は .gitignore 済みの生成物で、新規チェックアウトや
-mcp-apps の初回ビルド前には存在せず、無条件に読むテストは必ず落ちるため。
+View 本体（iframe の中身）は別プロジェクト mcp-apps/ が持ち、backend はそのビルド成果物
+（ui/dist/*.html）を読むだけ。固定するのは「読めないとき・壊れているときにどう振る舞うか」で
+あって HTML の中身ではない。実物の dist を読むテストは置かない——.gitignore 済みの生成物で、
+新規チェックアウトや初回ビルド前には存在せず、必ず落ちるため。
 """
 
 import inspect
@@ -20,8 +17,7 @@ import pytest
 
 from app.mcp_server import ui_assets
 
-# ui_assets._load_app_html が「壊れている」と判定しない最小の HTML。dist に置かれる
-# 実物は vite-plugin-singlefile が吐く単一ファイル HTML だが、backend が見るのは
+# ui_assets._load_app_html が「壊れている」と判定しない最小の HTML。backend が見るのは
 # 「文書として体を成しているか」だけなのでテストもその粒度で書く。
 _VALID_HTML = "<!DOCTYPE html><html lang='ja'><body><div id='root'></div></body></html>"
 
@@ -29,9 +25,8 @@ _VALID_HTML = "<!DOCTYPE html><html lang='ja'><body><div id='root'></div></body>
 class _FakeProduct:
     """build_search_ui_items が要求する最小限の形（id, image_url）だけを持つダミー。
 
-    実際には app.schemas.ProductOut が渡ってくるが、ui_assets.py は duck typing で
-    受けるだけなので、テストでは ProductOut そのものを構築する必要がない
-    （ProductOut を import すると app.models 経由で余計な依存が増える）。
+    ui_assets.py は duck typing で受けるだけなので ProductOut を構築しない（import すると
+    app.models 経由で余計な依存が増える）。
     """
 
     def __init__(self, *, id: int, image_url: str | None) -> None:
@@ -42,9 +37,8 @@ class _FakeProduct:
 def _use_dist(monkeypatch, tmp_path):
     """DIST_DIR を tmp_path へ差し替える。
 
-    差し替えられること自体が回帰テストの対象でもある——ローダはモジュール属性
-    DIST_DIR を**関数本体で**名前解決しており、デフォルト引数値に束縛すると import
-    時点の値で凍結されてここが効かなくなる（ui_assets._load_app_html の docstring 参照）。
+    差し替えられること自体が回帰テストの対象——ローダは DIST_DIR を**関数本体で**名前解決
+    しており、デフォルト引数値に束縛すると import 時点の値で凍結されて効かなくなる。
     """
     monkeypatch.setattr(ui_assets, "DIST_DIR", tmp_path)
 
@@ -52,9 +46,8 @@ def _use_dist(monkeypatch, tmp_path):
 class TestLoaderSignatures:
     """ローダに商品データを渡す口が無いことの回帰テスト。
 
-    View を別コンテナへ移す前は build_app_html(template, bundle_js) の引数が2つだけで
-    あることが「UI リソースの HTML に商品データを焼き込まない」設計の根拠だった。今は
-    「ローダが引数を1つも取らない」ことがその根拠にあたる。
+    「UI リソースの HTML に商品データを焼き込まない」設計の根拠が、ローダが引数を1つも
+    取らないことにあたる。
     """
 
     def test_loaders_take_no_arguments(self):
@@ -63,26 +56,22 @@ class TestLoaderSignatures:
 
 
 class TestLoadSearchAppHtml:
-    """load_search_app_html() が「ファイルが無い（想定内）」と「ファイルはあるが
-    壊れている（想定外の設定ミス）」のどちらでも None を返し、例外を外へ漏らさない
-    ことの回帰テスト。
+    """「ファイルが無い（想定内）」と「あるが壊れている（想定外の設定ミス）」のどちらでも
+    None を返し、例外を外へ漏らさないことの回帰テスト。
 
-    例外を漏らすと apps_ui.py のモジュール import 自体が失敗し、server.py の
-    `from app.mcp_server import apps_ui, checkout, tools` が例外を投げて /mcp 全体
-    （既存11ツール）が起動できなくなる——mcp-apps のビルドがわずかに崩れただけで店ごと
-    止まる障害モードなので、ローダの内側で確実に吸収されていることをここで固定する。
+    漏らすと apps_ui.py のモジュール import 自体が失敗し、server.py の import 経由で /mcp
+    全体（既存11ツール）が起動できなくなる——mcp-apps のビルドがわずかに崩れただけで店ごと
+    止まる障害モード。
     """
 
     def test_returns_none_when_file_missing(self, monkeypatch, tmp_path):
-        # mcp-apps がまだ dist を書き出していない状態（初回起動中・compose を通さずに
-        # backend だけ動かした場合）。
+        # mcp-apps がまだ dist を書き出していない状態（初回起動中など）。
         _use_dist(monkeypatch, tmp_path)
 
         assert ui_assets.load_search_app_html() is None
 
     def test_missing_file_is_silent(self, monkeypatch, tmp_path, caplog):
-        # 「無い」は想定内なので鳴らさない。毎回鳴らすと開発環境のログが埋まり、
-        # 本物の警告（下の test_broken_file_logs_warning）が埋もれる。
+        # 「無い」は想定内。毎回鳴らすと本物の警告（test_broken_file_logs_warning）が埋もれる。
         _use_dist(monkeypatch, tmp_path)
 
         with caplog.at_level(logging.WARNING, logger="app.mcp_server.ui_assets"):
@@ -104,8 +93,8 @@ class TestLoadSearchAppHtml:
         assert ui_assets.load_search_app_html() is None
 
     def test_returns_none_when_html_is_truncated(self, monkeypatch, tmp_path):
-        # ビルド途中の書きかけを読んでしまった場合。書き込みが終われば dist の更新で
-        # backend がもう一度再起動し、次の import で正しく読める（自然に回復する）。
+        # ビルド途中の書きかけ。書き込みが終われば dist の更新で backend が再起動し、次の
+        # import で正しく読める（自然に回復する）。
         (tmp_path / "search.html").write_text(
             "<!DOCTYPE html><html lang='ja'><body>", encoding="utf-8"
         )
@@ -116,13 +105,11 @@ class TestLoadSearchAppHtml:
     def test_returns_none_when_utf8_is_truncated_midcharacter(
         self, monkeypatch, tmp_path, caplog
     ):
-        # 上の truncated テストと同じ「書きかけを読んだ」経路だが、切れた位置が
-        # **マルチバイト文字の途中**の場合。read_text() が UnicodeDecodeError を投げる。
-        # UnicodeDecodeError は ValueError の子であって OSError ではないため、
-        # `except OSError` だけでは捕まらず外へ漏れる——漏れると apps_ui.py の import が
-        # 失敗し、/mcp が 11 ツールごと 404 になる（実測済みの障害）。dist は大半が
-        # ASCII なのでこの経路を踏む確率は数%だが、踏んだときの被害は店ごと止まる。
-        # ASCII だけの断片ではこの分岐を通らないので、テストは必ず bytes で書くこと。
+        # 書きかけを読んだ経路のうち、切れた位置が**マルチバイト文字の途中**の場合。
+        # read_text() が投げる UnicodeDecodeError は ValueError の子であって OSError では
+        # ないため `except OSError` だけでは捕まらず外へ漏れる——漏れると apps_ui.py の
+        # import が失敗し、/mcp が 11 ツールごと 404 になる（実測済みの障害）。ASCII だけの
+        # 断片ではこの分岐を通らないので、テストは必ず bytes で書くこと。
         (tmp_path / "search.html").write_bytes(
             "<!DOCTYPE html><html lang='ja'><body>ホ".encode()[:-1]
         )
@@ -131,8 +118,7 @@ class TestLoadSearchAppHtml:
         with caplog.at_level(logging.WARNING, logger="app.mcp_server.ui_assets"):
             assert ui_assets.load_search_app_html() is None
 
-        # 「壊れている」側（warning あり）へ合流させる。末尾が </html> で切れた場合と
-        # 同じ事象なので、切れた位置で無音と警告が入れ替わってはならない。
+        # 末尾が </html> で切れた場合と同じ事象。切れた位置で無音と警告が入れ替わらないこと。
         assert len(caplog.records) == 1
 
     def test_broken_file_logs_warning(self, monkeypatch, tmp_path, caplog):
@@ -164,12 +150,10 @@ class TestLoadSearchAppHtml:
 
 
 class TestLoadProductAppHtml:
-    """load_product_app_html() が load_search_app_html() と同じ壊れ方（ファイル欠落・
-    内容が HTML でない）を同じ規律で吸収することの回帰テスト。
+    """load_search_app_html() と同じ壊れ方を同じ規律で吸収することの回帰テスト。
 
-    ロジック本体は共有ヘルパー _load_app_html に集約されているため（TestLoadSearchAppHtml
-    が既に全パターンを固定している）、ここでは商品詳細側のファイル名でも同じ挙動になる
-    ことだけを確認する。
+    ロジック本体は共有ヘルパー _load_app_html にあり全パターンは TestLoadSearchAppHtml が
+    固定済みなので、ここでは商品詳細側のファイル名でも同じ挙動になることだけを確認する。
     """
 
     def test_returns_none_when_file_missing(self, monkeypatch, tmp_path):
@@ -265,9 +249,8 @@ class TestAppsExtensionMisconfiguration:
 
     Apps.tools() は MCPServer(extensions=[apps]) のコンストラクタ内で同期的に一度だけ
     呼ばれる（mcp/server/mcpserver/server.py の _apply_extension）。apps_ui.py が
-    add_html_resource() を先に呼ばずに apps.tool() だけ呼ぶ書き方に戻ってしまったら、
-    このテストではなく実際の /mcp 起動が例外で落ちる——このテストはその条件を、DB を
-    張らずに SDK 単体で再現して固定する。
+    add_html_resource() を先に呼ばずに apps.tool() だけ呼ぶ書き方に戻ったら、実際の /mcp
+    起動が例外で落ちる。その条件を DB を張らずに SDK 単体で再現して固定する。
     """
 
     def test_tool_without_matching_resource_raises(self):

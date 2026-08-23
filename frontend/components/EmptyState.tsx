@@ -11,13 +11,12 @@ interface EmptyStateProps {
 }
 
 /**
- * データが無いときの空状態表示。中央寄せで、図版・見出し・説明・アクションを縦に並べる。
- * 空の画面こそブランドが見える場所なので、既定の図版はブランドの線画にしている。
+ * データが無いときの空状態表示。空の画面こそブランドが見える場所なので、既定の図版は
+ * ブランドの線画にしている。
  *
  * 造形は SignatureBand と同じ装置を使う ——「1本の水平罫（棚）の上に線画が立つ」。
- * 何も無い画面で線画だけが宙に浮くと、図版が置き忘れのように見える。棚を1本引くと、
- * 空状態が「まだ何も置かれていない棚」として読め、署名帯・カテゴリ札・ログインの左パネルと
- * 同じ語彙になる。
+ * 何も無い画面で線画だけが宙に浮くと図版が置き忘れのように見えるが、棚を1本引くと
+ * 「まだ何も置かれていない棚」として読める。
  */
 export default function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
@@ -30,8 +29,8 @@ export default function EmptyState({ icon, title, description, action }: EmptySt
           図版の下端から 8px 上（= -mt-2）に引くと線画がちょうど罫の上に立つ。
           mb-2 で見た目の丈を 80px に戻し、下の見出しとのアキ（mt-5）を変えない。 */}
       <div aria-hidden="true" className="-mt-2 mb-2 h-px w-24 bg-line-strong" />
-      {/* 見出しは呼び出し側から可変長の和文（検索語・商品名）が来る。語中改行を防ぐ
-          <wbr> はここで挿す——PageMasthead / SectionHead と同じく、通すのは器の側の責務。 */}
+      {/* 見出しには呼び出し側から可変長の和文（検索語・商品名）が来る。<wbr> を挿すのは
+          PageMasthead / SectionHead と同じく器の側の責務。 */}
       <p className="mt-5 font-mincho text-h3 text-ink jp-head jp-name">{withWordBreaks(title)}</p>
       {description && <p className="wrap-read mt-2 text-body text-ink-muted">{description}</p>}
       {action && <div className="mt-7">{action}</div>}

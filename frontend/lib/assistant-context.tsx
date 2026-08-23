@@ -16,26 +16,14 @@ import { MQ_XL } from '@/lib/breakpoints';
 
 /**
  * AIアシスタントの開閉と、サイドバーの寸法を持つ context。
- *
- * 開閉状態は AssistantWidget が useState で抱えていたが、それだと右下の FAB からしか
- * 開けない。検索0件のような「行き止まりの画面」から相談へ送る導線は、その画面の中に
- * 置けないと機能しない（利用者が右下のボタンに気づく前に離脱する）ため、状態を
- * layout の provider へ上げて `openAssistant()` を全ページから呼べる形にする。
+ * パネルの描画・FAB・本文の押し出し・背景の inert は AssistantWidget が持つ（ここは状態だけ）。
  *
  * **context は2本に割ってある**。ページ側が引くのは開閉の指令だけ（`useAssistant`）で、
- * こちらの value は滅多に変わらない。寸法（`useAssistantGeometry`）は幅のドラッグ中に
- * 毎フレーム変わるので、同じ value に混ぜると `openAssistant` しか使っていない
- * ProductListing（memo 無し・600行超）まで pointermove ごとに再描画される。
- * サイドバーの存在理由が「商品を見て回りながら相談する」である以上、一覧を背後に置いた
- * ままドラッグするのが主要動線なので、そこを重くしない。
- *
- * パネルの描画・FAB・本文の押し出し・背景の inert は AssistantWidget が持つ（ここは状態だけ）。
+ * こちらの value は滅多に変わらない。寸法（`useAssistantGeometry`）は幅のドラッグ中に毎フレーム
+ * 変わるので、混ぜると `openAssistant` しか使っていない画面まで pointermove ごとに再描画される。
  */
 
-/**
- * 幅の永続化キー。次に開いたとき同じ広さで出す。
- * 接頭辞は lib/ の他のキー（hibino:guest-cart 等）に揃える。
- */
+/** 幅の永続化キー。接頭辞は lib/ の他のキー（hibino:guest-cart 等）に揃える。 */
 const WIDTH_KEY = 'hibino:assistant-width';
 
 /** 幅の下限。これより狭いと商品カード（列幅下限 20rem）が1列も入らない。 */
@@ -60,9 +48,8 @@ function clampWidth(value: number, maxWidth: number): number {
   return Math.round(Math.min(Math.max(value, ASSISTANT_MIN_WIDTH), maxWidth));
 }
 
-// localStorage は lib/ の他のモジュール（recentlyViewed / searchHistory / guestCart / visitor）と
-// 同じ流儀で包む。SSR（window 不在）と、プライベートモード等での例外は握りつぶす——
-// ここで throw させると endResize の途中で抜けて、ポインタ操作の後始末ごと落ちる。
+// SSR（window 不在）と、プライベートモード等での例外は握りつぶす——ここで throw させると
+// endResize の途中で抜けて、ポインタ操作の後始末ごと落ちる。
 function readStoredWidth(): number | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -83,10 +70,7 @@ function writeStoredWidth(width: number): void {
 }
 
 export interface OpenAssistantOptions {
-  /**
-   * 開いた直後に入力欄へ入れておく文言。**自動送信はしない**
-   * （パネル内のサジェスト chip と同じ規律。送る前に条件を書き足せる状態で渡す）。
-   */
+  /** 開いた直後に入力欄へ入れておく文言。**自動送信はしない**（送る前に条件を書き足せる）。 */
   prefill?: string;
   /**
    * 閉じたときにフォーカスを戻す先。開いた側が自分のボタンの ref を渡す。
@@ -98,22 +82,18 @@ export interface OpenAssistantOptions {
 
 /** ページ側が引くチャンネル。開閉の指令だけを持ち、value は滅多に変わらない。 */
 interface AssistantContextValue {
-  /** パネルが開いているか。 */
   open: boolean;
   /** 開いた直後に入力欄へ入れておく文言（空文字なら素のウェルカム表示）。 */
   prefill: string;
   /**
-   * `openAssistant()` が呼ばれるたびに増える通し番号。**接岸中は既に開いている
-   * パネルへ向けて呼ばれうる**（非モーダルなので、検索0件の「相談する」ボタンが
-   * 背後で押せる）。パネルは prefill を初期値としてしか読まないので、この番号の
-   * 変化を合図に入力欄へ入れ直す。番号が無いと、同じ文言で2回呼ばれたときに
-   * 何も起きない（ボタンが壊れて見える）。
+   * `openAssistant()` が呼ばれるたびに増える通し番号。**接岸中は既に開いているパネルへ向けて
+   * 呼ばれうる**（非モーダルなので背後のボタンが押せる）が、パネルは prefill を初期値として
+   * しか読まない。番号が無いと同じ文言で2回呼ばれたときに何も起きない（ボタンが壊れて見える）。
    */
   prefillNonce: number;
   /**
-   * 閉じたときのフォーカスの戻し先（開いた時点で解決済みの要素）。
-   * 戻す処理そのものは AssistantWidget が行う（消えていたときの退避先＝FAB を持つのが
-   * ウィジェット側のため）。
+   * 閉じたときのフォーカスの戻し先（開いた時点で解決済みの要素）。戻す処理そのものは
+   * AssistantWidget が行う（消えていたときの退避先＝FAB を持つのがウィジェット側のため）。
    */
   returnFocusRef: MutableRefObject<HTMLElement | null>;
   openAssistant: (options?: OpenAssistantOptions) => void;
@@ -123,10 +103,9 @@ interface AssistantContextValue {
 /** AssistantWidget と AssistantPanel だけが引くチャンネル。ドラッグ中は毎フレーム変わる。 */
 interface AssistantGeometryValue {
   /**
-   * サイドバーとして右端へ接岸できる幅か（= Tailwind の xl 以上）。
-   * false の間は全画面のオーバーレイとして開く（本文を詰める余地が無いため）。
-   * SSR と hydration 直後は false から入るが、パネルはクリック後にしかマウントされないので
-   * ちらつきにはならない。
+   * サイドバーとして右端へ接岸できる幅か（= Tailwind の xl 以上）。false の間は全画面の
+   * オーバーレイとして開く（本文を詰める余地が無いため）。SSR と hydration 直後は false から
+   * 入るが、パネルはクリック後にしかマウントされないのでちらつきにはならない。
    */
   docked: boolean;
   /** 接岸中のサイドバー幅（px）。ビューポートに合わせてクランプ済みの実効値。 */
@@ -156,9 +135,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const [docked, setDocked] = useState(false);
   const [resizing, setResizing] = useState(false);
-  // 利用者が選んだ幅（＝保存される値）。実効値は下で maxWidth にクランプして導出する。
-  // クランプ後の値を state に持たない：ウィンドウを一時的に狭めただけで好みの幅が
-  // 削られて戻らなくなる（広げ直しても記憶は 320px のまま）。
+  // 利用者が選んだ幅（＝保存される値）。クランプ後の値を state に持たない——ウィンドウを
+  // 一時的に狭めただけで好みの幅が削られて戻らなくなる（広げ直しても記憶は 320px のまま）。
   const [widthPref, setWidthPref] = useState(ASSISTANT_DEFAULT_WIDTH);
   const [maxWidth, setMaxWidth] = useState(ASSISTANT_MAX_WIDTH_PX);
 
@@ -172,10 +150,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     return () => mql.removeEventListener('change', applyDocked);
   }, []);
 
-  // 上限の測り直しは **開いている間だけ**。maxWidth は
-  // min(720, innerWidth * 0.4) なので 1800px 未満では約2.5px ごとに値が変わり、
-  // 常時購読するとウィンドウを掴んで動かすだけで、閉じたアシスタントのために
-  // 数十回の再描画が全ページで起きる（この寸法を見ている描画は開いている間しか無い）。
+  // 上限の測り直しは **開いている間だけ**。maxWidth = min(720, innerWidth * 0.4) は 1800px
+  // 未満では約2.5px ごとに値が変わるので、常時購読するとウィンドウを掴んで動かすだけで、
+  // 閉じたアシスタントのために数十回の再描画が全ページで起きる。
   useEffect(() => {
     if (!open) return;
     const measure = () => setMaxWidth(assistantMaxWidth(window.innerWidth));
@@ -210,9 +187,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const closeAssistant = useCallback(() => {
     setOpen(false);
-    // 次に開くときへ持ち越さない。prefill が残っていると、FAB から素直に開いたのに
-    // 前回の検索語が入力欄に居座る。戻し先の要素も同様に手放す（閉じ方によっては
-    // 使われないまま残り、外れたDOMノードを掴み続けることになる）。
+    // 次に開くときへ持ち越さない。prefill が残っていると、FAB から素直に開いたのに前回の
+    // 検索語が入力欄に居座る。戻し先の要素も同様に手放す（外れたDOMノードを掴み続けない）。
     setPrefill('');
     returnFocusRef.current = null;
   }, []);

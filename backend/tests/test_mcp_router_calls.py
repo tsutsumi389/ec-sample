@@ -2,20 +2,15 @@
 
 MCP のツールは REST を経由せず `app/routers/` の関数を Python 呼び出しで使う。FastAPI の
 依存注入は通らないので、**全引数をキーワードで明示的に渡さないと Depends オブジェクトが
-そのまま値として流れ込む**。たとえば visitor_id を渡し忘れると Depends が truthy になり、
-record_server_event() が壊れた行を書きにいく——analytics は例外を握って警告ログにするだけ
-なので、**無言で計測が壊れる**。
-
-危ないのは将来の変更で、既存ルーターに `Depends(...)` 付きの引数が 1 本増えた日に、REST は
-普通に動くのに MCP 経由だけが壊れる。しかもこの経路は DB を張れないので通常のテストでは
-踏めない。そこで「MCP が知っている引数の集合」をここに書き出して固定する。
-**このテストが落ちたら、ルーターの変更に合わせて tools.py / checkout.py の呼び出しにも
-同じ引数を足すこと**（EXPECTED を書き換えるだけで済ませない）。
+そのまま値として流れ込む**。たとえば visitor_id を渡し忘れると record_server_event() が
+壊れた行を書きにいき、analytics は例外を握って警告ログにするだけなので**無言で計測が壊れる**。
+既存ルーターに `Depends(...)` 付きの引数が 1 本増えた日、REST は普通に動くのに MCP 経由だけが
+壊れる。**このテストが落ちたら tools.py / checkout.py の呼び出しにも同じ引数を足すこと**
+（EXPECTED を書き換えるだけで済ませない）。
 
 ソースを ast で読むだけで **app パッケージを import しない**。app.routers を import すると
 app.auth 経由で SECRET_KEY が要求され（fail closed）、鍵が無い環境では収集エラーで
-**テストスイート全体が 1 件も走らなくなる**。ここのテストが DB にもネットワークにも環境変数にも
-依存しない、という conftest.py の前提を崩さないための作りである。
+**テストスイート全体が 1 件も走らなくなる**。
 """
 
 import ast
@@ -80,7 +75,6 @@ def _parameters(module: str, func: str) -> set[str]:
 
 
 def test_mcp_knows_every_parameter_of_the_routers_it_calls():
-    """引数が増減したらここで落ちる（MCP 側の呼び出しを直すのが正しい対応）。"""
     mismatched = {
         f"{module}.{func}": {
             "actual": sorted(_parameters(module, func)),

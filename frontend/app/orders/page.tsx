@@ -115,7 +115,6 @@ export default function OrdersPage() {
 
   return (
     <>
-      {/* 扉。全ページ共通の PageMasthead に寄せる（幅は本文と同じ wrap ＝ width="default"）。 */}
       <PageMasthead
         eyebrow="ORDERS"
         title="注文履歴"
@@ -178,10 +177,8 @@ export default function OrdersPage() {
                   </Link>
 
                   {/* 帳面の1行として横に読ませる。左＝注文の識別、中＝お届け先、右＝金額。
-                      以前は「注文番号」と「状態＋合計」の2要素を両端寄せしていたため、
-                      1,088px の版面のうち 731px が空白になり、薄い罫だけの行に見えていた。 */}
+                      2要素の両端寄せでは 1,088px の版面のうち 731px が空白になる。 */}
                   <div className={LEDGER_ROW}>
-                    {/* 1桁目: 注文の識別（番号・日時・状態） */}
                     <div className={LEDGER_ID}>
                       <p className="font-mincho text-h3 text-ink transition-colors duration-fast group-hover:text-brand-700">
                         注文番号 <span className="tnum">#{order.id}</span>

@@ -1,9 +1,7 @@
 """ホーム画面 API（Netflix 型のレーン構成）。
 
 レーンの組み立て（1 レーン = 1 アルゴリズム、stage-wise 貪欲法）はすべて
-services/home_page.py に置き、ここは HTTP 境界の責務だけを持つ:
-クエリパラメータの解釈 → 文脈構築 → ページ構築 → スキーマ変換。
-
+services/home_page.py に置き、ここは HTTP 境界の責務だけを持つ。
 多層フォールバック: pgvector 不在・Ollama 停止・埋め込み 0 件・プロフィール構築不能の
 いずれでも 200 を返す（例外は home_page 側の _safe / _safe_build で吸収される）。
 """

@@ -101,7 +101,6 @@ export default function ProductDetailPage() {
         setSelectedImage(0);
         setQuantity(1);
         setAdded(false);
-        // 取得に成功した商品だけを閲覧履歴に残す。
         recordRecentlyViewed(p.id);
         // ファネルの「商品を見た」段。page_view は全ページ共通なので、これが無いと
         // 「一覧 → 商品ページ」と「商品ページ → カート投入」を分けて読めない。
@@ -280,14 +279,12 @@ export default function ProductDetailPage() {
   const maxQty = Math.max(1, Math.min(product.stock, 10));
   const decQty = () => setQuantity((q) => Math.max(1, q - 1));
   const incQty = () => setQuantity((q) => Math.min(maxQty, q + 1));
-  // メイン画像を先頭に、ギャラリー画像を続けて並べる。
   const gallery = [product.image_url, ...product.images.map((i) => i.image_url)].filter(Boolean);
   const activeImage = gallery[selectedImage] ?? product.image_url;
   // 買えないとき・売り切れのときの逃げ先。カテゴリが分かっていれば同じ棚へ、
   // 分からなければ商品一覧へ送る（行き止まりを作らない）。
   const shelfHref = product.category_id ? `/categories/${product.category_id}` : '/products';
 
-  // 実験が指定した並び順。未指定・壊れた設定のときは既定の並びに戻す。
   const configuredSections = sectionOrderExperiment.config?.sections;
   const sectionOrder =
     Array.isArray(configuredSections) && configuredSections.length > 0
@@ -323,7 +320,6 @@ export default function ProductDetailPage() {
     recently: <RecentlyViewed excludeId={product.id} />,
   };
 
-  // 文言だけを差し替える実験。config が無ければ現行の文言。
   const addToCartLabel = ctaCopyExperiment.config?.label ?? 'カートに追加';
 
   const breadcrumbItems: BreadcrumbItem[] = [
@@ -334,14 +330,8 @@ export default function ProductDetailPage() {
     { label: product.name },
   ];
 
-  // 商品の「奥付」。
-  // 以前は左（図版）カラムの中に閉じていたため、右カラムが購入パネルで終わって
-  // 下半分が空になり、7:5 の版面が最後まで持たなかった。買い物かごパネルの直後、
-  // 右カラムの末尾に置いて2段組を下端まで閉じる。
-  //
-  // 本体はサーバーが持つ仕様（product_specs）で、末尾に商品コードとカテゴリを添える。
-  // **在庫はここに置かない** ——「残り N点」は状態であって仕様ではなく、上の StockLabel と
-  // 同じ数字が同一画面に二度出る（価格行が席を1つに絞っているのと同じ規律）。
+  // 商品の「奥付」。本体はサーバーが持つ仕様（product_specs）で、末尾に商品コードとカテゴリを添える。
+  // **在庫はここに置かない**——上の StockLabel と同じ数字が同一画面に二度出る。
   const specRows: { label: string; value: string }[] = [
     ...product.specs,
     ...(product.sku ? [{ label: '商品コード', value: product.sku }] : []),
@@ -351,28 +341,22 @@ export default function ProductDetailPage() {
   return (
     <>
       {/* 扉。他ページと同じ判型記号（沈んだ地のフルブリード帯＋裁ち落とした線画＋
-          パンくず＋明朝の h1）を PDP にも入れる。ここだけ扉も面の交替も持たず、
-          ヘッダー直下からフッターまで 3,000px 超が同じ地色のまま続いていた。
+          パンくず＋明朝の h1）を PDP にも入れる。
           商品名は扉の h1 が唯一の席（右カラムに二重に置かない）。 */}
       <PageMasthead
         eyebrow="PRODUCT"
         title={product.name}
-        // 扉の線画はこの商品のカテゴリに対応させる（ホームのカテゴリ札・カテゴリ扉と同じ図案）。
         motif={motifForCategory(categoryName)}
         width="default"
         breadcrumbs={breadcrumbItems}
       />
 
-      {/* 末尾に逃げ余白は持たない。
-          以前はここに `pb-28 lg:pb-20`（固定購入バーの逃げ）を置いていたが、
-          (a) バーは position:fixed で、この器のあとにも署名帯とフッターが続くため
-              逃げとしては働かず、
-          (b) 最後のセクションが色帯（沈み／深緑）のときだけ、帯と署名帯のあいだに
-              80px（lg）〜112px（<lg）の意味のない地色の帯が1本挟まっていた。
-          縦の間隔は下のセクション器（.wrap py-8）が配る。 */}
+      {/* 末尾に逃げ余白（`pb-28 lg:pb-20`）は持たない。固定購入バーは position:fixed で、
+          この器のあとにも署名帯とフッターが続くため逃げとして働かず、最後のセクションが
+          色帯のときだけ意味のない地色の帯が1本挟まる。縦の間隔は下のセクション器が配る。 */}
       <div>
         <div className="wrap band-lg">
-          {/* 7:5 の非対称。左（図版）が主、右（買う＋奥付）が従で、右は追従する。 */}
+          {/* 7:5 の非対称。左（図版）が主、右（買う）が従で、右は追従する。 */}
           <div className="grid grid-cols-1 gap-x-12 gap-y-10 lg:grid-cols-12">
             <div className="lg:col-span-7">
               {/* 額縁の地をイラストの地色（tile）に合わせ、枠と絵の境目を消す */}
@@ -421,12 +405,9 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="lg:col-span-5 lg:sticky lg:top-[calc(var(--header-h)+1.5rem)] lg:self-start">
-              {/* グループ1: 評価・価格・在庫（商品名は扉の h1 が持つ）
-
-                  在庫は「急ぐ理由があるときだけ」ここに出す（残り N点／在庫切れ）。
-                  通常在庫の「在庫 44 点」は購入の判断を変えないうえ、下の奥付
-                  （specRows の「在庫 | 44 点」）と同じ数字が同じ画面に2度出ていた。
-                  数え方の統一（点）だけでは重複は消えないので、席を1つに絞る。
+              {/* グループ1: 評価・価格・在庫（商品名は扉の h1 が持つ）。
+                  在庫は「急ぐ理由があるときだけ」ここに出す（残り N点／在庫切れ）。通常在庫の
+                  「在庫 44 点」は購入の判断を変えず、同じ数字を画面に二度出すだけになる。
                   一覧カード（components/ProductCard.tsx の lowStock）と同じ規律。 */}
               <RatingStars value={product.avg_rating} count={product.review_count} size="sm" />
               <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -498,8 +479,7 @@ export default function ProductDetailPage() {
                     type="button"
                     onClick={handleAddToCart}
                     disabled={adding || soldOut}
-                    // 未ログインだとカート投入はサーバーに届かない（ログイン画面へ送られる）ため、
-                    // ボタン押下そのものは click イベントとして別途記録する。
+                    // ゲストの投入はサーバーを通らないため、押下そのものも click として記録する。
                     data-track-click="pdp_add_to_cart"
                     data-track-props={JSON.stringify({ product_id: product.id })}
                     className={`${btn('primary', 'lg')} mt-5 w-full`}
@@ -514,8 +494,7 @@ export default function ProductDetailPage() {
                     </Link>
                   )}
 
-                  {/* 追加後の手応えをトーストだけに任せない。トーストは数秒で消えるため、
-                      「入ったのか／いま何点か／次にどこへ行くか」が画面に残らなかった。
+                  {/* 「入ったのか／いま何点か／次にどこへ行くか」を画面に残す。
                       既存の行を書き換えず下に足すので、押した位置のものは動かない。 */}
                   {added && (
                     <p
@@ -583,14 +562,12 @@ export default function ProductDetailPage() {
             </div>
           </div>
 
-          {/* 奥付。以前は左（図版）カラムの中に閉じていて、右カラムだけが購入パネルで終わり、
-              2段組の下半分が空いていた。2段組の外・全幅に出し、行を横に流す。
-              これで左右どちらのカラムにも「そのカラムだけの末端」が生まれない。 */}
+          {/* 奥付は2段組の外・全幅に出し、行を横に流す。左右どちらのカラムにも
+              「そのカラムだけの末端」を作らないため。 */}
           {specRows.length > 0 && (
             <section className="mt-16 border-t border-line pt-8">
               <SectionHead as="h2" size="sm" eyebrow="SPECIFICATION" title="仕様" />
-              {/* 3列だったのは中身が商品コード・カテゴリ・在庫の3行しか無かった頃の名残。
-                  仕様の値は「幅57.5×奥行42.5×厚さ0.9cm」のように長い和文が来るので、
+              {/* 仕様の値は「幅57.5×奥行42.5×厚さ0.9cm」のように長い和文が来るので、
                   lg でも2列までに留めて1行あたりの幅を確保する。 */}
               <dl className="mt-5 grid sm:grid-cols-2 sm:gap-x-12">
                 {specRows.map((row, index) => (
@@ -600,7 +577,6 @@ export default function ProductDetailPage() {
                     className="flex items-baseline justify-between gap-6 border-b border-line py-3"
                   >
                     <dt className="shrink-0 text-caption text-ink-muted">{row.label}</dt>
-                    {/* 可変長の和文なので withWordBreaks() を通す（語中改行とカタカナのアキ）。 */}
                     <dd className="min-w-0 text-right text-body tnum jp-body text-ink">
                       {withWordBreaks(row.value)}
                     </dd>
@@ -638,14 +614,11 @@ export default function ProductDetailPage() {
         })}
       </div>
 
-      {/* 単カラム時の固定購入バー。画面をスクロールしても価格と CTA が視野から消えない。
-          2カラム（＝右の買い物かごパネルが追従する）になるのは lg 以上なので、
-          バーを消すのも lg から。768px は単カラムなのにバーが無く、
+      {/* 単カラム時の固定購入バー。2カラム（＝右の買い物かごパネルが追従する）になるのは
+          lg 以上なので、バーを消すのも lg から。768px は単カラムなのにバーが無く、
           購入導線が本文の中に埋もれていた。
           セーフエリア（ホームバー）ぶんの余白を padding に足している。
-          z-30 はヘッダーと同値。階梯は Header.tsx の頭注が唯一の記述:
-          購入バー(z-30) < 検索サジェスト(z-40) < FAB・各モーダル(z-50) < ドロワー(z-[55])
-          < トースト(z-[60]) < スキップリンク(z-[70])。 */}
+          z-30 はヘッダーと同値。階梯は Header.tsx の頭注が唯一の記述。 */}
       {showPurchasePanel && (
         <div
           role="region"

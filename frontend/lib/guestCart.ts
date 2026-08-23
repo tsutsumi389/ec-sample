@@ -1,17 +1,15 @@
 /**
- * ゲスト（未ログイン）のカートを localStorage で管理する。
- *
- * 「欲しい」と思った瞬間にログインを挟むと、その意思はほぼ失われる。そこで未ログインでも
- * カートに入れられるようにし、ログイン・会員登録の直後に POST /cart/merge でサーバーの
- * カートへ合算する（lib/auth-context.tsx）。
+ * ゲスト（未ログイン）のカートを localStorage で管理する。「欲しい」と思った瞬間にログインを
+ * 挟むと、その意思はほぼ失われる。そこで未ログインでもカートに入れられるようにし、ログイン・
+ * 会員登録の直後に POST /cart/merge でサーバーのカートへ合算する（lib/auth-context.tsx）。
  *
  * ここが持つのは商品IDと数量だけ。価格・購入可否・在庫の判断はサーバー（POST /cart/preview）
- * に任せる。effective_price の計算をクライアントに写すと、必ずどちらかが古くなるため。
- * 数量の上限だけは、押した瞬間の手応えを返すために画面が持っている在庫数で丸める
- * （最終的な丸めはサーバーの解決結果で上書きされる）。
+ * に任せる——effective_price の計算をクライアントに写すと、必ずどちらかが古くなる。数量の
+ * 上限だけは、押した瞬間の手応えを返すために画面が持っている在庫数で丸める（最終的な丸めは
+ * サーバーの解決結果で上書きされる）。
  *
- * SSR（window 不在）や localStorage 例外は握りつぶす。保存できない端末ではカートが
- * 空のまま見えるだけで、ログイン後の通常のカートは従来どおり動く。
+ * SSR（window 不在）や localStorage 例外は握りつぶす。保存できない端末ではカートが空のまま
+ * 見えるだけで、ログイン後の通常のカートは従来どおり動く。
  */
 
 const STORAGE_KEY = 'hibino:guest-cart';
@@ -133,7 +131,6 @@ export function setGuestCartQuantity(productId: number, quantity: number): void 
   );
 }
 
-/** 明細を 1 つ取り除く。 */
 export function removeFromGuestCart(productId: number): void {
   const lines = readGuestCart();
   const next = lines.filter((line) => line.product_id !== productId);
@@ -142,9 +139,8 @@ export function removeFromGuestCart(productId: number): void {
 }
 
 /**
- * サーバーが解決した結果で控えを整える（取り扱いが終わった商品を落とし、在庫で丸めた
- * 数量に合わせる）。ゲストのカートは端末に残り続けるため、次に開いたときに実態と
- * 合っている必要がある。
+ * サーバーが解決した結果で控えを整える（取り扱いが終わった商品を落とし、在庫で丸めた数量に
+ * 合わせる）。ゲストのカートは端末に残り続けるため、次に開いたときに実態と合っている必要がある。
  */
 export function reconcileGuestCart(lines: GuestCartLine[]): void {
   const current = readGuestCart();
@@ -161,10 +157,9 @@ export function reconcileGuestCart(lines: GuestCartLine[]): void {
 }
 
 /**
- * 控えを空にする（ログイン後のマージが済んだとき）。
- * 空配列の書き込みは writeGuestCart が「キーごと消す」に畳むので、保存形式や
- * 変更イベントの発火条件をここで書き直さない（片方だけ直ると、ヘッダーのバッジが
- * マージ後も古い数のまま残る類の食い違いになる）。
+ * 控えを空にする（ログイン後のマージが済んだとき）。空配列の書き込みは writeGuestCart が
+ * 「キーごと消す」に畳むので、保存形式や変更イベントの発火条件をここで書き直さない
+ * （片方だけ直ると、ヘッダーのバッジがマージ後も古い数のまま残る類の食い違いになる）。
  */
 export function clearGuestCart(): void {
   writeGuestCart([]);

@@ -1,13 +1,12 @@
 """カートへの一括投入と、ゲストカートの明細解決。
 
-複数明細をまとめてカートへ入れる経路が 2 つある（過去の注文からの再注文と、ゲスト
-カートのログイン時マージ）。在庫の引き当て判定を経路ごとに書くと、片方だけ直したときに
-売り越しが起きるため、判定はこのモジュールに 1 つだけ置く。
+複数明細をまとめてカートへ入れる経路が 2 つある（再注文と、ゲストカートのログイン時
+マージ）。在庫の引き当て判定を経路ごとに書くと片方だけ直したときに売り越しが起きるため、
+判定はこのモジュールに 1 つだけ置く。
 
-ゲスト（未ログイン）のカートは端末の localStorage が持ち、サーバーには「商品IDと数量の
-並び」だけが届く。金額は必ず effective_price から計算する決まりなので、価格・購入可否・
-在庫の判断をクライアントに写すことはしない（二重実装になり、必ずどちらかが古くなる）。
-解決は resolve_guest_lines() に集約し、フロントは返ってきた数量と金額をそのまま描く。
+ゲストのカートは端末が持ち、サーバーには「商品IDと数量の並び」だけが届く。価格・購入
+可否・在庫の判断はクライアントに写さず resolve_guest_lines() に集約する（二重実装に
+なり、必ずどちらかが古くなる）。
 """
 
 from dataclasses import dataclass
@@ -49,15 +48,12 @@ def shortage_reason(added: int, requested: int) -> str | None:
     return f"在庫が不足するため{added}点のみ追加しました"
 
 
-# ---- 買えない理由の文言 ---------------------------------------------------------------
-#
-# 実装は下の 2 本（status を取る版）だけ。ORM の Product を持っている呼び出し側には皮を
-# 被せて渡す。ProductOut（Pydantic）しか持たない層——MCP のツール——が
-# `status in VIEWABLE_STATUSES` を書き写すと、販売可能な状態を 1 つ足した日に商品ページの
-# 購入ボタン（ProductOut.purchasable = models 由来）とその層の判定が割れるため、
-# status を取る版を入り口として公開している。
-# status → 可否の変換そのものは models.py の is_viewable_status / is_on_sale_status が
-# 唯一の源で、ここが持つのは文言だけ。
+# 実装は status を取る 2 本だけで、ORM の Product を持つ呼び出し側には皮を被せて渡す。
+# ProductOut（Pydantic）しか持たない層——MCP のツール——が `status in VIEWABLE_STATUSES`
+# を書き写すと、販売可能な状態を 1 つ足した日に商品ページの購入ボタン
+# （ProductOut.purchasable = models 由来）とその層の判定が割れるため。
+# status → 可否の変換は models.py の is_viewable_status / is_on_sale_status が唯一の源で、
+# ここが持つのは文言だけ。
 
 _GONE = "お取り扱いが終了しました"
 
@@ -244,8 +240,8 @@ def resolve_guest_lines(
 
     for line in lines:
         product = products_by_id.get(line.product_id)
-        # 商品ページごと消えている（物理削除・archived）明細は、名前も価格も出せない。
-        # 行として見せる意味がないので落とす。
+        # 商品ページが見えない明細（archived・draft、または行ごと消えている）は、名前も
+        # 価格も出せない。行として見せる意味がないので落とす。
         if product is None or not product.is_viewable:
             dropped.append(line.product_id)
             continue

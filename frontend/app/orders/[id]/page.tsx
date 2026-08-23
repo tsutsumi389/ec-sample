@@ -29,7 +29,6 @@ import { FOCUS_RING, btnDangerOutline } from '@/lib/buttonStyles';
 import { formatDateTime } from '@/lib/formatDate';
 import CountLabel from '@/components/CountLabel';
 
-/** 注文の進行状況を横型のステップで表示する。cancelled は打ち消し表示にする。 */
 function OrderTimeline({ status }: { status: OrderStatus }) {
   const cancelled = status === 'cancelled';
   const currentIndex = orderTimelineIndex(status);
@@ -214,7 +213,6 @@ function OrderDetailContent() {
 
   return (
     <>
-      {/* 扉。全ページ共通の PageMasthead に寄せる（幅は本文と同じ wrap ＝ width="default"）。 */}
       <PageMasthead
         eyebrow="ORDER"
         title={`注文番号 #${order.id}`}
@@ -251,7 +249,6 @@ function OrderDetailContent() {
         )}
 
         <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-x-10">
-          {/* 左: 進行状況 + 明細 */}
           <div className="lg:col-span-7">
             {/* 進行状況タイムライン。影を持たせず地の色差だけで沈める。 */}
             <div className="rounded-xl bg-sunken px-5 py-6 md:px-6">
@@ -304,7 +301,6 @@ function OrderDetailContent() {
             </div>
           </div>
 
-          {/* 右: 金額・お届け先・操作。スクロールに追従させる。 */}
           <aside className="mt-10 lg:col-span-5 lg:mt-0 lg:sticky lg:top-[calc(var(--header-h)+1.5rem)]">
             <div className="rounded-xl bg-surface p-6 shadow-lift md:p-7">
               <SectionHead title="お支払い金額" eyebrow="SUMMARY" />

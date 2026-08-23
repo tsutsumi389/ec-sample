@@ -127,16 +127,12 @@ def build_user_prompt(
 ) -> str:
     """user プロンプトを組み立てる。ユーザー入力は <message> タグで区切る。
 
-    user_context_lines（ログインユーザーの購入・お気に入り等の行動履歴）が非空なら、
-    好みを踏まえた提案をさせるため【これまでの会話】ブロックの前に行動ブロックを差し込む。
-    None/空なら従来と完全に同一の出力にして既存テスト・ゲスト会話の挙動を保つ。
-    行動履歴には商品名・行動種別のみを入れ、PII（氏名・メール等）は入れない。
+    user_context_lines（行動履歴）が非空なら【これまでの会話】の前に差し込む。None/空なら
+    従来と完全に同一の出力にする（既存テスト・ゲスト会話の挙動を保つ）。PII は入れない。
 
-    page_line（いま見ている画面の 1 行表現）は【これまでの会話】と【候補カタログ】の
-    **間**に置く。会話より後なのは「これ」の指示先は過去の発話より目の前の画面が優先
-    されるべきだから、カタログより前なのは同じ商品がカタログにも並ぶため（先に「いま見て
-    いる商品」と名乗らせてから候補の一覧を見せる）。
-    DB 非依存の純ロジック（テスト対象）。
+    page_line は【これまでの会話】と【候補カタログ】の**間**に置く。会話より後なのは
+    「これ」の指示先は過去の発話より目の前の画面が優先されるべきだから、カタログより前
+    なのは先に「いま見ている商品」と名乗らせてから候補を見せるため。DB 非依存の純ロジック。
     """
     history_block = "\n".join(conversation_lines) if conversation_lines else "（履歴なし）"
     catalog_block = "\n".join(catalog_lines) if catalog_lines else "（該当する候補がありません）"
@@ -262,19 +258,16 @@ def resolve_page_anchor(
 ) -> Product | None:
     """「いま見ている画面」の商品を DB から引き直す。引けなければ None。
 
-    絞りは **VIEWABLE_STATUSES**（LISTED ではない）。お客様が実際に開けている商品ページの
-    状態が基準で、一覧に出ない discontinued も URL では見られるため、その画面で「これ」と
-    言われたら誰のことか分からない、では応対にならない。逆に draft / archived はそもそも
-    404 になる画面なので、ここでも引けてはいけない——**product_id は外から任意に指定できる
-    入り口**であり、status を添え忘れると未公開商品の名前がプロンプト経由で外に出る
+    絞りは **VIEWABLE_STATUSES**（LISTED ではない）。一覧に出ない discontinued も URL では
+    開けるので、その画面で「これ」と言われて引けないと応対にならない。逆に draft / archived
+    は 404 になる画面なので引けてはいけない——**product_id は外から任意に指定できる入り口**
+    で、status を添え忘れると未公開商品の名前がプロンプト経由で外に出る
     （home_page.build_because_you_watched が踏んだのと同じ穴）。
 
-    route も必ず見る。いまは Literal が product_detail の 1 値なので不一致は起こらないが、
-    route を増やした日に「category なのに product_id が付いている」ペイロードを黙って
-    アンカーにしてしまう（フラットな任意フィールドの構造はそこが弱点）。
+    route も必ず見る。いまは Literal が 1 値なので不一致は起こらないが、route を増やした日に
+    「category なのに product_id が付いている」ペイロードを黙ってアンカーにしてしまう。
 
-    提案カード（＝候補カタログ）に載せてよいかはこれとは別の判断で、そちらは呼び出し側が
-    is_listed で絞る。
+    提案カードに載せてよいかは別の判断で、そちらは呼び出し側が is_listed で絞る。
     """
     if page_context is None or page_context.route != "product_detail":
         return None
@@ -312,14 +305,12 @@ def get_candidates(
 ) -> Candidates:
     """ハイブリッド候補抽出（ベクトル近傍 top-20 + キーワード top-10 をマージ）。
 
-    ベクトルは query_text（マルチターン文脈）を埋め込んで近傍検索、キーワードは
-    keyword_text（新メッセージ）で ILIKE する。重複は除去し、ベクトル候補を優先順で
-    先に並べる。埋め込みが引けない環境ではキーワード候補のみになる。
+    ベクトルは query_text（マルチターン文脈）、キーワードは keyword_text（新メッセージ）。
+    重複は除去しベクトル候補を先に並べる。埋め込みが引けない環境ではキーワードのみ。
 
-    anchor（いま見ている商品）があれば、**先頭に置いてその近傍も足す**。先頭に置くのは
-    SID 照合（llm_catalog.match_products）が候補集合に無い SID を落とすためで、候補へ
-    入れないと「目の前の商品そのもの」だけが提案できない状態になる。ただし載せるのは
-    is_listed のときだけ——提案カードは公開中の商品しか出せない。
+    anchor（いま見ている商品）があれば**先頭に置いてその近傍も足す**。先頭に置くのは SID
+    照合（llm_catalog.match_products）が候補集合に無い SID を落とすためで、候補へ入れないと
+    「目の前の商品そのもの」だけが提案できない。載せるのは is_listed のときだけ。
     """
     # 埋め込みは embedding.embed_query に任せる（クエリ側プレフィックスの付与・次元検査・
     # 失敗時の警告ログを持つ唯一の入口。private の _embed_texts を直接叩くと、商品側の
@@ -333,20 +324,18 @@ def get_candidates(
     )
     keyword_hits = _keyword_candidates(db, keyword_text, _KEYWORD_CANDIDATE_LIMIT)
     # 「いま見ている商品」の近傍。相談文の近傍だけだと「これに合うものある？」のような、
-    # 要望が画面にしか無い相談で候補が空振りする。近傍を引くのはレコメンドの
-    # get_neighbors_of が唯一の入口（ホームの「これを見た人に」と同じ1本）——ここで
-    # 引き直すと、LISTED の絞りとアンカー自身の除外を経路ごとに書くことになる。
+    # 要望が画面にしか無い相談で候補が空振りする。近傍は get_neighbors_of が唯一の入口
+    # （ここで引き直すと LISTED の絞りとアンカー除外を経路ごとに書くことになる）。
     # 埋め込みが無い商品では空リストが返る（Ollama も呼ばない）。
     anchor_hits = (
         recommendation.get_neighbors_of(db, anchor.id, _ANCHOR_NEIGHBOR_LIMIT)
         if anchor is not None
         else []
     )
-    # アンカーとその近傍を相談文の候補より**前**に置く。「これに合うものは？」のように
-    # 要望が画面にしか無い相談では、埋め込む相談文がほぼ無内容で近傍 20 件が丸ごと雑音になり、
-    # 後ろに置くとカタログの 21 行目以降＝小型モデルがまず見ない位置へ本命が沈む。
-    # 逆に要望が具体的な相談（画面と無関係な「予算5000円の鍋」等）では、先頭 9 行が画面寄りに
-    # なるだけで相談文の候補 20 件はカタログに残るので、取り違えても落とし方が浅い方を採る。
+    # アンカーとその近傍を相談文の候補より**前**に置く。要望が画面にしか無い相談では
+    # 埋め込む相談文がほぼ無内容で近傍 20 件が丸ごと雑音になり、後ろに置くと本命が
+    # カタログの 21 行目以降＝小型モデルがまず見ない位置へ沈む。逆に具体的な相談では
+    # 先頭 9 行が画面寄りになるだけで済むので、取り違えても落とし方が浅い方を採る。
     head = [anchor] if anchor is not None and anchor.is_listed else []
 
     merged: list[Product] = []
@@ -400,13 +389,11 @@ def _build_messages(
             llm_catalog.catalog_line(product, sid, avg_map.get(product.id))
         )
 
-    # 画面の 1 行。SID を名乗らせるのは候補と同じ商品だと分からせるため。カタログに
-    # 居ない（＝公開中でない）アンカーの SID は sid_to_product に入らないので、
-    # LLM がそれを items に返しても match_products が落とす（カードには出ない）。
-    # ただし**落とせるのはカードだけ**で本文は落とせない。書式が候補カタログと同じままだと、
-    # system プロンプトの「その商品自身を提案に含めてもよい」がそのまま効いて、
-    # discontinued（VIEWABLE だが LISTED でない唯一の状態）の商品を本文で薦めながら
-    # カードは 1 枚も出ない、という応対になる。買えないことを行に書き添えて外す。
+    # 画面の 1 行。SID を名乗らせるのは候補と同じ商品だと分からせるため。カタログに居ない
+    # （＝公開中でない）アンカーの SID は sid_to_product に入らないので、items に返っても
+    # match_products が落とす。ただし**落とせるのはカードだけ**で本文は落とせず、書式が候補と
+    # 同じままだと discontinued（VIEWABLE だが LISTED でない唯一の状態）を本文で薦めながら
+    # カードは 1 枚も出ない応対になる。買えないことを行に書き添えて外す。
     page_line = None
     if anchor is not None:
         page_line = "商品ページ: " + llm_catalog.catalog_line(
@@ -457,14 +444,13 @@ def _fallback(
 ) -> AssistantResult:
     """キーワード検索 top-4 + 定型文のフォールバック応答。
 
-    キーワードが 1 件もヒットしない場合は人気順 top-4 に落とす（既存レコメンドの
-    人気順フォールバックと同じ思想。商品が空のままだと案内として成立しないため）。
-    ここは generate_reply の最終防衛線なので、検索が失敗しても例外を外に漏らさず
-    （商品なしの）定型応答を返す。API が 500 を返さないことを保証する。
+    キーワードが 1 件もヒットしなければ人気順 top-4 に落とす（商品が空のままだと案内として
+    成立しないため）。ここは generate_reply の最終防衛線なので、検索が失敗しても例外を外に
+    漏らさず定型応答を返す（API が 500 を返さないことの保証）。
 
-    known_hits は候補抽出で既に引き終えたキーワードヒット。渡されたらそれを使い、
-    同じ ILIKE（最大 8 トークン × 2 列の OR ＝ 全表走査）を投げ直さない。候補抽出
-    そのものが例外で落ちた経路だけが None で来て、ここで改めて検索する。
+    known_hits は候補抽出で既に引き終えたキーワードヒット。渡されたら同じ ILIKE
+    （最大 8 トークン × 2 列の OR ＝ 全表走査）を投げ直さない。候補抽出そのものが例外で
+    落ちた経路だけが None で来る。
     """
     try:
         products = (
@@ -514,7 +500,6 @@ def generate_reply(
             # キーワードヒットも空と分かっているので、そのまま渡して再検索を省く。
             return _fallback(db, user_message, known_hits=candidates.keyword_hits)
 
-        # ログインユーザーなら行動履歴をプロンプトに注入する（取得失敗時は空で継続）。
         user_context_lines = (
             _build_user_context_lines(db, user_id) if user_id is not None else None
         )
@@ -530,7 +515,6 @@ def generate_reply(
         adopted = llm_catalog.match_products(
             parsed.items, sid_to_product, max_items=_MAX_ITEMS
         )
-        # 小型モデルは指示しても本文に SID を書くことがあるため防御的に除去する。
         reply = strip_sids_from_reply(parsed.reply or "")
         if not reply:
             # 本文が空なら定型文に落とす（カードだけ返すのは不自然なため）。

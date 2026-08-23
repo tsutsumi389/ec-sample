@@ -28,25 +28,21 @@ from dataclasses import dataclass
 # 「プレフィックスを消した」のどちらの事故でも一方が残る。
 _KEY_INFO = b"hibino-mcp/confirm-token/v1/key"
 _MSG_PREFIX = "hibino-mcp/confirm-token/v1"
-# JWT（aaa.bbb.ccc）と一目で見分かる形にする。ログや会話に現れたときに「これは
-# セッショントークンではない」と分かること自体が防御になる（decode_access_token に
-# 渡しても、Bearer らしき文字列を保存するクライアントに拾われても、認証には使えない）。
+# JWT（aaa.bbb.ccc）と一目で見分かる形にする。ログや会話に現れたときに「これはセッション
+# トークンではない」と分かること自体が防御になる。
 _TOKEN_PREFIX = "hbc1_"
 
-# 有効期限。3 分だと 5 明細のカートを人間が読んで納得するのに足りず、「期限切れ →
-# やり直し → また期限切れ」で安全弁が邪魔者になる。30 分は長すぎる。値ずれは指紋が
-# 捕まえるので、TTL の実害は「会話ログに残った有効なトークンが後続ターンで叩かれる窓」の
-# 長さそのもの。
+# 有効期限。3 分だと 5 明細のカートを人間が読んで納得するのに足りず「期限切れ → やり直し →
+# また期限切れ」になり、30 分は長すぎる。値ずれは指紋が捕まえるので、TTL の実害は「会話ログ
+# に残った有効なトークンが後続ターンで叩かれる窓」の長さそのもの。
 TTL_SECONDS = 10 * 60
 # 単一プロセスなので本来ゼロでよい。時計の巻き戻りを検出するためだけの許容幅。
 _MAX_CLOCK_SKEW_SECONDS = 60
 # 壊れた入力に base64 デコードの時間を使わないための足切り。**発行できるトークンの最大長
-# より十分大きく取ること。** ここを詰めすぎると、自由入力の住所が長い注文だけ issue() は
-# 成功して verify() が「形式不正」で弾くという、再現条件の分かりにくい壊れ方をする
-# （和文 1 文字は UTF-8 で 3 バイト、それを base64 で 4/3 倍し、さらに本体ごと base64 で
-# 4/3 倍するので、住所の文字数はおよそ 5.3 倍になってトークンに効く）。
-# preview_checkout 側の shipping_address は 200 文字に制限してあり、実際に出るトークンは
-# 最悪でも 2.3KB 程度。
+# より十分大きく取ること。** 詰めすぎると、自由入力の住所が長い注文だけ issue() は成功して
+# verify() が「形式不正」で弾くという、再現条件の分かりにくい壊れ方をする（和文 1 文字は
+# UTF-8 で 3 バイト、base64 の 4/3 倍を二重に食うので、住所の文字数はおよそ 5.3 倍になって
+# トークンに効く）。shipping_address は 200 文字制限で、実際のトークンは最悪 2.3KB 程度。
 _MAX_TOKEN_CHARS = 4096
 _FIELDS = ("u", "h", "t", "a", "s", "d", "c", "o", "i", "e", "n")
 
@@ -93,10 +89,9 @@ class ConfirmClaims:
     nonce: str
 
 
-# ---- 文言（そのまま LLM に見せる。理由 → 次に呼ぶツール名の順） ----------------------
-#
-# ツールのエラーは SDK が "Error executing tool <name>: " を前置するので、体言止めや
-# 「〜してください」始まりにせず、前置きされても読める文にしてある。
+# 文言はそのまま LLM に見せる（理由 → 次に呼ぶツール名の順）。SDK が
+# "Error executing tool <name>: " を前置するので、体言止めや「〜してください」始まりに
+# せず、前置きされても読める文にしてある。
 
 _MSG_MALFORMED = (
     "確認トークンが無効です。preview_checkout をもう一度呼び、返ってきた confirm_token を "
@@ -126,17 +121,13 @@ _MSG_ADDRESS_CHANGED = (
 )
 
 
-# ---- 鍵と指紋 -----------------------------------------------------------------
-
-
 def signing_key(secret_key: str) -> bytes:
     """SECRET_KEY から確認トークン専用の鍵を導出する（HMAC を PRF として使う）。
 
-    環境変数を 2 本目に増やさないのは、fail closed の検査・make secret の生成・compose の
-    受け渡し・.env の管理・ローテーション手順がすべて二重になり、そして 2 本目を忘れた
-    ときに「無ければ SECRET_KEY にフォールバック」と書きたくなるため（CLAUDE.md が禁じて
-    いる既定値そのもの）。分離は運用ではなく暗号で取る——派生鍵から SECRET_KEY は復元
-    できないので、JWT の署名鍵と計算上独立になる。
+    環境変数を 2 本目に増やさないのは、fail closed の検査・make secret・compose の受け渡し・
+    ローテーション手順がすべて二重になり、忘れたときに「無ければ SECRET_KEY にフォール
+    バック」と書きたくなるため。分離は運用ではなく暗号で取る——派生鍵から SECRET_KEY は
+    復元できないので、JWT の署名鍵と計算上独立になる。
     """
     return hmac.new(secret_key.encode("utf-8"), _KEY_INFO, hashlib.sha256).digest()
 
@@ -144,13 +135,11 @@ def signing_key(secret_key: str) -> bytes:
 def cart_fingerprint(lines: Sequence[tuple[int, int, int, int]]) -> str:
     """(cart_item_id, product_id, quantity, unit_price) の並びから指紋を作る。
 
-    unit_price は effective_price（カートを組んだ既存関数の値をそのまま渡す。ここで価格を
-    計算し直さないこと）。単価を含めるのは、下見の時点でセール中だった商品がセール終了で
-    値上がりしたあと、古いトークンで「ユーザーが見たことのない金額」の注文が確定する穴を
-    塞ぐため。単価を明細ごとに入れるのは、合計だけだと「A を 1 個増やし B を 1 個減らす」
-    組み替えを通してしまうため。cart_item_id を含めるのは、注文確定で CartItem 行が消える
-    ので、同じ商品を同じ数だけ入れ直しても id が変わって一致しないようにするため
-    （last_order_id と併せた多重防御）。
+    unit_price は effective_price（ここで価格を計算し直さないこと）。単価を含めるのは、下見
+    の時点でセール中だった商品が値上がりしたあと「ユーザーが見たことのない金額」で注文が
+    確定する穴を塞ぐため。単価を明細ごとに持つのは、合計だけだと「A を 1 個増やし B を 1 個
+    減らす」組み替えを通してしまうため。cart_item_id を含めるのは、注文確定で CartItem 行が
+    消えるので、同じ商品を同じ数だけ入れ直しても id が変わって一致しないようにするため。
 
     在庫と status は入れない。create_order が行ロック下で必ず再検査する（そちらが唯一の
     源）。ここに入れると、他人が 1 個買っただけでユーザーに無関係なやり直しを強いる。
@@ -166,9 +155,6 @@ def address_fingerprint(text: str) -> str:
     空文字の指紋になり、照合で必ず落ちる（＝トークンは使えない）。
     """
     return hashlib.sha256(f"{_MSG_PREFIX}/address\n{text}".encode()).hexdigest()
-
-
-# ---- 正準化 -------------------------------------------------------------------
 
 
 def _b64e(raw: bytes) -> str:
@@ -236,9 +222,6 @@ def _parse(text: str) -> ConfirmClaims:
     if (address_id == 0) != (text_value is not None):
         raise ConfirmTokenError("malformed", _MSG_MALFORMED)
     return claims
-
-
-# ---- 発行 / 検証 ---------------------------------------------------------------
 
 
 def issue(key: bytes, *, user_id: int, state: CartState, now: int) -> str:
@@ -317,8 +300,7 @@ def verify(
         raise ConfirmTokenError("total_changed", _MSG_TOTAL_CHANGED)
     if claims.state.coupon_code != current.coupon_code:
         # 合計だけ見ていると、**割引額が 0 のクーポン**が有効→無効に変わった場合を素通し
-        # する（total が動かないため）。そのまま進むと place_order が失効したコードを
-        # create_order に渡し、下見をやり直す案内の無い生の 400 になる。
+        # する（total が動かない）。そのまま進むと create_order が生の 400 を返す。
         raise ConfirmTokenError("coupon_changed", _MSG_TOTAL_CHANGED)
     if not hmac.compare_digest(claims.state.address_hash, current.address_hash):
         raise ConfirmTokenError("address_changed", _MSG_ADDRESS_CHANGED)

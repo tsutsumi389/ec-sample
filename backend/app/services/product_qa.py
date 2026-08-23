@@ -1,15 +1,10 @@
 """商品ページの購入前Q&A。対象商品を固定し、その商品の説明文とレビューだけを根拠に
 LLM が質問へ回答する。
 
-アシスタント（assistant.py）と同じ設計思想を単一商品向けに簡素化したもの:
-- 構造化出力（Pydantic の JSON schema を format= に渡す）で answer / answerable を得る。
-- 例外はすべて握って warning ログ + フォールバック応答にする。この関数がユーザーに
-  500 を返すことはない（呼び出し側ルーターも 201 で返す前提）。
-- ハルシネーション対策として、根拠に無いことは推測させず answerable=false で
-  「商品情報からは判断できません」と正直に答えさせる。
-
-商品横断の候補検索（get_candidates）は不要で、対象商品の description + reviews を
-プロンプトへ直接注入する。埋め込み検索も使わない（単一商品のため）。
+例外はすべて握って warning ログ + フォールバック応答にする。この関数がユーザーに 500 を
+返すことはない（呼び出し側ルーターも 201 で返す前提）。根拠に無いことは推測させず、
+answerable=false で正直に答えさせる。商品横断の候補検索も埋め込み検索も使わない
+（単一商品のため、description + reviews をプロンプトへ直接注入する）。
 """
 
 import logging
@@ -148,7 +143,6 @@ def answer_question(db: Session, product: Product, question_text: str) -> QAResu
 
         answer = (parsed.answer or "").strip()[:_ANSWER_MAX_LEN]
         if not answer:
-            # 本文が空なら定型フォールバックに落とす。
             return _fallback()
         return QAResult(
             source="llm", answer=answer, answerable=bool(parsed.answerable)

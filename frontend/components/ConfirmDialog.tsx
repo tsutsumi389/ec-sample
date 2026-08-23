@@ -21,8 +21,8 @@ interface ConfirmDialogProps {
 const dangerConfirmClass = btn('danger', 'md');
 
 /**
- * 確認ダイアログ。Esc・オーバーレイクリックで onCancel、開いたら確認ボタンにフォーカス、
- * Tab は内部で循環（簡易フォーカストラップ）。danger 時は確認ボタンを赤系にする。
+ * 確認ダイアログ。Esc・オーバーレイクリックで onCancel、開いたら確認ボタンにフォーカスし、
+ * Tab は内部で循環させる。
  */
 export default function ConfirmDialog({
   open,
@@ -39,11 +39,10 @@ export default function ConfirmDialog({
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const descId = useId();
-  // 出現時の scale+opacity トランジション用
   const [entered, setEntered] = useState(false);
 
-  // Escape・Tab の循環・トリガーへのフォーカス復帰は共有フックが持つ。
-  // 開いた瞬間（false→true 遷移時）だけ確認ボタンへフォーカスするのも initialFocus に委ねる。
+  // Escape・Tab の循環・トリガーへのフォーカス復帰・開いた瞬間の初期フォーカスは
+  // すべて共有フックが持つ（ここで addEventListener を足さないこと）。
   useFocusTrap(dialogRef, {
     active: open,
     onEscape: onCancel,
@@ -51,7 +50,6 @@ export default function ConfirmDialog({
     restoreFocus: true,
   });
 
-  // 出現時のトランジション。次フレームで entered を立てる。
   useEffect(() => {
     if (!open) {
       setEntered(false);

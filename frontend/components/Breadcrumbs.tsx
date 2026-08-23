@@ -7,9 +7,8 @@ export interface BreadcrumbItem {
 }
 
 /**
- * パンくずリスト。最後の要素を現在地（aria-current="page"）として扱う。
+ * パンくずリスト。最後の要素を現在地（aria-current="page"）として扱い、リンクにしない。
  * 余白（mb 等）は呼び出し側で付与する。
- * 誌面の「柱」として細い字面（text-caption）と薄い区切りで軽く置き、見出しの邪魔をしない。
  */
 export default function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
   if (items.length === 0) return null;

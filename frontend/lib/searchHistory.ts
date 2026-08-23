@@ -7,7 +7,7 @@
 const STORAGE_KEY = 'hibino:search-history';
 const MAX_ITEMS = 5;
 
-/** 履歴として妥当なキーワードか（空文字・空白のみは弾く）。 */
+/** 前後の空白を落とす。空になったキーワードは呼び出し側が弾く。 */
 function normalize(term: string): string {
   return term.trim();
 }
@@ -62,7 +62,6 @@ export function removeSearchHistory(term: string): string[] {
   }
 }
 
-/** 履歴をすべて消去する。 */
 export function clearSearchHistory(): string[] {
   if (typeof window === 'undefined') return [];
   try {

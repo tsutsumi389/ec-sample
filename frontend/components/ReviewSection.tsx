@@ -110,7 +110,6 @@ export default function ReviewSection({ productId, avgRating, reviewCount }: Rev
         }
       />
 
-      {/* サマリーヘッダ: 平均点の大きな表示 + 星 + 件数。右に星ごとの分布を並べる。 */}
       <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-10">
         <div className="flex shrink-0 items-center gap-4">
           <div className="flex items-baseline gap-1">

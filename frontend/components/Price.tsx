@@ -5,7 +5,7 @@ export type PriceSize = 'sm' | 'base' | 'lg' | 'xl' | '3xl' | 'num-lg' | 'featur
  * 価格だけ素の目盛りに逃げていると、本文・見出しと行送りの基準が揃わず、
  * カードの中で価格行だけ別の版面規則で組まれているように見えるため。
  *
- * 段は3つしかない:
+ * 段は4つに閉じる:
  *   caption(13px) … 明細の単価・打ち消しの定価
  *   body(15px)    … 明細・レコメンドの本文級
  *   h3(18px)      … 商品カード・関連商品・購入バーの主価格
@@ -15,10 +15,9 @@ const SIZE_CLASSES: Record<PriceSize, string> = {
   sm: 'text-caption',
   base: 'text-body',
   lg: 'text-h3',
-  // 旧 text-xl。h3 の段に畳んだ（18px と 20px の差は価格の階層として意味を持たない）。
+  // xl は h3 に畳んである（18px と 20px の差は価格の階層として意味を持たない）。
   xl: 'text-h3',
   '3xl': 'text-num-lg',
-  // 表紙・合計金額など「金額そのものが主役」の場所用（clamp 24→32px）
   'num-lg': 'text-num-lg',
   // 新着グリッドの大判カード専用。lg 未満ではセル幅が通常カードと同じになるため、
   // 通常カードと同じ h3 に落とす（大きいままだと 169px 幅で定価が折り返し、
@@ -31,9 +30,8 @@ export type PriceTone = 'default' | 'onDark' | 'inherit';
 interface PriceProps {
   /** 表示する金額（円）。¥ と桁区切りはこのコンポーネントが付与する。 */
   value: number;
-  /** ページ内での見た目のサイズ（商品カード=lg、商品詳細=3xl 等）。 */
   size?: PriceSize;
-  /** 合計金額など、通常価格より強調したい場合に true にする。色・太さの強調ルールを統一するためのフラグ。 */
+  /** 合計金額など、通常価格より強調する（font-bold）。 */
   strong?: boolean;
   /**
    * 打ち消しの定価など「主でない金額」。文字色を一段落とし、太さも通常に戻す。
@@ -71,14 +69,12 @@ const TONE_CLASSES: Record<PriceTone, { text: string; symbol: string; muted: str
 
 /**
  * 金額表示を統一するための共通コンポーネント。
- * 色・太さの体系: 価格・金額は text-ink で統一（brand 塗りは CTA 専用のため）。
- * 通常価格は font-semibold、合計金額（strong）は font-bold。サイズは呼び出し側の文脈に応じて変える。
+ * 色は text-ink に統一する（brand 塗りは CTA 専用のため）。通常価格は font-semibold、
+ * 合計金額（strong）は font-bold。
  *
- * 組版の体系:
- * - `.tnum`（font-num + tabular-nums）を必ず効かせる。カードや明細で価格が縦に並んだとき、
- *   桁位置が揃って「表」に見えるかどうかがこのコンポーネントの主目的。
- * - 通貨記号は数字より一段小さく・淡くして、数字そのものを主役にする。
- *   **打ち消しの定価もここを通すこと**（直書きすると ¥ だけ素の全角で入る）。
+ * `.tnum`（font-num + tabular-nums）を必ず効かせる。カードや明細で価格が縦に並んだとき、
+ * 桁位置が揃って「表」に見えるかどうかがこのコンポーネントの主目的。
+ * **打ち消しの定価もここを通すこと**（直書きすると ¥ だけ素の全角で入る）。
  */
 export default function Price({
   value,

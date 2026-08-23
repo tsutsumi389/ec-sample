@@ -3,9 +3,8 @@
 クライアントからのバッチ受信（/api/events）と、サーバー側から直接記録する経路
 （注文確定など）の両方をここに集約する。
 
-イベントは実験に紐づけずそのまま貯める。実験の集計は experiment_report.py が
-曝露テーブルと JOIN して行う。この分離のおかげで、実験を始める前から貯まっている
-ログに対しても、あとから思いついた指標で分析できる。
+イベントは実験に紐づけずそのまま貯める（集計は experiment_report.py が曝露テーブルと
+JOIN する）。実験を始める前から貯まっているログにも、あとから思いついた指標を当てられる。
 """
 
 import logging
@@ -35,10 +34,9 @@ EVENT_BEGIN_CHECKOUT = "begin_checkout"
 EVENT_PURCHASE = "purchase"
 
 # 既定のファネル。管理画面の結果表示で各段の到達率を枝ごとに比較する。
-# 段は「訪問 → 商品を見た → カートに入れた → カートを開いた → 確定操作 → 購入」。
-# view_item と view_cart はフロントの track() だけが記録する（サーバー側で確定できる
-# 事実ではないため）。重要指標である add_to_cart / purchase はサーバー側が正で、
-# ゲストのカート投入だけは例外的にフロントが記録する（cart.py の add_cart_item 参照）。
+# view_item / view_cart はフロントの track() だけが記録する（サーバー側で確定できる事実
+# ではないため）。add_to_cart / purchase はサーバー側が正で、ゲストのカート投入だけが
+# 例外的にフロント記録（cart.py の add_cart_item 参照）。
 DEFAULT_FUNNEL = (
     EVENT_PAGE_VIEW,
     EVENT_VIEW_ITEM,

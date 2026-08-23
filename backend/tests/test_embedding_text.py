@@ -20,7 +20,6 @@ def _product(**kwargs) -> Product:
 
 class TestBuildProductText:
     def test_includes_specs_as_one_line(self):
-        # 仕様は「項目名 値」を読点で連ねた1行にまとまる。
         product = _product(
             specs=[
                 ProductSpec(label="容量", value="500mL", sort_order=0),
@@ -37,7 +36,6 @@ class TestBuildProductText:
         assert "仕様" not in text
 
     def test_keeps_existing_parts(self):
-        # 既存の4行（商品名・カテゴリ・説明・価格帯）は仕様の有無に関わらず出る。
         product = _product(
             category=Category(name="日用品", slug="daily-goods"),
             specs=[ProductSpec(label="素材", value="ステンレス鋼", sort_order=0)],
@@ -49,6 +47,5 @@ class TestBuildProductText:
         assert "価格帯: 手頃な価格帯（¥1,500）" in text
 
     def test_uses_effective_price_band(self):
-        # 価格帯は実売価格（sale_price があればそれ）で判定する。
         product = _product(price=8000, sale_price=1800)
         assert "価格帯: 手頃な価格帯（¥1,800）" in embedding.build_product_text(product)
