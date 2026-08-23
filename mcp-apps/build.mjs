@@ -1,32 +1,23 @@
 // MCP Apps の View（iframe の中身）を単一ファイル HTML として組み立てる。
 //
-// **なぜ vite build を直接叩かず、このスクリプトが要るのか。**
-// vite-plugin-singlefile は output.codeSplitting を落とすため、1回のビルドで
-// 扱えるエントリは1つだけ（複数入力を渡すと Rolldown が INVALID_OPTION で落ちる）。
-// かといって codeSplitting を戻すと、プラグインが共有チャンクを消したまま HTML に
-// 差し込まない「壊れているのに成功扱い」の成果物が出る。そこでエントリごとに
-// vite の JS API を呼び分ける。npm scripts に `vite build && vite build` と
-// 並べないのは、--watch を同じ形で扱いたいから（`&&` では1本目が終わらない）。
+// **なぜ vite build を直接叩かず、このスクリプトが要るのか。** vite-plugin-singlefile が
+// codeSplitting を落とすため、1回のビルドで扱えるエントリは1つだけ（理由は
+// vite.config.ts のコメント）。npm scripts に `vite build && vite build` と並べないのは、
+// --watch を同じ形で扱いたいから（`&&` では1本目が終わらない）。
 //
-// **エントリの一覧を持つのはこのファイルだけ。** 「dist に何が揃っていなければ
-// ならないか」は scripts/check-dist.ts がこの一覧から `${entry}.html` として導出する
-// （MCP_APP_ENTRIES → vite.config.ts → checkDistPlugin({ entries })）。以前は
-// check-dist.ts 側にもファイル名を並べていたが、あちらは期待するファイルを1枚ずつ
-// 読むだけでディレクトリを列挙しないため、**ここにだけ足して向こうを忘れた場合は
-// ビルドが緑のまま通ってしまう**（新しい View が黙って検査を素通りする）。
+// **エントリの一覧を持つのはこのファイルだけ。** scripts/check-dist.ts はこの一覧から
+// `${entry}.html` を導出する（MCP_APP_ENTRIES → vite.config.ts → checkDistPlugin）。
+// あちらにも並べると、**ここにだけ足して向こうを忘れた場合にビルドが緑のまま通る**
+// （あちらは期待するファイルを1枚ずつ読むだけでディレクトリを列挙しないため）。
 //
-// **dist を消す処理をここに足さないこと。** ビルドは毎回同じ2つのファイル名を
-// 上書きするだけなので溜まるものが無く、消すと「backend が読みに行った一瞬だけ
-// dist が空」という窓ができる（backend は UI を諦めて素のツール登録に落ちる）。
-// vite 側の emptyOutDir も同じ理由で false 固定にしてある（vite.config.ts 参照）。
+// **dist を消す処理をここに足さないこと**（vite の emptyOutDir: false と同じ理由。
+// 「backend が読みに行った一瞬だけ dist が空」という窓ができる）。
 
 import { build } from "vite";
 
 const ENTRIES = ["search", "product"];
 const WATCH = process.argv.includes("--watch");
 
-// dist に揃っているべき成果物を check-dist.ts が導出するための一覧（上記）。
-// ループの外で1回だけ渡す。
 process.env.MCP_APP_ENTRIES = ENTRIES.join(",");
 
 try {

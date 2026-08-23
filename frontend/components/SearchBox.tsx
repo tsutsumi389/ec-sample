@@ -45,13 +45,10 @@ const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 250;
 
 /**
- * プレースホルダは「文字が切れない一番長い版」を実測で選ぶ。
- *
- * ヘッダーの検索欄は flex-1 で、ログイン状態（ナビの項目数）とビューポート幅の
- * 掛け合わせで幅が 190px〜670px まで動く。固定文にすると必ずどこかで
- * 「…雨の日に便利ﾅ」のように 1 文字ぶった切られて不良表示に見えるため、
- * ブレークポイントではなく入力欄の実幅（＝ ResizeObserver の contentRect）で
- * 出し分ける。しきい値は各文言の実測レンダリング幅に余裕を足した値。
+ * プレースホルダは「文字が切れない一番長い版」を実測で選ぶ。ヘッダーの検索欄は flex-1 で、
+ * ログイン状態（ナビの項目数）とビューポート幅の掛け合わせで幅が 190px〜670px まで動くため、
+ * 固定文にすると必ずどこかで「…雨の日に便利ﾅ」と 1 文字ぶった切られる。ブレークポイントでは
+ * なく入力欄の実幅で出し分け、しきい値は各文言の実測レンダリング幅に余裕を足した値にする。
  */
 const PLACEHOLDERS = [
   { minTextWidth: 372, text: '商品名や雰囲気で検索（例: 雨の日に便利なもの）' },
@@ -62,9 +59,9 @@ const PLACEHOLDERS = [
 const DEFAULT_PLACEHOLDER = PLACEHOLDERS[1].text;
 
 /**
- * ドロップダウンに並ぶ選択肢のフラットなモデル。
- * 履歴・キーワード候補・商品候補が混在するため、種別付きの 1 次元配列に正規化し、
- * ↑↓ / Enter / aria-activedescendant がどの種別でも同じインデックスで一貫して動くようにする。
+ * ドロップダウンに並ぶ選択肢のフラットなモデル。履歴・キーワード候補・商品候補が混在するので
+ * 種別付きの 1 次元配列に正規化し、↑↓ / Enter / aria-activedescendant がどの種別でも
+ * 同じインデックスで動くようにする。
  * 見出し（「最近の検索」「商品」）はこの配列には含めない（＝キーボードで止まらない）。
  */
 type Option =
@@ -73,12 +70,8 @@ type Option =
   | { kind: 'product'; product: SuggestProduct };
 
 /**
- * 検索窓 + サジェスト（履歴・キーワード・商品ダイレクト候補）。
- *
- * WAI-ARIA の combobox パターンに準拠する:
- * - 入力は role="combobox"、候補リストは role="listbox"、各候補は role="option"
- * - ↑↓ で候補を移動、Enter で確定（未選択なら入力値で検索）、Esc で閉じる
- * - aria-activedescendant で「今どの候補がアクティブか」を支援技術へ伝える
+ * 検索窓 + サジェスト（履歴・キーワード・商品ダイレクト候補）。WAI-ARIA の combobox
+ * パターンに準拠する。
  *
  * キーワード候補・商品候補は入力中に GET /products/suggest から取得する。
  * 2 文字未満のときは代わりに localStorage の検索履歴を出す。
@@ -124,10 +117,8 @@ export default function SearchBox({
   const optionId = (index: number) => `${listboxId}-opt-${index}`;
 
   const trimmedQuery = query.trim();
-  // 2 文字未満のときは履歴モード（＝「最近の検索」を出す）。
   const isHistoryMode = trimmedQuery.length < MIN_QUERY_LENGTH;
 
-  // ドロップダウンの選択肢を種別付きのフラット配列へ正規化する。
   // 履歴モードなら履歴だけ、通常モードならキーワード候補 → 商品候補の順に並べる。
   const options = useMemo<Option[]>(() => {
     if (isHistoryMode) {
@@ -200,9 +191,7 @@ export default function SearchBox({
     if (autoFocus) inputRef.current?.focus();
   }, [autoFocus]);
 
-  // 入力欄の実幅を監視してプレースホルダの版を切り替える。
-  // ヘッダーの検索欄はナビの項目数（ログイン状態）でも幅が変わるので、
-  // メディアクエリではなく実測でないと「文字の途中で切れる」を潰せない。
+  // 入力欄の実幅を監視してプレースホルダの版を切り替える（理由は PLACEHOLDERS の項）。
   useEffect(() => {
     const el = inputRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -261,7 +250,6 @@ export default function SearchBox({
     onSubmitted?.();
   };
 
-  // 選択肢の確定。商品候補は詳細ページへ、それ以外（履歴・キーワード）は検索を実行する。
   const selectOption = (opt: Option) => {
     if (opt.kind === 'product') {
       setOpen(false);
@@ -275,7 +263,6 @@ export default function SearchBox({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    // 候補をハイライト中ならその候補で、そうでなければ入力値そのままで検索する。
     if (activeIndex >= 0 && options[activeIndex]) {
       selectOption(options[activeIndex]);
       return;
@@ -322,7 +309,7 @@ export default function SearchBox({
     }
   };
 
-  // × ボタン: 入力をクリアしてフォーカスを戻す。空欄フォーカス状態になるので履歴を出す。
+  // × ボタン。クリア後は空欄フォーカス状態になるので、閉じずに履歴を出す。
   const handleClear = () => {
     setQuery('');
     setSuggestions([]);
@@ -409,7 +396,7 @@ export default function SearchBox({
           aria-label="検索候補"
           className="absolute left-0 right-0 top-full z-40 mt-2 max-h-96 overflow-y-auto rounded-xl bg-surface py-1.5 shadow-float"
         >
-          {/* 履歴モードの見出し（「最近の検索」＋全消去）。option ではないので role=presentation。 */}
+          {/* 見出しは option ではないので role=presentation（＝キーボードで止まらない）。 */}
           {isHistoryMode && (
             <li
               role="presentation"

@@ -9,7 +9,6 @@ import { btn } from '@/lib/buttonStyles';
  *
  * 造形は HomeBillboard と同じ「表紙」の型（深緑フルブリード・背面の裁ち落とし線画・
  * 左6カラムの縦組み見出し）に揃えてある。フォールバックだけ別の世界観にならないようにするため。
- * かつて内包していた装飾イラストは BrandMotifs.tsx に線画として切り出し済み。
  */
 export default function BrandHero() {
   return (
@@ -43,9 +42,8 @@ export default function BrandHero() {
         </div>
 
         {/* 右: 棚。署名帯と同じ「1本の水平罫＋非等間隔の3点」を暗い面で反復する。
-            3点の高さは同じ数字（h-24 md:h-32）で揃える。BrandMotifs の viewBox が
-            120×120 の正方形・接地線 y=108 に統一されているので、これで光学サイズも
-            接地も揃う（署名帯・フッター・ログインと同じ規律）。 */}
+            3点の高さは同じ数字を渡す（BrandMotifs の viewBox が正方形・接地線 y=108 に
+            統一されているので、それだけで光学サイズも接地も揃う）。 */}
         <div aria-hidden className="mt-12 lg:col-span-5 lg:col-start-8 lg:mt-0">
           <div className="stagger relative h-36 border-b border-brand-400/40 [--stagger-step:90ms] md:h-44">
             <KettleMotif className="pointer-events-none absolute bottom-0 left-[0%] h-24 select-none text-brand-300 animate-rise md:h-32" />

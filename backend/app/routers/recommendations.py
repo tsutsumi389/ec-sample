@@ -37,7 +37,6 @@ def home_recommendations(
     current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ) -> RecommendationListOut:
-    # 未ログイン: 人気順フォールバックのみ（生成はしない）。
     if current_user is None:
         return _fallback(db, limit, exclude_ids=None)
 
@@ -55,7 +54,6 @@ def home_recommendations(
             ),
         )
 
-    # ここから: キャッシュ無し/陳腐化。人気順フォールバックを即返し、必要なら生成起動。
     # プロフィールが作れない（行動なし/埋め込み欠損）なら生成しても失敗するだけなので起動しない。
     # 多重起動と失敗クールダウンの判定は _schedule_generation が advisory ロックの下で
     # 行うので、ここで先に state を読んで判定し直さない（ロック外で読んだ値は権威が無い）。
@@ -75,11 +73,10 @@ def _schedule_generation(
 ) -> None:
     """多重起動を防ぎつつ LLM 生成タスクを起動する。
 
-    BackgroundTasks はレスポンス返却後に走るため、generating がコミットされる前に
-    届いた同一ユーザの並行リクエストが二重に生成をスケジュールし得る。PostgreSQL の
-    advisory ロックで同一ユーザのスケジューリングを直列化し、ロック下で state を
-    読み直して generating を同期確定させることで TOCTOU 競合と重複生成を防ぐ。
-    ロックが取れない（＝他リクエストが処理中）ならスキップする。
+    BackgroundTasks はレスポンス返却後に走るため、generating がコミットされる前に届いた
+    同一ユーザの並行リクエストが二重に生成をスケジュールし得る。advisory ロックで直列化し、
+    ロック下で state を読み直して generating を同期確定させることで TOCTOU 競合を防ぐ
+    （ロックが取れない＝他リクエストが処理中ならスキップする）。
     """
     got_lock = db.execute(
         text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": user_id}
@@ -90,7 +87,6 @@ def _schedule_generation(
     state = db.get(RecommendationState, user_id, populate_existing=True)
     if not _should_generate(state):
         return
-    # レスポンス返却前に generating を同期確定させ、後続リクエストの二重起動を防ぐ。
     recommendation.mark_generating(db, user_id, profile_hash)
     background_tasks.add_task(recommendation.generate_for_user, SessionLocal, user_id)
 
@@ -106,7 +102,6 @@ def _should_generate(state: RecommendationState | None) -> bool:
         return True
     if state.status not in ("generating", "failed"):
         return True
-    # 状態が最後に更新された時刻を基準に「新しさ」を判断する。
     marker = state.updated_at or state.generated_at
     if marker is None:
         return True

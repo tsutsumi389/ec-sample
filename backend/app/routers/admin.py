@@ -44,15 +44,11 @@ def _refresh_embedding_task(product_id: int) -> None:
 
 
 def _rebuild_embeddings_task() -> None:
-    """全商品の埋め込み + セマンティックID を強制再構築する（rebuild 用）。"""
     db = SessionLocal()
     try:
         embedding.sync_embeddings(db, force=True)
     finally:
         db.close()
-
-
-# ---------- Products ----------
 
 
 @router.get("/products", response_model=list[ProductOut])
@@ -136,7 +132,6 @@ def update_product(
 
     db.commit()
     db.refresh(product)
-    # 商品テキストが変わった可能性があるので埋め込みを非同期で更新する。
     background_tasks.add_task(_refresh_embedding_task, product.id)
     return product
 
@@ -147,14 +142,10 @@ def delete_product(product_id: int, db: Session = Depends(get_db)) -> Product:
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
 
-    # 物理削除はせず archived に落とす（論理削除。過去注文のスナップショットは不変）。
     product.status = "archived"
     db.commit()
     db.refresh(product)
     return product
-
-
-# ---------- Recommendations ----------
 
 
 @router.post("/recommendations/rebuild", status_code=status.HTTP_202_ACCEPTED)
@@ -165,9 +156,6 @@ def rebuild_recommendations(background_tasks: BackgroundTasks) -> dict[str, str]
     """
     background_tasks.add_task(_rebuild_embeddings_task)
     return {"status": "started"}
-
-
-# ---------- Orders ----------
 
 
 @router.get("/orders", response_model=list[AdminOrderOut])
@@ -198,15 +186,9 @@ def update_order_status(
     return order
 
 
-# ---------- Users ----------
-
-
 @router.get("/users", response_model=list[AdminUserOut])
 def list_users(db: Session = Depends(get_db)) -> list[User]:
     return db.query(User).order_by(User.id).all()
-
-
-# ---------- Categories ----------
 
 
 @router.get("/categories", response_model=list[CategoryOut])
@@ -269,9 +251,6 @@ def delete_category(category_id: int, db: Session = Depends(get_db)) -> Category
     db.delete(category)
     db.commit()
     return result
-
-
-# ---------- Coupons ----------
 
 
 @router.get("/coupons", response_model=list[CouponOut])

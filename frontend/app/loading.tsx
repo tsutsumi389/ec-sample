@@ -4,14 +4,10 @@ import Spinner from '@/components/Spinner';
 /**
  * ルート境界の読み込み画面（Next.js の loading boundary）。
  *
- * 各ページはクライアント側で取得するので、ふだん出るのはこの画面ではなく
- * それぞれの器に合わせたスケルトン（components/Skeleton.tsx）。ここが出るのは
- * ルートのコードを取りに行っているあいだで、**どのページになるかまだ分からない**。
- * したがって特定の版面を模したスケルトンは置けない。
- *
- * 造形は components/EmptyState.tsx / components/ErrorNotice.tsx と同じ縦積み
- * （線画 → 棚の罫 → 明朝の見出し）にして、空・エラー・読み込み中の3つを1系統に保つ。
- * 帯の丈（band-xl）も app/not-found.tsx と揃えるので、遷移で版面が跳ねない。
+ * 各ページはクライアント側で取得するので、ふだん出るのはそれぞれの器に合わせた
+ * スケルトン（components/Skeleton.tsx）。ここが出るのはルートのコードを取りに行って
+ * いるあいだで、**どのページになるかまだ分からない**＝特定の版面は模せない。
+ * 造形と帯の丈（band-xl）は EmptyState / ErrorNotice / not-found と揃える（遷移で跳ねない）。
  */
 export default function Loading() {
   return (

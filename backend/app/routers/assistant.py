@@ -39,8 +39,8 @@ _MAX_MESSAGES = 50
 def _listed_products_by_ids(db: Session, ids: Sequence[int]) -> dict[int, Product]:
     """公開中の商品だけを ID の集合から 1 クエリで引く。
 
-    status はクエリに添える（CLAUDE.md の規律。Python 側で弾く形にすると、
-    次にこのループへ手を入れた人が絞りを落としても誰も気づけない）。
+    status は Python 側で弾かずクエリに添える（弾く形にすると、次にこのループへ
+    手を入れた人が絞りを落としても誰も気づけない）。
     """
     if not ids:
         return {}
@@ -66,9 +66,8 @@ def _load_conversation(
     """会話を取得し所有チェックする。存在しない/他人のものは 404。
 
     - ログインユーザーの会話（user_id あり）→ 本人のみアクセス可（他人は 404）。
-    - ゲスト会話（user_id NULL）→ UUID を知っていることが認可（サンプルアプリとして許容）。
-      本番想定なら UUID 保持だけでは不十分で、署名付きセッション（HttpOnly Cookie 等）で
-      ゲスト会話を端末に束縛する必要がある。ここではサンプルのため UUID 認可に留める。
+    - ゲスト会話（user_id NULL）→ UUID を知っていることが認可。本番想定なら署名付き
+      セッション（HttpOnly Cookie 等）で端末に束縛する必要があるが、サンプルのため留める。
 
     attach=True かつログイン済みのとき、ゲスト会話に user_id を紐付けて引き継ぐ。
     """
@@ -84,7 +83,6 @@ def _load_conversation(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
             )
     elif attach and current_user is not None:
-        # ゲスト会話中にログインした。以降は本人の会話として紐付ける（引き継ぎ）。
         conv.user_id = current_user.id
     return conv
 
@@ -106,7 +104,6 @@ def chat(
     current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ) -> AssistantChatOut:
-    # 会話の取得/作成。conversation_id が null なら新規作成する。
     if payload.conversation_id is None:
         conv = AssistantConversation(
             id=str(uuid.uuid4()),
@@ -128,7 +125,6 @@ def chat(
                 detail="Conversation message limit reached",
             )
 
-    # ユーザーメッセージを永続化する。
     db.add(
         AssistantMessage(
             conversation_id=conv.id,
@@ -140,7 +136,6 @@ def chat(
     )
 
     # LLM 応答（失敗時はフォールバック）を生成する。ここは 500 を出さない。
-    # ログインユーザーは行動履歴をプロンプトに注入する。ゲストは None で従来どおり。
     # page_context（いま開いている画面）は**メッセージごと**に受け取る。接岸したサイドバーは
     # ページ遷移で閉じないので、1 つの会話の途中で見ている画面が変わる（会話に紐づけると
     # 3 画面渡り歩いたあとの「これ」が最初の商品を指し続ける）。商品の実体はサービス側が
@@ -153,7 +148,6 @@ def chat(
         page_context=payload.page_context,
     )
 
-    # assistant メッセージを永続化する（提案商品IDと生成元を保存）。
     product_ids = [p.id for p, _ in result.products]
     db.add(
         AssistantMessage(
@@ -198,8 +192,6 @@ def list_messages(
 
     # 商品と評価は全メッセージぶんを先に 1 回ずつ引く。メッセージごとに引くと、
     # 会話上限 50（= assistant 行は最大 25）× 提案件数ぶんの往復になる。
-    # 非公開化された商品は _listed_products_by_ids のクエリ側で落ちるので、
-    # 見つからなければそのままカードから除かれる。
     all_ids = [
         pid
         for msg in messages
@@ -219,7 +211,6 @@ def list_messages(
             role=msg.role,
             content=msg.content,
             source=msg.source,
-            # 保存順を維持しつつ、いま公開中のものだけを並べる。
             products=[
                 card_by_id[pid]
                 for pid in (msg.product_ids or [])

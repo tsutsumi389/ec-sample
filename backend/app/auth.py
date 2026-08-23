@@ -14,11 +14,10 @@ from app.models import User
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
-# HS256 は対称鍵。検証鍵と署名鍵が同一なので、鍵を知ることは「管理者トークンを発行できる」
-# ことと同義になる。既定値へのフォールバックを置くと、リポジトリを見た誰でも sub=1（シードの
-# 管理者）のトークンを偽造でき、しかもパスワード変更では締め出せない——失効判定
-# (_resolve_user_from_token) は iat と password_changed_at の比較であり、iat は発行側が
-# 選べるため。よって未設定・弱い鍵では **起動させない**（fail closed）。
+# HS256 は対称鍵なので、鍵を知ることは「管理者トークンを発行できる」ことと同義。既定値への
+# フォールバックを置くと誰でも sub=1（シードの管理者）のトークンを偽造でき、しかも失効判定
+# (_resolve_user_from_token) が iat 依存である以上パスワード変更では締め出せない。
+# よって未設定・弱い鍵では **起動させない**（fail closed）。
 _MIN_SECRET_LENGTH = 32
 # 過去に配布された既定値と、ありがちな仮置き。前方一致で弾く。
 _WEAK_SECRET_PREFIXES = ("dev-secret", "changeme", "change-me", "secret", "test", "password")
@@ -89,8 +88,7 @@ def _resolve_user_from_token(token: str, db: Session) -> User:
     user_id = payload.get("sub")
     # sub が数値でないトークンもここで 401 にする。int() の ValueError を素通しさせると、
     # 任意認証（get_current_user_optional / MCP の optional_user）が「HTTPException だけを
-    # 握って匿名に落とす」約束から外れ、そこだけ 500 になる。無効なトークンは経路を問わず
-    # 同じ扱いにする。
+    # 握って匿名に落とす」約束から外れ、そこだけ 500 になる。
     try:
         user = db.get(User, int(user_id)) if user_id is not None else None
     except (TypeError, ValueError):
@@ -133,9 +131,8 @@ def get_current_user_optional(
     try:
         return _resolve_user_from_token(credentials.credentials, db)
     except HTTPException:
-        # 期限切れ・失効・削除済みトークンでも 401 を投げず匿名として扱う。
         # 任意認証エンドポイント（/recommendations/home 等）がフォールバック応答を
-        # 返し続けられるようにするため（暗黙ログアウトやセクション消失を防ぐ）。
+        # 返し続けられるよう、期限切れ・失効・削除済みでも 401 を投げず匿名扱いにする。
         return None
 
 
@@ -150,9 +147,8 @@ def get_visitor_id(
 ) -> str | None:
     """A/Bテストの割り当て単位・行動ログの識別子。無効／未指定なら None。
 
-    ログイン前でも一貫した識別が必要なため user_id ではなくこちらを単位にする
-    （EC ではカート投入までの大半が未ログインで、user_id 単位にするとその区間の
-    効果が丸ごと測れなくなる）。認証には一切使わない、あくまで計測用の識別子。
+    user_id ではなくこちらを単位にするのは、EC ではカート投入までの大半が未ログインで、
+    user_id 単位にするとその区間の効果が丸ごと測れなくなるため。認証には一切使わない。
     """
     if x_visitor_id is None:
         return None

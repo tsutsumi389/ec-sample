@@ -75,7 +75,7 @@ def create_question(
             status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
         )
 
-    # AI 回答を生成する（Ollama 失敗時は source="fallback" で返る。500 は出さない）。
+    # Ollama 失敗時も source="fallback" で返る（ここで 500 は出さない）。
     result = product_qa.answer_question(db, product, payload.question)
 
     question = ProductQuestion(

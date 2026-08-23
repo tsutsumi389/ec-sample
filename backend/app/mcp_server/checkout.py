@@ -6,19 +6,17 @@ LLM が「渡す値を書き換える」経路そのものを消すのが安全�
 
 **この安全弁が守るのは「整合性」だけで、「ユーザーの同意」ではない。** トークンを受け取る
 のは LLM 自身なので、モデルは preview_checkout → place_order を人間を介さず 1 ターンで
-続けて呼べる。実際に人間を挟んでいるのは MCP ホスト（Claude Code など）のツール承認 UI
-であって、サーバー側の保証ではない——ユーザーが place_order を許可リストに入れた時点で
-その関門は消える。トークンが保証するのは「下見で組んだ姿と確定する姿が同一であること」
-（カート・金額・配送先・クーポンが下見の時点から動いていないこと）に限られる。
-「MCP からの購入は安全弁があるから承認不要」と読み替えないこと。
+続けて呼べる（人間を挟んでいるのは MCP ホストのツール承認 UI であって、サーバー側の保証
+ではない。許可リストに入れた時点でその関門は消える）。トークンが保証するのは「下見で組んだ
+姿と確定する姿が同一であること」だけ。「MCP からの購入は安全弁があるから承認不要」と
+読み替えないこと。
 
 金額は cart._get_cart（= effective_price）と coupons.evaluate_coupon にだけ作らせる。
 **ここで価格・割引の式を書かないこと。** トークンに載る合計は照合値であって指示値では
 ないので、確定する金額は create_order が effective_price から計算した値そのものになる。
 
-visitor_id は常に None を渡す（MCP 経由の購入は analytics_events に載らない）。理由は
-tools.py の docstring に書いたとおりで、合成 ID がファネルを汚すのを避けるため。A/B の
-CV から MCP 経由の購入が抜けることは意図的な欠測。
+visitor_id は常に None を渡す（理由は tools.py の docstring）。A/B の CV から MCP 経由の
+購入が抜けることは意図的な欠測。
 """
 
 import logging
@@ -47,9 +45,8 @@ from app.schemas import OrderCreate, OrderDetailOut
 
 logger = logging.getLogger(__name__)
 
-# 確認トークン専用の鍵。app.auth を import した時点で SECRET_KEY の fail closed 検査
-# （未設定・短すぎ・既知の弱い値なら起動を止める）は済んでいる。ここで既定値や
-# フォールバックを持たせないこと。
+# 確認トークン専用の鍵。app.auth を import した時点で SECRET_KEY の fail closed 検査は
+# 済んでいる。ここで既定値やフォールバックを持たせないこと。
 _KEY = confirm.signing_key(SECRET_KEY)
 
 # LLM への次の指示。**静的文字列にする**（商品名など未信頼のテキストを混ぜない）。
@@ -99,9 +96,8 @@ class Quote:
         ]
 
 
-# 配送先が決まらなかったことを表す唯一の値。この組み合わせ（登録済みでも自由入力でも
-# ない）は AddressRef としては不正で _parse が弾くが、この経路ではトークンを発行しない
-# ので外へ出ない。同じダミーを複数箇所で組み立てないためだけの定数。
+# 配送先が決まらなかったことを表す値。AddressRef としては不正な組み合わせ（登録済みでも
+# 自由入力でもない）で _parse が弾くが、この経路ではトークンを発行しないので外へ出ない。
 _NO_ADDRESS = confirm.AddressRef(address_id=0)
 
 
@@ -123,16 +119,14 @@ def _resolve_address(
     """配送先を決める。→ (トークンに焼く参照, 由来, 進めない理由)
 
     自由入力を受けるのは、シードのテストアカウントに配送先が 1 件も無く、登録済みだけに
-    絞ると一度も購入できないため。インジェクションに対する防御の本体は「preview が自由
-    文字列を拒むこと」ではなく「**place_order が住所引数を持たないこと**」で、preview の
-    出す住所はユーザーに提示され確認トークンに焼き込まれる。差し替えるには preview から
-    やり直す必要があり、そのとき新しい住所がユーザーの目に触れる。
+    絞ると一度も購入できないため。インジェクションへの防御の本体は「preview が自由文字列を
+    拒むこと」ではなく「**place_order が住所引数を持たないこと**」——差し替えるには preview
+    からやり直す必要があり、そのとき新しい住所がユーザーの目に触れる。
 
-    address_id と shipping_address が両方来たら登録済みを優先する（登録済みのほうが
-    ユーザー自身が過去に入力した確かな値なので）。
+    address_id と shipping_address が両方来たら登録済みを優先する（ユーザー自身が過去に
+    入力した確かな値なので）。
 
-    owned は呼び出し側が 1 回だけ引いて渡す（_quote にも同じものを渡すこと。ツール 1 回で
-    同じクエリを 2 度打たないための約束で、_categories と同じ流儀）。
+    owned は呼び出し側が 1 回だけ引いて渡す（_quote にも同じものを渡すこと）。
     """
     if address_id is not None:
         if address_id not in owned:
@@ -292,18 +286,15 @@ def place_order(confirm_token: str, *, ctx: Context) -> views.OrderDetail:
     """
     with tool_session() as db:
         user = require_user(ctx, db)
-        # 同一ユーザーの place_order を直列化する。create_order はカート明細を
-        # ロックせずに読むため、同時に 2 回叩かれると両方が同じ明細を見て二重注文に
-        # なり得る。負けた側は起床後に _quote が空カート（と進んだ last_order_id）を
-        # 見るので、指紋が一致せず create_order まで到達しない。
+        # 同一ユーザーの place_order を直列化する。create_order はカート明細をロックせずに
+        # 読むため、同時に 2 回叩かれると両方が同じ明細を見て二重注文になり得る。負けた側は
+        # 起床後に _quote が空カート（と進んだ last_order_id）を見るので指紋が一致しない。
         #
-        # **ロックするのは users の自分の行**であって、カート行でも商品行でもない。
-        # 既存の書き手はどちらも「商品行 → カート行」の順で掴む（orders.create_order は
-        # 商品を FOR UPDATE してから cart_item を delete し、services/cart.merge_lines も
-        # 商品が先）。ここでカート行を先に掴むと順序が交差し、ブラウザの注文・再注文と
-        # 同時に走ったときにデッドロックする。users の行はそのロック階層に一切参加して
-        # いない（商品行を持ったまま users を更新する経路が無い）ので、per-user の
-        # ミューテックスとして安全に使える。
+        # **ロックするのは users の自分の行**であって、カート行でも商品行でもない。既存の
+        # 書き手はどちらも「商品行 → カート行」の順で掴む（orders.create_order も
+        # services/cart.merge_lines も商品が先）ので、ここでカート行を先に掴むと順序が交差し、
+        # ブラウザの注文・再注文と同時に走ったときにデッドロックする。users の行はそのロック
+        # 階層に参加していないので、per-user のミューテックスとして安全に使える。
         # （申し送り: ブラウザのダブルサブミットは未対策のまま。直し方は orders.py の
         #  create_order 側に書いてある。直すときはここの users ロックも一緒に外すこと。）
         db.query(User).filter(User.id == user.id).with_for_update().one()
@@ -331,11 +322,10 @@ def place_order(confirm_token: str, *, ctx: Context) -> views.OrderDetail:
         detail = OrderDetailOut.model_validate(order)
         if detail.total_amount != claims.state.total_amount:
             # ユーザーが下見で確認した額と、create_order が実際に請求した額がずれた。
-            # トークンの照合は「トークンの額 vs いまの _quote の額」しか見ておらず
-            # （どちらも同じ式から出るので必ず一致する）、確定額との突き合わせは
-            # ここが唯一の場所になる。将来 create_order に送料や手数料が入ると、
-            # 下見は旧式の額を提示したまま別の額で注文が確定する——安全弁が素通しに
-            # なった証拠なので、必ず気づける形で残す。注文は確定済みなので取り消さない。
+            # トークンの照合は「トークンの額 vs いまの _quote の額」しか見ていない（どちらも
+            # 同じ式から出るので必ず一致する）ので、確定額との突き合わせはここが唯一の場所。
+            # 将来 create_order に送料や手数料が入ると安全弁が素通しになった証拠になるため、
+            # 必ず気づける形で残す。注文は確定済みなので取り消さない。
             logger.error(
                 "mcp place_order 金額不一致 user=%s order=%s confirmed=%s charged=%s nonce=%s",
                 user.id,

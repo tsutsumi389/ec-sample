@@ -2,10 +2,9 @@ import type { BadgeVariant } from '@/components/Badge';
 import type { ProductStatus } from '@/lib/types';
 
 /**
- * 「残り N点」で購入を急がせる在庫の上限。
- * StockLabel の分岐と、札を出すかどうかを決める呼び出し側の判定が**同じ数**を見るための唯一の源。
- * 以前は 5 が StockLabel・ProductCard・AssistantProductCard・商品詳細の4箇所に散っていて、
- * 変えると「札が出る条件」と「札の文言」がずれた。
+ * 「残り N点」で購入を急がせる在庫の上限。StockLabel の分岐と、札を出すかどうかを決める
+ * 呼び出し側の判定が**同じ数**を見るための唯一の源（4箇所に散らすと「札が出る条件」と
+ * 「札の文言」がずれる）。
  */
 export const LOW_STOCK_THRESHOLD = 5;
 
@@ -27,7 +26,6 @@ export function isLowStock(product: StockFacts): boolean {
 interface StatusMeta {
   /** 管理画面の状態カラム用ラベル（全状態）。 */
   adminLabel: string;
-  /** バッジ色。 */
   variant: BadgeVariant;
   /**
    * 店頭（商品カード・詳細）に表示するバッジ文言。
@@ -41,26 +39,22 @@ interface StatusMeta {
    */
   dimmed: boolean;
   /**
-   * 買えないときに商品ページで示す理由の一文。買える状態（on_sale）と、
-   * そもそも店頭に出ない状態（draft / archived）は null。
-   *
-   * 以前は商品ページが `Record<string, string>` のローカル表を持っていた。キーが
-   * ProductStatus ではないので状態を1つ足しても型が漏れを検出せず、無言で既定文
-   * （「この商品は現在購入いただけません。」）に落ちた。ここは Record<ProductStatus, …>
-   * なので、状態を足すとコンパイルが止まる。
+   * 買えないときに商品ページで示す理由の一文。買える状態（on_sale）と、そもそも店頭に
+   * 出ない状態（draft / archived）は null。Record<ProductStatus, …> で持つのは、ローカルの
+   * `Record<string, string>` 表だと状態を1つ足しても型が漏れを検出せず、無言で既定文
+   * （「この商品は現在購入いただけません。」）に落ちるため。
    */
   purchaseNotice: string | null;
 }
 
 /**
  * status を単一の源として、表示ラベル・色・図版の沈み方をここに集約する。
- * variant は Badge の新体系（brand / accent / neutral）で指定する。
- * 販売に関わる状態は brand、注意を促す状態は accent、それ以外は neutral。
+ * variant は Badge の体系（brand / accent / neutral）で、販売に関わる状態は brand、
+ * 注意を促す状態は accent、それ以外は neutral。
  *
- * ⚠ 呼び出し側で variant をハードコードしないこと。商品カード（図版の上）と
- *   関連商品（本文中）で同じ状態が別色になっていたのは、カード側が variant を
- *   捨てて invert を直書きしていたため。写真の上での可読性は Badge の
- *   `elevated`（縁＋影）で担保し、色はこの表の値をそのまま使う。
+ * ⚠ 呼び出し側で variant をハードコードしないこと。商品カード（図版の上）と関連商品
+ *   （本文中）で同じ状態が別色になっていたのは、カード側が variant を捨てて invert を
+ *   直書きしていたため。写真の上での可読性は Badge の `elevated`（縁＋影）で担保する。
  */
 export const PRODUCT_STATUS_META: Record<ProductStatus, StatusMeta> = {
   draft: {
@@ -108,20 +102,18 @@ export const PRODUCT_STATUS_META: Record<ProductStatus, StatusMeta> = {
 };
 
 /**
- * 在庫切れ（status は on_sale のまま stock が 0）の札。
- * status ではないので PRODUCT_STATUS_META には入らないが、**文言と色の源はここ1箇所**にする。
- * 以前はカードが invert（濃緑ベタ・白抜き）、関連商品行が neutral（無地）と別色だった。
- * 図版の上に重ねるときは Badge の `elevated`（縁＋影）だけを足し、色は変えない。
+ * 在庫切れ（status は on_sale のまま stock が 0）の札。status ではないので
+ * PRODUCT_STATUS_META には入らないが、**文言と色の源はここ1箇所**にする（散らすとカードと
+ * 関連商品行で別色になる）。図版の上に重ねるときは Badge の `elevated`（縁＋影）だけを
+ * 足し、色は変えない。
  */
 export const SOLD_OUT_BADGE = { label: '在庫切れ', variant: 'neutral' as BadgeVariant };
 
 /**
  * 買えない商品の「札」に出す文言と色。在庫切れ（status は on_sale のまま stock が 0）と
- * status 由来の状態を1つの分岐に畳む。
- *
- * お気に入り一覧・アシスタントの提案カード・商品ページが、同じ状態にそれぞれ
- * 「現在お取り扱いできません」「購入できません」「この商品は現在購入いただけません。」と
- * 3通りの言い方を持っていた。呼び出し側は purchasable が false のときだけこれを使う。
+ * status 由来の状態を1つの分岐に畳む。お気に入り一覧・アシスタントの提案カード・商品ページが
+ * 同じ状態に3通りの言い方を持っていたのを1つにするための関数。
+ * 呼び出し側は purchasable が false のときだけこれを使う。
  */
 export function unavailableBadge(product: {
   status: ProductStatus;

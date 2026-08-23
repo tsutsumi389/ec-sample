@@ -5,15 +5,12 @@
 
 原則:
   - **PII を入れない。** 商品系の出力にレビュアー名・氏名・住所は一切載せない。
-  - **`price` という名前のフィールドを出さない。** リポジトリ内で price は「定価」を
-    意味しており、実売価格を price という鍵で出すとフロント・バックエンド・MCP で同じ語が
-    別の意味になる。実売価格は必ず effective_price。例外は注文明細（OrderItem.price は
-    注文時点のスナップショットで、その意味で price が正しい）。
+  - **`price` という名前のフィールドを出さない。** リポジトリ内で price は「定価」であり、
+    実売価格は必ず effective_price。例外は注文明細（OrderItem.price は注文時点の
+    スナップショットで、その意味で price が正しい）。
   - **重いものは一覧に出さない**（description 全文 / 画像 / 仕様は詳細ツールだけ）。
-  - **「なぜ買えないか」を LLM に自作させない。** 文言は services/cart.py から引き、
-    ここに書き写さない。
-  - **金額を組み立てない。** 小計も合計もサーバーが effective_price から計算済み。
-    ここでの足し算は item_count（数量の合計）だけ。
+  - **「なぜ買えないか」を LLM に自作させない。** 文言は services/cart.py から引く。
+  - **金額を組み立てない。** ここでの足し算は item_count（数量の合計）だけ。
 """
 
 from datetime import datetime
@@ -169,7 +166,7 @@ class CheckoutPreview(BaseModel):
     discount_amount: int
     payable_amount: int
     coupon: CouponView | None = None
-    # _format_shipping_address の結果を mask_shipping_address に通したもの（電話番号だけ伏字）。
+    # format_shipping_address の結果を mask_shipping_address に通したもの（電話番号だけ伏字）。
     # 保存される文字列と確認トークンの指紋は伏せる前の全文で作る。
     shipping_address: str | None = None
     address_source: Literal["address_id", "shipping_address", "default"] | None = None
@@ -205,9 +202,6 @@ class OrderDetail(OrderSummary):
 
 class OrderListResult(BaseModel):
     items: list[OrderSummary]
-
-
-# ---- 変換 ---------------------------------------------------------------------
 
 
 def to_product_brief(product: ProductOut, category_name: str | None) -> ProductBrief:

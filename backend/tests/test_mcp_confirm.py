@@ -71,7 +71,7 @@ class TestSigningKey:
 
 class TestCartFingerprint:
     def test_same_lines_in_different_order_match(self):
-        # 明細の並び順はカートの同一性に関係しない（DB の返す順に依存させない）。
+        # DB の返す順に依存させない。
         a = confirm.cart_fingerprint([(1, 10, 2, 3000), (2, 11, 1, 500)])
         b = confirm.cart_fingerprint([(2, 11, 1, 500), (1, 10, 2, 3000)])
         assert a == b
@@ -205,7 +205,7 @@ class TestIssueAndVerify:
         assert exc.value.code == "expired"
 
     def test_expiry_boundary_is_inclusive(self):
-        # ちょうど失効時刻は「まだ有効」。境界の 1 秒で挙動が揺れないよう固定する。
+        # 境界の 1 秒で挙動が揺れないよう固定する。
         state = make_state()
         token = confirm.issue(KEY, user_id=USER_ID, state=state, now=NOW)
         confirm.verify(
@@ -273,7 +273,7 @@ class TestIssueAndVerify:
         assert exc.value.code == "coupon_changed"
 
     def test_same_coupon_still_applied_passes(self):
-        # 有効なままなら通ること（上のチェックが正常系を巻き込んでいないこと）。
+        # 上のチェックが正常系を巻き込んでいないこと。
         state = make_state(coupon="WELCOME10", total=6000)
         token = confirm.issue(KEY, user_id=USER_ID, state=state, now=NOW)
         claims = confirm.verify(
@@ -331,9 +331,8 @@ class TestIssueAndVerify:
 
     def test_longest_allowed_free_text_address_round_trips(self):
         # 自由入力の住所は preview_checkout 側で 200 文字に制限してある。その上限いっぱい
-        # （和文＋絵文字で最悪のバイト数）でも発行したトークンが検証を通ること。ここが
-        # 通らないと、住所の長い注文だけ issue() は成功して verify() が形式不正で弾く、
-        # という再現条件の分かりにくい壊れ方をする。
+        # （和文＋絵文字で最悪のバイト数）でも検証を通ること。通らないと、住所の長い注文
+        # だけ issue() は成功して verify() が形式不正で弾く、という壊れ方をする。
         state = make_state(address_text="あ" * 100 + "🏠" * 100, coupon="ク" * 64)
         token = confirm.issue(KEY, user_id=USER_ID, state=state, now=NOW)
         assert len(token) <= confirm._MAX_TOKEN_CHARS

@@ -13,10 +13,9 @@ const WIDTHS = {
 /**
  * 管理画面のフォームモーダルの器。
  *
- * オーバーレイ（`fixed inset-0 bg-invert/50 …`）と `role="dialog"` / `aria-modal` /
- * `aria-labelledby` の組み合わせが4箇所に一字一句写されており、**実験の作成フォームだけ
- * `useFocusTrap` を取り落としていた**（Tab が背後の一覧へ抜け、Esc で閉じない）。
- * 器を1つにすれば、次にモーダルを足す人がフォーカストラップを思い出す必要がなくなる。
+ * オーバーレイと `role="dialog"` / `aria-modal` / `aria-labelledby` / `useFocusTrap` の
+ * 組み合わせをここ1つに閉じる。写して組むと1つ取り落としたときに気づけない
+ * （実際、トラップの無いフォームが1枚あり、Tab が背後の一覧へ抜け Esc で閉じなかった）。
  *
  * ⚠ 破壊的操作の確認には使わない。それは components/ConfirmDialog.tsx の担当。
  */
@@ -65,10 +64,7 @@ export default function AdminModal({
   );
 }
 
-/**
- * フォームの footer（キャンセル / 保存）。文言と「保存中...」の出し方を1箇所に閉じる。
- * 4つのフォームが同じ2行を写しており、片方だけ文言が変わる余地が残っていた。
- */
+/** フォームの footer（キャンセル / 保存）。文言と「保存中...」の出し方を1箇所に閉じる。 */
 export function AdminModalActions({
   onCancel,
   submitting,

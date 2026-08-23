@@ -18,24 +18,20 @@ export type ProductLaneVariant = 'lane' | 'ranked' | 'quiet';
 
 /**
  * variant ごとの造形。帯の地・カード幅・端の減衰幅を1つの表で持つ。
+ * カード幅は **HomeSections の LaneSkeleton も同じ表を引く**——別々に持つと、片方だけ
+ * 直したときに読み込み完了の瞬間にレーンが跳ねる。
  *
- * 3本の三項連鎖に散らしていた頃は、variant を1つ足すのに3箇所を直す必要があった。
- * カード幅は **HomeSections の LaneSkeleton も同じ表を引く**——別々に持つと、
- * 片方だけ直したときに読み込み完了の瞬間にレーンが跳ねる（lib/gridStyles.ts が
- * 規律として書いている問題の再発）。
- *
- * 端の処理は「地の色のグラデーションをカードの上に重ねる」のをやめ、スクロール領域
- * そのものを mask で抜く。旧実装は深緑帯でカード面に暗い膜が掛かり紙が濁っていた。
- * 幅は CSS 変数 --lane-fade でビューポート別に持つ（inline style ではメディアクエリが書けない）。
- *   ・明るい帯（lane / quiet）は広げる。抜いた先の地色（page / sunken）がカードの
- *     surface と近く、旧 2rem では減衰が読めず「画面端で生に切れている」ように見えた。
+ * 端の処理はカードの上にグラデーションを重ねるのではなく、スクロール領域そのものを
+ * mask で抜く（重ねるとカード面に膜が掛かり紙が濁る）。幅は CSS 変数 --lane-fade で
+ * ビューポート別に持つ（inline style ではメディアクエリが書けない）。
+ *   ・明るい帯（lane / quiet）は広げる。抜いた先の地色がカードの surface と近く、
+ *     2rem では減衰が読めず「画面端で生に切れている」ように見える。
  *   ・ranked（深緑帯）は 768px で狭める。カード幅が 36% しかない帯で 4rem 取ると
  *     3枚目の商品名・価格がマスクの途中で飲まれる。lg でだけ 5rem に開く。
  *
- * カード幅はモバイルで約1.6枚、デスクトップで 4〜5枚が見える値。「次がある」ことが
- * 常に見えるよう、割り切れない幅をあえて選んでいる。lg の下限は「12文字の商品名が
- * text-h3 で1行に入る内寸 218px」から逆算（これより詰めると全カードで語中改行が出る）。
- * quiet は一回り大きくして、直前のレーンと判型が変わったことを分かるようにする。
+ * カード幅はモバイルで約1.6枚、デスクトップで 4〜5枚が見える値。「次がある」ことが常に
+ * 見えるよう割り切れない幅をあえて選ぶ。lg の下限は「12文字の商品名が text-h3 で1行に入る
+ * 内寸 218px」から逆算（これより詰めると全カードで語中改行が出る）。
  */
 export const LANE_STYLES: Record<
   ProductLaneVariant,
@@ -77,11 +73,9 @@ interface ProductLaneProps {
 const SCROLL_RATIO = 0.85;
 
 /**
- * 推薦理由（reason）を丸める文字数。**行数ではなく文字数で持つ理由**:
- * 同じ文字列が幅の違う器に流れる（カードの実寸は 390px で 216px / 1440px で 264px）。
- * いちばん狭い 216px・text-caption(13px + 0.02em) で 1行 約16文字なので、
- * 2行に必ず収まる上限として 30 文字を取る。丸めは lib/wordBreak.ts の
- * truncateAtSentence()（「。」→ 収まらなければ読点、の順）。
+ * 推薦理由（reason）を丸める文字数。**行数ではなく文字数で持つ理由**: 同じ文字列が幅の違う
+ * 器に流れる（カードの実寸は 390px で 216px / 1440px で 264px）。いちばん狭い 216px・
+ * text-caption(13px + 0.02em) で 1行 約16文字なので、2行に必ず収まる上限として 30 文字を取る。
  */
 const REASON_BUDGET = 30;
 
@@ -93,20 +87,14 @@ function prefersReducedMotion(): boolean {
 /**
  * Netflix 型の横スクロールレーン。
  *
- * 実装方針:
- * - カルーセルライブラリは使わず、素の CSS scroll snap（snap-x snap-mandatory + snap-start）で実現する。
- * - 端の検知は ScrollableTable と同じ scrollLeft / clientWidth / scrollWidth の比較で行い、
- *   スクロールできない方向の矢印とフェードを消す。
- * - キーボード: スクロールコンテナ自体を tabIndex={0} にして矢印キーでスクロールできるようにしつつ、
- *   矢印ボタンも通常のボタンとして残す（aria-hidden にしない）。
+ * - カルーセルライブラリは使わず、素の CSS scroll snap で実現する。
+ * - 端の検知は ScrollableTable と同じ scrollLeft / clientWidth / scrollWidth の比較。
  * - ProductCard は stretched-link（after:absolute inset-0）でカード全面がリンクになるため、
  *   カードの上に要素を重ねない構造にしている（ranked の順位番号もカードの外に置く）。
- *
- * 造形方針:
  * - 面を3種類（lane / ranked / quiet）持ち、呼び出し側が交互に切り替える。同じ地・同じカード幅の
- *   レーンが3本以上続くとスクロールのリズムが完全に止まるため、造形の交替はレーンの必須要件。
- * - 版面は wrap-wide 固定。ホームの他セクション（表紙・署名帯・カテゴリ・新着）と同じ 1320px に
- *   揃えないと、スクロール中に紙の左端が 84px 動く。
+ *   レーンが3本以上続くとスクロールのリズムが止まるため、造形の交替はレーンの必須要件。
+ * - 版面は wrap-wide 固定。ホームの他セクションと同じ 1320px に揃えないと、
+ *   スクロール中に紙の左端が 84px 動く。
  */
 export default function ProductLane({
   title,
@@ -235,8 +223,7 @@ export default function ProductLane({
             tabIndex={0}
             aria-label={`${title}の商品一覧（横にスクロールできます）`}
             // 右端に余白を足し、最後のカードも先頭まで送れるようにする（FAB との被りも避ける）。
-            // .stagger（globals.css §3b）で直下の子の animation-delay を 45ms ずつ増やす。
-            // 刻み・8枚での頭打ち・低モーション時の扱いは向こうの頭注にある。
+            // 出現の段は .stagger（globals.css §3b）が配る。
             className={`stagger flex snap-x snap-mandatory items-stretch gap-4 overflow-x-auto pb-2 [--stagger-step:45ms] [scrollbar-width:thin] md:pr-16 md:[scroll-padding-right:4rem] ${laneFade}`}
             // 端のフェードは mask。スクロールしても mask はこの箱の border-box に固定されるので、
             // 「版面の端でカードが裁ち落とされる」見え方が保たれる。
@@ -253,15 +240,14 @@ export default function ProductLane({
                 {ranked ? (
                   <div className="flex h-full items-stretch gap-2">
                     {/* 順位はカードの外（兄弟）に置く。カード上に重ねると stretched-link を塞ぐため。
-                        明朝の大きな数字を薄く敷き、誌面のノンブルのように見せる。 */}
-                    {/* 番号の柱は細くする。lg:w-20（80px）はカードの文字領域を 140px 台まで削り、
+                        番号の柱は細くする——lg:w-20（80px）はカードの文字領域を 140px 台まで削り、
                         商品名がカタカナ語の途中で折れる主因になっていた。 */}
                     <div className="flex w-10 shrink-0 items-start justify-center pt-1 sm:w-12 lg:w-16">
                       <span className="sr-only">{index + 1}位</span>
                       {/* 桁揃えは tabular-nums で取る。.tnum は font-num（Inter）を強制するため
                           ここでは使わない（順位数字は明朝で組む、が型の規律）。
-                          色: brand-400/45 は深緑地で 2.2:1 しか出ず「順位が読めないランキング」
-                          になっていた。brand-300/70（約 4.6:1）まで上げ、主題として読ませる。 */}
+                          色は brand-300/70（深緑地で約 4.6:1）。brand-400/45 では 2.2:1 しか
+                          出ず「順位が読めないランキング」になっていた。 */}
                       <span
                         aria-hidden="true"
                         className="font-mincho text-[clamp(2.75rem,4.5vw,4rem)] font-bold leading-none tabular-nums text-brand-300/70"
@@ -281,13 +267,10 @@ export default function ProductLane({
                   <div className="flex h-full flex-col">
                     <ProductCard product={item.product} trackSection={trackSection} />
                     {item.reason && (
-                      // 丸めは文字数ではなく「文」で行う（truncateAtSentence）。
-                      // line-clamp-2 のままだと「食卓の必…」「ミルで挽…」と文節の途中で切れ、
-                      // 約物・改行位置まで面倒を見る組版の中でここだけ無配慮になっていた。
-                      //
+                      // 丸めは文字数ではなく「文」で行う（truncateAtSentence）。line-clamp-2 の
+                      // ままだと「食卓の必…」と文節の途中で切れる。
                       // 箱の丈は 2 行ぶん（text-caption の line-height 1.7 × 2 = 3.4em）で固定する。
                       // 丸めた結果は 1〜2 行と可変なので、予約しないと同じ行のカード下端が揃わない。
-                      // line-clamp-2 は最後の砦（想定外に長い reason が来ても器を壊さない）として残す。
                       <p className="mt-2 line-clamp-2 min-h-[3.4em] text-caption text-ink-muted jp-body">
                         {truncateAtSentence(item.reason, REASON_BUDGET)}
                       </p>

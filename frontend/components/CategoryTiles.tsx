@@ -9,9 +9,7 @@ import { MOTIFS } from '@/components/BrandMotifs';
 // カテゴリ名 → 線画の対応表は扉（PageMasthead）と共有する。
 // 同じカテゴリはホームの札でもカテゴリページの扉でも同じ図案になる＝線画が目次として働く。
 import { motifForCategory } from '@/lib/categoryMotifs';
-// 語の切れ目に <wbr> を挿し、カタカナの字送りを詰める共通処理。CSS の
-// word-break: auto-phrase は評価環境の Chromium では効かない（実測）ため、
-// 札の名前もここで改行位置を決める。
+// 札の名前も語中で折らない（可変長の和文は例外なくこれを通す。lib/wordBreak.ts の頭注）。
 import { withWordBreaks } from '@/lib/wordBreak';
 import { fetchCategories } from '@/lib/categories';
 
@@ -19,18 +17,15 @@ import { fetchCategories } from '@/lib/categories';
 const SKELETON_TILES = 5;
 
 /**
- * カテゴリの「目次の札」。高さ 56px のピル横スクロール帯を置き換えたもの。
+ * カテゴリの「目次の札」。
  *
- * 造形の意図（r1 からの作り直し）:
- * - 旧版は 4:5 の縦長タイルの背面に線画を敷いていたため、(a) 上部 55% が完全な空白、
- *   (b) 線画がカテゴリ名の字面を貫通、(c) 線画がタイル右端で唐突に断ち切られて描画バグに見える、
- *   の3点が同時に起きていた。線画を「背面の装飾」から「上段の図版」に格上げして解決している。
+ * 造形の意図:
  * - 上段＝図版（線画を1本の水平罫の上に接地させる）／下段＝キャプション（通し番号＋明朝の名前）。
- *   署名帯の「棚」と同じ造形を小さく反復させ、判型記号としての一貫性を取る。
+ *   署名帯の「棚」と同じ造形を小さく反復させ、判型記号としての一貫性を取る。線画を背面に
+ *   敷くと字面を貫通し、タイル右端で断ち切られて描画バグに見える。
  * - 線画はタイルの内側に完全に収める。裁ち落とすのは表紙・扉のような大きい面だけの権利にする。
  * - 高さはアスペクト比ではなく中身で決める。グリッドの stretch で全タイルが同じ高さになる。
- * - 図版の高さは全札で1つ（h-16 md:h-[4.5rem]）。BrandMotifs の viewBox を 120×120 の
- *   正方形に統一したので、旧 MOTIF_HEIGHT / MOTIF_SCALE のような図案ごとの手当ては要らない。
+ * - 図版の高さは全札で1つ（BrandMotifs の viewBox が正方形なので図案ごとの手当ては要らない）。
  * - タップ領域はタイル全体。44px を大幅に超えるので .hit は不要
  *   （overflow-hidden があるため .hit の ::after はそもそも効かない）。
  *
@@ -84,7 +79,6 @@ export default function CategoryTiles({ order }: { order: number }) {
           {loading
             ? Array.from({ length: SKELETON_TILES }).map((_, i) => (
                 <li key={i} aria-hidden="true" className={i === 4 ? 'max-md:col-span-2' : ''}>
-                  {/* 明滅のトークンは Skeleton.tsx の PULSE（根拠もそちらに一本化してある）。 */}
                   <div className={`h-[11.5rem] rounded-xl bg-sunken md:h-[13rem] ${PULSE}`} />
                 </li>
               ))
@@ -113,7 +107,7 @@ export default function CategoryTiles({ order }: { order: number }) {
                         )}
                       </span>
 
-                      {/* キャプション。図版と縄張りを分けるので、線が字に食い込まない。 */}
+                      {/* キャプション。図版と縄張りを分け、線が字に食い込まないようにする。 */}
                       <span className="mt-4 flex flex-1 flex-col">
                         <span className="text-eyebrow tnum text-ink-muted">
                           {String(i + 1).padStart(2, '0')}

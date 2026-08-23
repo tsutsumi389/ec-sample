@@ -1,29 +1,24 @@
-/* ---- ホストのテーマに乗るための共通スタイル -------------------------------
+/* ホストのテーマに乗るための共通スタイル。
    検索結果カード一覧（search）と商品詳細パネル（product）の **両方に同じ宣言で
    存在していたものだけ**をここに置く。片方にしか無いもの、値が違うもの
    （#app の max-width、.page-btn の padding など）は各 View の CSS が持つ。
 
    **spacing（余白）はホストから配られない前提の変数なので、var() を使わず固定値で
    書く**（Apps の仕様書 Theming 節: "Spacing intentionally excluded"）。
-   色・書体・角丸・影・線幅だけを var(--x, フォールバック) で参照し、ホストが値を
-   渡さない場合は light-dark() を使った既定値に落ちる。light-dark() の分岐は
-   document.documentElement の color-scheme に従う。ここは各 View の
-   <meta name="color-scheme" content="light dark"> と、SDK の useHostStyles()
-   （内部で applyDocumentTheme を呼ぶ）が両方担当する。
+   色・書体・角丸・影・線幅だけを var(--x, フォールバック) で参照する。ホストが値を
+   渡さない場合に落ちる light-dark() の分岐は document.documentElement の color-scheme に
+   従う（各 View の <meta name="color-scheme"> と SDK の useHostStyles() が担当）。
 
    **ホストが流し込める CSS 変数名は SDK の union で 76 個に固定されている**
    （--color-* / --font-* / --border-radius-* / --border-width-regular / --shadow-*）。
-   この 76 個以外の名前を var() で読んでも永久にフォールバックしか当たらないので、
-   新しい変数名を発明しないこと。
-
-   表示の出し分けは条件付きレンダリング（描かない）で行うので、**今この CSS に
-   [hidden] へ当たる要素は1つも無い**。下の1行は normalize 相当の防御として残してある。 */
+   この 76 個以外の名前を var() で読んでも永久にフォールバックしか当たらない。 */
 
 * , *::before, *::after { box-sizing: border-box; }
 
 /* display: flex / grid は [hidden] の既定 display: none に勝つので、hidden を書いた
    要素が消えないという形で表に出る。**この !important を弱めないこと**（弱めた瞬間、
-   display を持つ要素にだけ個別指定を足して回る運用に戻る）。 */
+   display を持つ要素にだけ個別指定を足して回る運用に戻る）。表示の出し分けは条件付き
+   レンダリングで行うので当たる要素は無く、normalize 相当の防御として置いてある。 */
 [hidden] { display: none !important; }
 
 html, body { margin: 0; padding: 0; }
@@ -42,14 +37,12 @@ button, select {
   color: inherit;
 }
 
-/* 既定の余白（16px）が存在するのはここ1か所だけ。ホストから safe area のインセットが
-   届いたときは shared/host.ts の useSafeAreaInsets() が --safe-area-* をドキュメントの
-   ルートに載せ（カスタムプロパティは継承するのでここまで届く）、足し算はこの calc() が
-   やる。**JS 側に 16 を写して足し込む形へ戻さないこと**——
-   同じ数値を CSS と JS で二重に持つことになり、余白を変えた日にインセットを持つ端末
-   でだけ古い基準が残る（手元では絶対に再現しない壊れ方になる）。
-   max-width は View ごとに違う（search 720px / product 560px）ので各 View の CSS で
-   指定する。 */
+/* 既定の余白（16px）が存在するのはここ1か所だけ。ホストから safe area のインセットが届いた
+   ときは shared/host.ts の useSafeAreaInsets() が --safe-area-* をドキュメントのルートに載せ、
+   足し算はこの calc() がやる。**JS 側に 16 を写して足し込む形へ戻さないこと**——同じ数値を
+   CSS と JS で二重に持つことになり、余白を変えた日にインセットを持つ端末でだけ古い基準が残る
+   （手元では絶対に再現しない壊れ方になる）。
+   max-width は View ごとに違う（search 720px / product 560px）ので各 View の CSS で指定する。 */
 #app {
   padding:
     calc(16px + var(--safe-area-top, 0px))
@@ -85,9 +78,9 @@ button, select {
   background: var(--color-background-secondary, light-dark(#fafafa, #27272a));
 }
 
-/* 丸い操作ボタン。**padding だけが View ごとに違う**（.retry-btn 6px 16px /
-   search の .page-btn 6px 14px / product の .page-btn 8px 16px）ので、そこだけ
-   各所で指定する。共通化のときに寄せないこと。 */
+/* 丸い操作ボタン。**padding だけが View ごとに違う**（.retry-btn 6px 16px / search の
+   .page-btn 6px 14px / product の .page-btn 8px 16px）ので、そこだけ各所で指定する。
+   共通化のときに寄せないこと。 */
 .retry-btn,
 .page-btn {
   border-radius: var(--border-radius-full, 999px);
@@ -99,7 +92,6 @@ button, select {
   padding: 6px 16px;
 }
 
-/* 無効時の見た目は操作系すべて共通。 */
 .text-btn:disabled,
 .retry-btn:disabled,
 .page-btn:disabled,
@@ -133,7 +125,7 @@ button, select {
   color: var(--color-text-danger, light-dark(#b91c1c, #fca5a5));
 }
 
-/* 小さな添え書き（カード／パネルのカテゴリ名、商品コード）。3か所とも同じ宣言だった。
+/* 小さな添え書き（カード／パネルのカテゴリ名、商品コード）。
    **打ち消し価格（.card-list-price / .panel-list-price）を混ぜないこと**——あちらは
    同じ --color-text-tertiary でも light-dark() の明暗が逆（#a1a1aa, #71717a）で、
    意図的に別の値。 */
@@ -144,9 +136,8 @@ button, select {
   color: var(--color-text-tertiary, light-dark(#71717a, #a1a1aa));
 }
 
-/* 画像の器。search の .card-image と product の .panel-image は宣言が完全に同一。
-   クラス名は View 側の HTML と一対一で対応させたいので統合せず、セレクタを
-   並べる形で共有する。 */
+/* 画像の器。クラス名は View 側の HTML と一対一で対応させたいので1つに統合せず、
+   セレクタを並べる形で共有する。 */
 .card-image,
 .panel-image {
   aspect-ratio: 4 / 3;
@@ -171,9 +162,8 @@ button, select {
   color: var(--color-text-tertiary, light-dark(#a1a1aa, #71717a));
 }
 
-/* カード（search、クリックできる <button>）とパネル（product、クリックしない
-   <article>）の共通部分。地色・枠・角丸・影はまったく同じ。
-   .card だけが持つ text-align / cursor / padding: 0 と、:hover / :focus-visible /
+/* カード（search、クリックできる <button>）とパネル（product、クリックしない <article>）の
+   共通部分。.card だけが持つ text-align / cursor / padding: 0 と、:hover / :focus-visible /
    :disabled は search 側の CSS に置く。 */
 .card,
 .panel {
@@ -186,11 +176,10 @@ button, select {
   overflow: hidden;
 }
 
-/* availability の色分け。**View がやってよいのはこの色分けだけで、文言は
-   サーバーが返した完成文をそのまま出す**（backend の services/cart.py の
-   availability_reason_for_status が唯一の源）。
-   暗色側の危険色が #f87171 なのは意図的で、.banner-error / .state-message--error
-   の #fca5a5 とは別の値。共通化のときに混ぜないこと。 */
+/* availability の色分け。**View がやってよいのはこの色分けだけで、文言はサーバーが返した
+   完成文をそのまま出す**（backend の services/cart.py の availability_reason_for_status が
+   唯一の源）。暗色側の危険色が #f87171 なのは意図的で、.banner-error /
+   .state-message--error の #fca5a5 とは別の値。共通化のときに混ぜないこと。 */
 .card-availability[data-ok="true"],
 .panel-availability[data-ok="true"] {
   color: var(--color-text-success, light-dark(#15803d, #4ade80));

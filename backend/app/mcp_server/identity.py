@@ -7,8 +7,6 @@
 **ユーザーを絶対にキャッシュしない。** Context.request_context.request は JSON-RPC の
 メッセージごとに差し替わるので、ツール呼び出しのたびにヘッダから引き直す。モジュール変数や
 セッションに載せると、最初の呼び出し時点の身元に固定され、以後の全操作がその人として動く。
-
-visitor_id（X-Visitor-Id）は読まない。あれは計測専用の端末IDで、認証には一切使わない。
 """
 
 from fastapi import HTTPException
@@ -54,6 +52,5 @@ def optional_user(ctx: Context, db: Session) -> User | None:
     try:
         return _resolve_user_from_token(token, db)
     except HTTPException:
-        # 無効なトークンはすべて匿名に落とす（auth.get_current_user_optional と同じ意味論。
-        # 無効なトークンが 401 として揃うことは _resolve_user_from_token 側が担保している）。
+        # 無効なトークンが 401 として揃うことは _resolve_user_from_token 側が担保している。
         return None

@@ -80,16 +80,13 @@ export default function ProductQA({ productId }: ProductQAProps) {
   };
 
   return (
-    // ページ末尾の沈んだ帯。PDP は扉のあと最後まで生成り1色で、後半 2,000px 超に
-    // 面の交替がまったく無かった。ここを「沈んだ地＋上下ヘアライン」の帯にして
-    // 誌面の終いを1段落とす（.edge-y = line-strong の 1px。border ユーティリティと衝突しない）。
+    // ページ末尾の沈んだ帯。PDP は扉のあと最後まで生成り1色なので、ここで誌面の終いを
+    // 1段落とす（.edge-y = line-strong の 1px。border ユーティリティと衝突しない）。
     <section className="edge-y band-lg bg-sunken">
       <div className="wrap">
         {/*
-          見出し・説明・「AIが回答」バッジを入力カードと同じ 40rem の柱に乗せる。
-          以前は SectionHead だけが wrap(1152) 幅だったため、justify-between で
-          バッジが版面の右端（x=1264）へ飛び、40rem の入力カードとは無関係な位置に
-          浮いていた（1つの帯に柱が2本立っている状態）。
+          見出し・説明・「AIが回答」バッジを入力カードと同じ 40rem の柱に乗せる。SectionHead を
+          wrap(1152) 幅のままにすると、justify-between でバッジだけが版面の右端へ飛ぶ。
         */}
         <div className="max-w-[40rem]">
           <SectionHead
@@ -108,9 +105,7 @@ export default function ProductQA({ productId }: ProductQAProps) {
 
         {/*
           左＝質問する（読み物幅 40rem の柱。版面いっぱいの入力欄は管理画面のフォームに
-          見えるため広げない）、右＝これまでの質問。
-          以前は右 510px が高さ 900px 以上にわたって空いていた。柱を保ったまま
-          余りを「読む側」に使い、帯が約束した面積を埋める。
+          見えるため広げない）、右＝これまでの質問。柱を保ったまま余りを「読む側」に使う。
           パネルは沈んだ帯の上に置くので、地は surface（＋ヘアライン）で浮かせる。
         */}
         <div className="grid gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,40rem)_minmax(0,1fr)] lg:items-start">
@@ -178,7 +173,6 @@ export default function ProductQA({ productId }: ProductQAProps) {
                 これまでの質問 <span className="tnum">{questions.length}</span> 件
               </p>
             )}
-            {/* 送信中は生成待ちのタイピングインジケータを先頭に表示する（点の造形は TypingDots）。 */}
             {submitting && (
               <div className="mb-4 flex items-center gap-1.5 rounded-lg bg-surface px-4 py-3 shadow-paper">
                 <TypingDots />
@@ -201,9 +195,8 @@ export default function ProductQA({ productId }: ProductQAProps) {
                 {listError}
               </p>
             ) : questions.length === 0 ? (
-              // 空状態は「中央寄せの EmptyState」ではなく、直上の投稿パネルと同じ
-              // 左端・同じ幅の箱にする。1セクションの中に「左揃え」と「中央揃え」の
-              // 2つの整列規則が同居していたのを1つに畳む。
+              // 空状態は「中央寄せの EmptyState」ではなく、直上の投稿パネルと同じ左端・
+              // 同じ幅の箱にする（1セクションの中に整列規則を2つ持たない）。
               <div className="flex items-center gap-5 rounded-xl border border-line bg-surface px-5 py-8 md:px-6">
                 <PlantMotif className="h-16 w-auto shrink-0 text-line-strong" aria-hidden />
                 <div className="min-w-0">
@@ -217,7 +210,6 @@ export default function ProductQA({ productId }: ProductQAProps) {
               <ul className="space-y-5">
                 {questions.map((qa) => (
                   <li key={qa.id} className="rounded-xl bg-surface p-5 shadow-paper">
-                    {/* 質問 */}
                     <div className="flex items-start gap-2">
                       <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sunken text-caption font-bold text-ink-muted">
                         Q
@@ -231,7 +223,6 @@ export default function ProductQA({ productId }: ProductQAProps) {
                         </p>
                       </div>
                     </div>
-                    {/* AI回答 */}
                     <div className="mt-3 flex items-start gap-2 border-t border-line pt-3">
                       <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
                         <SparklesIcon className="h-3.5 w-3.5" />

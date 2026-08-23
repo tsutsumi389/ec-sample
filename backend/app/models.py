@@ -56,8 +56,7 @@ class Category(Base):
     products: Mapped[list["Product"]] = relationship(back_populates="category")
 
 
-# 商品の状態機械。可視性・購入可否はすべてこの単一の状態から導出する
-# （旧 is_active フラグは廃止し archived に統合）。
+# 商品の状態機械。可視性・購入可否はすべてこの単一の状態から導出し、真偽フラグを増やさない。
 PRODUCT_STATUSES = (
     "draft",  # 下書き（未公開）。一覧・商品ページとも非表示、購入不可
     "coming_soon",  # 近日発売。表示するが購入不可
@@ -73,8 +72,7 @@ LISTED_STATUSES = ("coming_soon", "on_sale", "suspended")
 VIEWABLE_STATUSES = ("coming_soon", "on_sale", "suspended", "discontinued")
 
 
-# 下の Product.is_viewable / is_on_sale を、ORM を持たない呼び出し側からも使えるように
-# 関数として出しておく。ProductOut（Pydantic）しか持っていない層——MCP のツールなど——が
+# ORM を持たない層（ProductOut しか持っていない MCP のツールなど）が
 # `status in VIEWABLE_STATUSES` を書き写すと、販売可能な状態を 1 つ足した日に商品ページの
 # 購入ボタンとその層の判定が割れる。**status → 可否の変換はここ以外に書かないこと。**
 
@@ -94,14 +92,13 @@ class Product(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    # 商品コード（SKU）。在庫・注文管理の実務標準。任意だが設定時は一意。
     sku: Mapped[str | None] = mapped_column(String, unique=True, nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     price: Mapped[int] = mapped_column(Integer, nullable=False)
     # セール価格。設定時は price を定価（打ち消し表示）、sale_price を実売価格として扱う。
     sale_price: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stock: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    # 販売状態。可視性・購入可否の唯一の源。新規作成時は draft（誤公開防止）。
+    # 可視性・購入可否の唯一の源。既定を draft にするのは誤公開の防止。
     status: Mapped[str] = mapped_column(String, nullable=False, default="draft")
     image_url: Mapped[str | None] = mapped_column(String, nullable=True)
     category_id: Mapped[int | None] = mapped_column(
@@ -134,10 +131,7 @@ class Product(Base):
 
     @property
     def effective_price(self) -> int:
-        """実売価格。セール価格があればそれを、なければ定価を返す。
-
-        カート小計・注文金額・OrderItem スナップショットはすべてこの値を使う。
-        """
+        """実売価格。カート小計・注文金額・OrderItem スナップショットはすべてこの値を使う。"""
         return self.sale_price if self.sale_price is not None else self.price
 
     @property
@@ -152,10 +146,10 @@ class Product(Base):
 
     @property
     def is_on_sale(self) -> bool:
-        """販売中か（在庫は見ない）。「売り物として出しているか」だけを判定する。
+        """販売中か（在庫は見ない）。在庫込みの購入可否は purchasable。
 
-        在庫込みの購入可否は purchasable。買えない理由を「販売していない」と「在庫が無い」に
-        書き分ける必要がある場所（カートの見送り理由など）がこちらを使う。
+        買えない理由を「販売していない」と「在庫が無い」に書き分ける必要がある場所
+        （カートの見送り理由など）がこちらを使う。
         """
         return is_on_sale_status(self.status)
 
@@ -182,15 +176,11 @@ class ProductImage(Base):
 class ProductSpec(Base):
     """商品の仕様（サイズ・重量・素材・保証など）を1行1項目で持つ。
 
-    description のフリーテキストに溶けていた「モノの事実」を構造化するためのテーブル。
-    商品ページの「仕様」欄はこの行がそのまま出る。
-
-    **在庫・価格・販売状態をここに入れないこと。** あれは「いまの状態」であって仕様ではない。
-    仕様として並べると、商品ページで StockLabel（残りN点）と同じ数字が同一画面に二度出る。
+    **在庫・価格・販売状態をここに入れないこと。** あれは「いまの状態」であって仕様ではなく、
+    並べると商品ページで StockLabel（残りN点）と同じ数字が同一画面に二度出る。
 
     label / value を自由文字列にしてあるのは、カテゴリ横断で属性名を固定できないため
-    （「容量」はケトルにはあるがマフラーには無い）。絞り込み条件に使う予定は無く、
-    あくまで表示と埋め込み原文のための構造化に留める。
+    （「容量」はケトルにはあるがマフラーには無い）。絞り込み条件に使う設計ではない。
     """
 
     __tablename__ = "product_specs"
@@ -200,9 +190,8 @@ class ProductSpec(Base):
     product_id: Mapped[int] = mapped_column(
         ForeignKey("products.id"), nullable=False, index=True
     )
-    # 項目名（例: 本体サイズ / 重量 / 素材）。
     label: Mapped[str] = mapped_column(String, nullable=False)
-    # 値（例: 幅24×奥行18×高さ30cm）。単位まで含めた表示用の文字列で持つ。
+    # 単位まで含めた表示用の文字列で持つ（例: 幅24×奥行18×高さ30cm）。
     value: Mapped[str] = mapped_column(String, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
@@ -328,11 +317,7 @@ class OrderItem(Base):
     product: Mapped["Product"] = relationship()
 
 
-# ---------- レコメンド（セマンティックID / 埋め込み / LLM生成キャッシュ）----------
-#
-# 以下 4 テーブルはレコメンド機能専用。既存テーブルには一切カラムを足さず、
-# 商品埋め込みやユーザ推薦結果はここに分離して持つ。もとは「マイグレーションツールが
-# 無く既存テーブルを変更できない」制約から来た分割だが、Alembic 導入後もそのまま維持する
+# 以下 4 テーブルはレコメンド機能専用。既存テーブルには一切カラムを足さず分離して持つ
 # （EC 中核のテーブルを LLM 都合の列で汚さず、レコメンドごと落とせる形にしておくため）。
 
 
@@ -348,7 +333,6 @@ class ProductEmbedding(Base):
     product_id: Mapped[int] = mapped_column(
         ForeignKey("products.id"), primary_key=True
     )
-    # 埋め込みベクトル本体（pgvector）。次元は EMBED_DIM に固定。
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBED_DIM), nullable=False)
     # 残差量子化で割り当てた "a-b-c" 形式のセマンティックID（衝突時はサフィックス付き）。
     semantic_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
@@ -427,9 +411,8 @@ class RecommendationState(Base):
 class ProductView(Base):
     """ログインユーザーの商品閲覧履歴。パーソナライズのシグナル用。
 
-    1 ユーザー × 1 商品で 1 行だけ持ち、再閲覧時は viewed_at を更新して
-    view_count をインクリメントする（閲覧のたびに行を増やすとテーブルが
-    肥大化するため。購入・お気に入りと同様に「関心のある商品」を表す軽い信号）。
+    1 ユーザー × 1 商品で 1 行だけ持ち、再閲覧時は viewed_at を更新して view_count を
+    インクリメントする（閲覧のたびに行を増やすとテーブルが肥大化するため）。
     """
 
     __tablename__ = "product_views"
@@ -442,7 +425,7 @@ class ProductView(Base):
         ForeignKey("users.id"), nullable=False, index=True
     )
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
-    # 同一商品を何度見たか。再閲覧のたびに +1 して関心の強さの目安にする。
+    # 関心の強さの目安に使う。
     view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # 最終閲覧時刻。時間減衰（新しい閲覧ほど重い）の基準に使う。
     viewed_at: Mapped[datetime] = mapped_column(
@@ -453,11 +436,8 @@ class ProductView(Base):
     product: Mapped["Product"] = relationship()
 
 
-# ---------- AIショッピングアシスタント（チャット会話）----------
-#
-# レコメンドとは別の同期チャット機能。会話単位でメッセージを永続化し、未ログインでも
-# 端末の localStorage に UUID を保持して継続できるようにする（下記 AssistantConversation
-# 参照）。AI 機能の周辺データは既存テーブルに混ぜず、独立したテーブルに分けて持つ。
+# レコメンドとは別の同期チャット機能。AI 機能の周辺データは既存テーブルに混ぜず、
+# 独立したテーブルに分けて持つ。
 
 
 class AssistantConversation(Base):
@@ -466,13 +446,12 @@ class AssistantConversation(Base):
     id は推測困難な UUID（文字列 PK）。未ログインでもフロントの localStorage に UUID を
     保持することでパネル再オープン時に会話を継続できる。ゲスト会話は user_id が NULL で、
     UUID を知っていること自体が認可になる（サンプルアプリとして許容。routers 参照）。
-    ゲスト会話中にログインした場合は以降のリクエストで user_id を紐付ける。
     """
 
     __tablename__ = "assistant_conversations"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    # ログインユーザーの会話なら本人ID。ゲスト会話は NULL。
+    # ゲスト会話は NULL。会話中にログインしたら以降のリクエストで紐付ける。
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True, index=True
     )
@@ -520,12 +499,8 @@ class AssistantMessage(Base):
     )
 
 
-# ---------- 商品Q&A（購入前質問へのAI回答）----------
-#
-# 商品ページで購入検討者の質問に、その商品の説明文とレビューだけを根拠に AI が即答し、
-# 公開・蓄積する機能。回答は生成時点のスナップショット（OrderItem と同じ思想で後から
-# 再生成しない）。可視性・購入可否は Product.status に従い、AI 機能の周辺データは
-# 既存テーブルに混ぜず独立したテーブルに分けて持つ。
+# 購入検討者の質問に、その商品の説明文とレビューだけを根拠に AI が即答し、公開・蓄積する。
+# 回答は生成時点のスナップショット（OrderItem と同じ思想で、後から再生成しない）。
 
 
 class ProductQuestion(Base):
@@ -557,16 +532,10 @@ class ProductQuestion(Base):
     user: Mapped["User"] = relationship()
 
 
-# ---------- A/Bテスト（実験）と行動イベントログ ----------
-#
-# 実験の割り当ては DB に持たず、visitor_id と実験の salt から決定論的ハッシュで毎回
-# 計算する（services/experiment.py）。ここに置くのは「何を実験しているか（定義）」と
-# 「誰にどの variant を見せたか（曝露）」と「誰が何をしたか（イベント）」の3種類だけ。
-#
-# 成果は実験専用テーブルではなく汎用の analytics_events に集約し、分析時に曝露と
-# JOIN して variant 別に切り出す。こうすると実験を作る前から貯まったログを後から
-# 任意の指標で振り返れる（実験専用の計測にすると、指標を思いついた時点より前の
-# データが存在しないという致命的な制約を抱えるため）。
+# 割り当ては DB に持たず、visitor_id と実験の salt から毎回計算する（services/experiment.py）。
+# ここに置くのは定義・曝露・イベントの3種類だけ。成果は汎用の analytics_events に集約し、
+# 分析時に曝露と JOIN して variant 別に切り出す（実験専用の計測にすると、指標を思いついた
+# 時点より前のデータが存在しないという致命的な制約を抱えるため）。
 
 
 # 実験の状態機械。Product.status と同じく、可視性・稼働可否はこの単一の状態から導出する。
@@ -674,8 +643,7 @@ class ExperimentExposure(Base):
         ForeignKey("experiments.id"), nullable=False, index=True
     )
     variant_key: Mapped[str] = mapped_column(String, nullable=False)
-    # 割り当ての単位。未ログインでも計測できるよう端末の visitor_id を使う
-    # （user_id を単位にすると、カート投入前の大半を占める未ログイン行動を測れない）。
+    # 割り当ての単位。未ログインでも計測できるよう端末の visitor_id を使う。
     visitor_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     # 曝露時点でログインしていれば紐付ける。分析の切り口に使うだけで割り当てには使わない。
     user_id: Mapped[int | None] = mapped_column(

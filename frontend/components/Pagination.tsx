@@ -30,7 +30,6 @@ function buildPageItems(page: number, totalPages: number): PageItem[] {
   for (const p of sorted) {
     if (prev) {
       if (p - prev === 2) {
-        // 隙間が1ページ分だけなら省略せずその番号を出す
         items.push(prev + 1);
       } else if (p - prev > 2) {
         items.push({ ellipsis: `gap-${prev}` });
@@ -58,7 +57,7 @@ export default function Pagination({ page, totalPages, onChange }: PaginationPro
   const items = buildPageItems(page, totalPages);
 
   return (
-    // グリッドの終端を1本の罫で締める（誌面のノド）。数字はすべて tnum で縦位置が揃う。
+    // グリッドの終端を1本の罫で締める（誌面のノド）。
     <nav aria-label="ページ送り" className="mt-14 border-t border-line pt-8 text-center">
       {/*
         390px の版面（実効 358px）には 前へ(72) + 番号5枚(220) + gap + 次へ(72) が入らず、

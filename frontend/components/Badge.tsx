@@ -10,8 +10,7 @@ export type BadgeVariant = 'brand' | 'accent' | 'critical' | 'neutral' | 'invert
 
 /**
  * 同じ色相の中での濃度。**順序を持つ状態**（注文の進行段階・実験の進行段階）だけに使う。
- * 色相を増やさずに「進んだ／進んでいない」を描き分けるための軸で、
- * 色数の増加と状態の取り違えを同時に防ぐ。既定は 'base'。
+ * 色相を増やさずに「進んだ／進んでいない」を描き分けるための軸。既定は 'base'。
  */
 export type BadgeStrength = 'soft' | 'base' | 'strong';
 
@@ -52,7 +51,6 @@ const VARIANT_CLASSES: Record<BadgeVariant, Record<BadgeStrength, string>> = {
 
 interface BadgeProps {
   variant?: BadgeVariant;
-  /** 同じ色相の中での濃度。順序を持つ状態にだけ使う（既定 'base'）。 */
   strength?: BadgeStrength;
   /**
    * 図版（商品タイル）の上に重ねるとき true。
@@ -66,10 +64,8 @@ interface BadgeProps {
 }
 
 /**
- * ステータス表示用の共通バッジ。
- * 造形: 高さ 24px 固定のピル。文字は eyebrow（11px / tracking .22em）で、
- * 和文でも欧文ラベルと同じ「小見出し」の質感になるようにしている。
- * tracking の分だけ右に余白が生まれるため、右パディングだけ差し引いて光学的に中央へ寄せる。
+ * ステータス表示用の共通バッジ。文字は eyebrow（11px / tracking .22em）で組むので、
+ * tracking の分だけ右に余白が生まれる。右パディングだけ差し引いて光学的に中央へ寄せる。
  */
 export default function Badge({
   variant = 'neutral',

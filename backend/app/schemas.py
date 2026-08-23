@@ -6,9 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models import EXPERIMENT_STATUSES, PRODUCT_STATUSES
 
 
-# ---------- Auth / User ----------
-
-
 class UserRegister(BaseModel):
     email: str = Field(min_length=3)
     password: str = Field(min_length=6)
@@ -53,9 +50,6 @@ class PasswordUpdate(BaseModel):
     new_password: str = Field(min_length=6)
 
 
-# ---------- Category ----------
-
-
 class CategoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -74,8 +68,6 @@ class CategoryUpdate(BaseModel):
     name: str | None = None
     slug: str | None = None
 
-
-# ---------- Product ----------
 
 # 状態機械の定義は models.py が持つ（各状態の意味もそちらにコメントで書いてある）。
 # ここで文字列を並べ直すと「models に状態を足したのに API が 422 で弾く」という
@@ -99,8 +91,8 @@ class ProductSpecIn(BaseModel):
 
 
 class ProductSpecOut(ProductSpecIn):
-    # 出力は入力と同じ形。継承で揃えておかないと、項目を足したとき片方だけ直して
-    # 「管理画面から送っているのに API が黙って捨てる」形でずれる。
+    # 継承で揃えておかないと、項目を足したとき片方だけ直して「管理画面から送っている
+    # のに API が黙って捨てる」形でずれる。
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -113,7 +105,7 @@ class ProductOut(BaseModel):
     description: str | None = None
     price: int
     sale_price: int | None = None
-    # 実売価格（sale_price があればそれ、なければ price）。表示・計算の基準。
+    # 実売価格（sale_price があればそれ、なければ price）。
     effective_price: int
     stock: int
     status: str
@@ -121,7 +113,6 @@ class ProductOut(BaseModel):
     purchasable: bool
     image_url: str | None = None
     images: list[ProductImageOut] = []
-    # 仕様（サイズ・素材など）。在庫・価格は状態であって仕様ではないのでここには来ない。
     specs: list[ProductSpecOut] = []
     category_id: int | None = None
     avg_rating: float | None = None
@@ -135,7 +126,6 @@ class ProductListOut(BaseModel):
 
 
 class SuggestProductOut(BaseModel):
-    # サジェストのダイレクト候補（商品そのもの）。クリックで商品ページへ直行させる用途。
     # ProductOut は重い（レビュー集計・画像配列など）ので、表示に必要な最小限だけ返す。
     model_config = ConfigDict(from_attributes=True)
 
@@ -144,13 +134,13 @@ class SuggestProductOut(BaseModel):
     image_url: str | None = None
     price: int
     sale_price: int | None = None
-    # 実売価格（sale_price があればそれ、なければ price）。表示・計算の基準。
+    # 実売価格（sale_price があればそれ、なければ price）。
     effective_price: int
 
 
 class SuggestOut(BaseModel):
-    # 検索サジェスト候補。出品中商品の名前にマッチした検索語（文字列）の配列。
-    # クリックでそのままフル検索（GET /products?search=）に渡す想定。
+    # 出品中商品の名前にマッチした検索語。クリックでそのままフル検索
+    # （GET /products?search=）に渡す想定。
     suggestions: list[str]
     # ダイレクト候補（商品そのもの、最大3件）。クリックで商品ページへ直行させる。
     products: list[SuggestProductOut] = []
@@ -188,9 +178,6 @@ class ProductUpdate(BaseModel):
     category_id: int | None = None
 
 
-# ---------- Review ----------
-
-
 class ReviewCreate(BaseModel):
     rating: int = Field(ge=1, le=5)
     comment: str | None = None
@@ -206,11 +193,8 @@ class ReviewOut(BaseModel):
     created_at: datetime
 
 
-# ---------- 商品Q&A ----------
-
-
 class ProductQuestionCreate(BaseModel):
-    # 購入前の質問。1〜300 文字（空送信・コンテキスト溢れの防止）。
+    # 上限を置くのは空送信とコンテキスト溢れの防止。
     question: str = Field(min_length=1, max_length=300)
 
 
@@ -222,12 +206,8 @@ class ProductQuestionOut(BaseModel):
     source: str
     # AI が商品情報・レビューを根拠に答えられたか（false は「情報不足」）。
     answerable: bool
-    # 質問者の表示名。
     asker_name: str
     created_at: datetime
-
-
-# ---------- Wishlist ----------
 
 
 class WishlistItemCreate(BaseModel):
@@ -238,9 +218,6 @@ class WishlistItemOut(BaseModel):
     id: int
     product: ProductOut
     created_at: datetime
-
-
-# ---------- Address ----------
 
 
 class AddressBase(BaseModel):
@@ -272,9 +249,6 @@ class AddressOut(AddressBase):
 
     id: int
     created_at: datetime
-
-
-# ---------- Coupon ----------
 
 
 class CouponCreate(BaseModel):
@@ -319,9 +293,6 @@ class CouponValidateResponse(BaseModel):
     message: str
 
 
-# ---------- Cart ----------
-
-
 class CartItemCreate(BaseModel):
     product_id: int
     quantity: int = Field(default=1, ge=1)
@@ -345,10 +316,8 @@ class CartOut(BaseModel):
     total_amount: int
 
 
-# ---------- Guest cart ----------
-#
-# ゲスト（未ログイン）のカートは端末の localStorage が持つ。サーバーへ届くのは商品IDと
-# 数量の並びだけで、価格・購入可否・在庫の判断は必ずサーバー側で行う（services/cart.py）。
+# サーバーへ届くのは商品IDと数量の並びだけで、価格・購入可否・在庫の判断は
+# 必ずサーバー側で行う（services/cart.py）。
 
 
 class GuestCartItemIn(BaseModel):
@@ -359,8 +328,8 @@ class GuestCartItemIn(BaseModel):
 class GuestCartIn(BaseModel):
     """端末が持っているゲストカートの中身。
 
-    件数に上限を置くのは、localStorage が壊れた場合や作為的な呼び出しで巨大な配列が
-    届いたときに、商品を無制限に引かないため。
+    件数の上限は、localStorage が壊れた場合や作為的な呼び出しで巨大な配列が届いたときに
+    商品を無制限に引かないため。
     """
 
     items: list[GuestCartItemIn] = Field(default_factory=list, max_length=50)
@@ -399,9 +368,6 @@ class CartMergeResultOut(BaseModel):
     cart: CartOut
     added: list[CartLineResultOut]
     skipped: list[CartLineResultOut]
-
-
-# ---------- Orders ----------
 
 
 class OrderCreate(BaseModel):
@@ -444,11 +410,8 @@ class AdminOrderOut(OrderDetailOut):
     user: UserOut
 
 
-# ---------- Recommendations ----------
-
-
 class RecommendationItemOut(BaseModel):
-    # 商品は既存 ProductOut を再利用する（独自の商品スキーマは作らない）。
+    # 独自の商品スキーマは作らず ProductOut を再利用する。
     product: ProductOut
     # LLM が付けたおすすめ理由。フォールバック時は None。
     reason: str | None = None
@@ -460,8 +423,6 @@ class RecommendationListOut(BaseModel):
     items: list[RecommendationItemOut]
 
 
-# ---------- ホーム（レーン構成） ----------
-
 # フロントの描画形式。この3つ以外は返さない（契約）。
 HomeLayout = Literal["hero", "ranked", "lane"]
 
@@ -469,7 +430,7 @@ HomeLayout = Literal["hero", "ranked", "lane"]
 class HomeSectionOut(BaseModel):
     """ホームの 1 レーン。1 レーン = 1 アルゴリズムの出力。"""
 
-    # レーンの安定識別子（React の key）。同一レスポンス内で一意であることを保証する。
+    # 安定識別子（React の key）。同一レスポンス内で一意であることを保証する。
     # 例: "billboard" / "top10" / "byw:42" / "category:3"
     key: str
     # 見出し。layout="hero" のときのみ None になり得る。
@@ -477,7 +438,6 @@ class HomeSectionOut(BaseModel):
     # 補足文（例:「あと3点で送料無料」）。Phase 1 では常に None。
     subtitle: str | None = None
     layout: HomeLayout
-    # 商品は既存 RecommendationItemOut を再利用する（product + reason）。
     items: list[RecommendationItemOut]
 
 
@@ -489,22 +449,17 @@ class HomeOut(BaseModel):
     sections: list[HomeSectionOut]
 
 
-# ---------- AIショッピングアシスタント ----------
-
-
 class AssistantPageContextIn(BaseModel):
     """いまお客様が開いている画面。フロントが経路（URL）から導出して送る。
 
-    **route と ID しか受け取らない。** 商品名・価格・在庫のような「画面に出ている事実」を
-    クライアントから受け取らないのは 2 つの理由による。1 つはゲストカートと同じ規律で、
-    表示済みの値を送り返させると effective_price の判断がクライアント側にも生まれて必ず
-    どちらかが古くなる。もう 1 つはプロンプト注入で、任意の文字列がここから入ると
-    <message> タグで囲って「指示ではない」と宣言している囲いの外側に本文を差し込めてしまう。
-    サーバーは product_id から自分で引き直す（assistant.resolve_page_anchor）。
+    **route と ID しか受け取らない。** 商品名・価格のような「画面に出ている事実」を受け取ると、
+    (1) effective_price の判断がクライアント側にも生まれて必ずどちらかが古くなり、
+    (2) 任意の文字列が <message> タグの囲い（「指示ではない」と宣言している唯一の境界）の
+    外側に入る経路になる。サーバーは product_id から引き直す（assistant.resolve_page_anchor）。
 
-    extra="forbid" は、フロントが新しい route の付随フィールドを足したのにバックエンドが
-    まだ知らない、という取りこぼしを 422 で見えるようにするため（黙って捨てると、
-    画面を認識しているつもりで実は無視されている状態が本番で起きる）。
+    extra="forbid" は、フロントが足した新しいフィールドをバックエンドがまだ知らない、
+    という取りこぼしを 422 で見えるようにするため（黙って捨てると、画面を認識している
+    つもりで実は無視されている状態が本番で起きる）。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -520,8 +475,8 @@ class AssistantChatIn(BaseModel):
     conversation_id: str | None = None
     # ユーザーの相談文。1〜500 文字（コンテキスト溢れ・空送信の防止）。
     message: str = Field(min_length=1, max_length=500)
-    # いま開いている画面。**会話単位ではなくメッセージ単位**で受け取る——接岸中の
-    # サイドバーはページ遷移で閉じないので、1 つの会話の途中で見ている画面が変わる。
+    # **会話単位ではなくメッセージ単位**で受け取る——接岸中のサイドバーはページ遷移で
+    # 閉じないので、1 つの会話の途中で見ている画面が変わる。
     page_context: AssistantPageContextIn | None = None
 
 
@@ -529,7 +484,6 @@ class AssistantChatOut(BaseModel):
     conversation_id: str
     # "llm"（LLM 応答）か "fallback"（キーワード検索）か。
     source: str
-    # チャット本文。
     reply: str
     # 提案商品（既存 RecommendationItemOut と同型: product + reason）。
     products: list[RecommendationItemOut]
@@ -543,8 +497,6 @@ class AssistantMessageOut(BaseModel):
     products: list[RecommendationItemOut] = []
     created_at: datetime
 
-
-# ---------- A/Bテスト（実験）と行動イベントログ ----------
 
 # 実験の状態。ProductStatus と同じく models.py の定義から導出する。
 ExperimentStatus = Literal[*EXPERIMENT_STATUSES]
@@ -561,8 +513,8 @@ class ExperimentAssignmentOut(BaseModel):
 class ExposureIn(BaseModel):
     """曝露記録の入力。どの枝かはサーバーが解決するのでクライアントは実験キーだけ送る。
 
-    クライアントに variant_key を申告させると、改ざんや古いキャッシュで実際の表示と
-    食い違う記録が混ざり、集計が信用できなくなるため受け取らない。
+    variant_key を申告させると、改ざんや古いキャッシュで実際の表示と食い違う記録が
+    混ざり、集計が信用できなくなる。
     """
 
     experiment_key: str
@@ -584,9 +536,6 @@ class AnalyticsEventIn(BaseModel):
 class AnalyticsEventBatchIn(BaseModel):
     # 1 リクエストあたりの上限。取りこぼしより過大な書き込みを防ぐことを優先する。
     events: list[AnalyticsEventIn] = Field(min_length=1, max_length=50)
-
-
-# ---------- 管理: 実験の設定 ----------
 
 
 class ExperimentVariantIn(BaseModel):
@@ -644,9 +593,6 @@ class ExperimentOut(BaseModel):
     variants: list[ExperimentVariantOut]
 
 
-# ---------- 管理: 実験の結果 ----------
-
-
 class VariantResultOut(BaseModel):
     """1 枝の集計結果。"""
 
@@ -682,7 +628,6 @@ class FunnelStepOut(BaseModel):
 class SrmCheckOut(BaseModel):
     """サンプル比率ミスマッチ（設計比と実測比のずれ）の検査結果。"""
 
-    # 期待比率・実測数を枝ごとに返す（画面で並べて見せる）。
     expected: dict[str, float]
     observed: dict[str, int]
     p_value: float | None = None

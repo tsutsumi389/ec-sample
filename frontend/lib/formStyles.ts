@@ -1,11 +1,6 @@
 /**
  * 認証まわり（ログイン・会員登録・アカウント）のフォームの造形。
- *
- * lib/buttonStyles.ts（btn）・lib/gridStyles.ts と同じ流儀で、クラス列を lib に置く。
- * 以前は同じ文字列が3ファイルにバイト単位で写されていて、「揃っていること」を
- * account/page.tsx のコメント（「ログイン／会員登録と同一の造形に揃える」）と
- * 人間の目視だけが保証していた。罫の色トークンやフォーカスリングを変えたときに
- * 1つ落とすと、フォーム間で罫の濃度が割れる。
+ * 罫の色トークンやフォーカスリングを変えたときに1つ落とすと、フォーム間で罫の濃度が割れる。
  *
  * ⚠ ここに集めるのは**この3画面が共有する造形**だけ。
  *   カート（app/cart/page.tsx）は disabled 状態と角丸違いを持ち、AddressForm は
@@ -20,16 +15,13 @@
 export const inputClass =
   'h-11 w-full rounded-md border border-line-input bg-surface px-3.5 text-body text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:border-brand-600';
 
-/** 入力ラベル。 */
 export const labelClass = 'mb-1.5 block text-caption font-medium text-ink-soft';
 
-/* ── 管理画面 ──────────────────────────────────────────────
+/*
  * 管理画面は店頭とは別系統（gray-* / text-sm）で組む。これは意図的な使い分けなので
- * 上の2つに寄せない。ただし**管理画面の中では**1組であるべきで、実際には
- * ラベル24箇所・入力欄22箇所に同じ文字列が写されていた（ProductFormModal だけで各10回）。
+ * 上の2つに寄せない。ただし**管理画面の中では**1組であるべき。
  */
 
-/** 管理画面の入力ラベル。 */
 export const adminLabelClass = 'block text-sm font-medium text-gray-700 mb-2';
 
 /** 管理画面の入力欄・セレクト。 */

@@ -21,7 +21,7 @@ import {
   useAssistantGeometry,
 } from '@/lib/assistant-context';
 
-// 会話IDの永続化キー。端末単位で会話を継続する（未ログインでも利用可）。
+// 端末単位で会話を継続する（未ログインでも利用可）。
 const CONVERSATION_ID_KEY = 'assistant_conversation_id';
 
 // 入力の最大文字数。残数カウンタと入力制限に共有する。
@@ -32,7 +32,6 @@ const WELCOME_MESSAGE =
   'こんにちは。生活道具店 Hibino の店員AIです。ご予算やお探しの用途を教えていただければ、ぴったりの商品をご提案します。';
 
 // サジェスト chips。タップで入力欄に文言を挿入する（自動送信はしない）。
-// 複数タップは追記になる（書きかけを消さない）。
 const SUGGESTIONS = [
   'ギフトを探す',
   '予算5,000円で探す',
@@ -43,7 +42,6 @@ const SUGGESTIONS = [
 ];
 
 // 商品ページを見ているときのサジェスト chip。SUGGESTIONS と差し替えで使う（並べない）。
-// 「これ」が目の前の商品を指せることは、文言でそう書いてある chip が一番早く伝わる。
 // 定数として持つのは ChipGroup の memo 境界のため（描画ごとに配列を作ると bail out しない）。
 const PRODUCT_SUGGESTIONS = [
   'これに似た商品は？',
@@ -58,7 +56,6 @@ const MAX_CATEGORY_SHORTCUTS = 5;
 // 丸型 chip の造形は lib/buttonStyles.ts が持つ（提案カードの操作行と同じ源）。
 const CHIP_CLASS = chip();
 
-// はじめての方向けの簡単な使い方ガイド。
 const USAGE_GUIDE = [
   '用途・ご予算・お相手を教えてください',
   'ぴったりの商品をAIがご提案します',
@@ -68,13 +65,9 @@ const USAGE_GUIDE = [
 /**
  * ウェルカムの「見出し＋ chip の羅列」。サジェストとカテゴリで造形が同じなので器を1つにする
  * （別々に書くと chip の造形を直すとき片方だけ直った状態が生まれる）。
- * 小見出しは和文の太字ゴシックではなく、サイト共通の eyebrow 体系
- * （Footer の columnHeadClass・注文履歴の ledgerHeadClass と同じ語彙）で組む。
  *
- * memo 境界でもある。ウェルカムが出ているのは「最初の相談文を打ち込んでいる最中」そのもので、
- * 文字数カウンタがあるため1打鍵ごとに必ず再描画が走る。中身は withWordBreaks
- * （= Intl.Segmenter の語分割）を chip の数だけ通すので、memo が無いと 30 字打つあいだに
- * 11 語 × 30 回ぶんの語分割をやり直すことになる（AssistantProductCard と同じ判断）。
+ * memo 境界でもある。ウェルカム表示中は文字数カウンタのせいで1打鍵ごとに再描画が走り、
+ * memo が無いと chip の数だけ withWordBreaks（= Intl.Segmenter の語分割）を打鍵ごとにやり直す。
  * items は定数か state、onPick は useCallback 済みで同一性が保たれる。
  */
 const ChipGroup = memo(function ChipGroup({
@@ -144,7 +137,7 @@ function clearStoredConversationId(): void {
   window.localStorage.removeItem(CONVERSATION_ID_KEY);
 }
 
-// 履歴 API のメッセージを内部表現へ整形する。products は防御的に空配列へフォールバック。
+// products は防御的に空配列へフォールバックする（古いバックエンドでの欠損に備える）。
 function toChatMessage(msg: AssistantMessage): ChatMessage {
   return {
     id: nextMessageId(),
@@ -164,8 +157,7 @@ interface AssistantPanelProps {
   onNavigate: () => void;
   /**
    * 開いた直後に入力欄へ入れておく文言（検索0件からの相談導線など）。
-   * **自動送信はしない**——サジェスト chip と同じ規律で、送る前に予算などを書き足せる
-   * 状態にしておく。
+   * **自動送信はしない**——送る前に予算などを書き足せる状態にしておく。
    */
   prefill?: string;
   /**
@@ -189,7 +181,6 @@ export default function AssistantPanel({
   // 寸法は provider が持つ（本文を詰める側と同じ1つの値から導くため）。掴んでいる状態も
   // provider 側——接岸が解けてハンドルが消えたときに降ろせるのは、接岸を知っている層だけ。
   const { docked, width, maxWidth, setWidth, resizing, setResizing } = useAssistantGeometry();
-  // 入場アニメーション用。マウント直後に true にしてフェード/スライドインさせる。
   const [entered, setEntered] = useState(false);
   // 上へスクロール中に新着が届いたことを示す「新着へ移動」インジケータ。
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
@@ -200,17 +191,15 @@ export default function AssistantPanel({
   // 履歴復元が 404 以外（500・通信断）で失敗すると messages は空のまま会話IDだけが残るので、
   // messages.length だけで判定するとその会話を捨てる手段が画面から消える。
   const [conversationId, setConversationId] = useState<string | null>(null);
-  // ウェルカムに出すカテゴリ chip。固定文字列で持っていた頃は、シードの実カテゴリ
-  // （キッチン家電・生活家電・日用品・アウトドア・ファッション小物）と1つも一致せず、
-  // 押すと店に無い分類名で相談文が組まれてキーワード候補が必ず空振りしていた。
+  // ウェルカムに出すカテゴリ chip。固定文字列で持っていた頃はシードの実カテゴリと1つも
+  // 一致せず、押すと店に無い分類名で相談文が組まれてキーワード候補が必ず空振りしていた。
   // カテゴリの唯一の取得口（進行中の Promise を共有して往復を1回に畳む）から引く。
   const [categories, setCategories] = useState<string[]>([]);
   // 会話の世代。「新しい会話」を押すたびに増やし、飛行中の send() の結果を捨てる目印にする。
   // これが無いと、送信中にリセットしても応答が返った時点で会話IDが復活し、
   // 空のスレッドに「問いの無い回答」だけが積まれる。
   const sessionRef = useRef(0);
-  // いま開いている画面。経路の判定・ピルのラベル・取り下げは lib/assistantPageContext.ts が持つ
-  // （ページ側に名乗らせないのは、画面を1つ足した人が呼び忘れても誰も気づけないため）。
+  // いま開いている画面。経路の判定・ピルのラベル・取り下げは lib/assistantPageContext.ts が持つ。
   // ここは受け取って描くだけ——画面の種類ごとの都合をこの部品に溜めない。
   const {
     context: activeContext,
@@ -252,13 +241,11 @@ export default function AssistantPanel({
   }, []);
 
   // 入力欄を掴む経路はこの1本だけ。マウント（＝オープン）と、**開いたままの再オープン**
-  // （接岸中は非モーダルなので、背後の「相談する」ボタンが押せる）を同じ形で扱う。
-  // null 始まりなので初回も「nonce が変わった」側に落ちる。
+  // （接岸中は非モーダル）を同じ形で扱う。null 始まりなので初回も「nonce が変わった」側に落ちる。
   //
   // flushSync で値を先に確定させるのは、キャレット送りが el.value.length を読むため。
-  // 素の setInput だと値の反映は次のコミットになり、しかも同じ文言で2度呼ばれたときは
-  // React が再描画ごと省くので「値の反映を待つ」仕掛けはそもそも動かない（押しても
-  // 何も起きないボタンになる）。同期コミットにすればどちらの経路も1本で済む。
+  // 素の setInput だと反映は次のコミットになり、しかも同じ文言で2度呼ばれると React が
+  // 再描画ごと省くので「反映を待つ」仕掛けは動かない（押しても何も起きないボタンになる）。
   // passive effect の中なので flushSync は警告を出さない（レンダー中・layout effect 中は不可）。
   const appliedNonceRef = useRef<number | null>(null);
   useEffect(() => {
@@ -284,7 +271,6 @@ export default function AssistantPanel({
     };
   }, []);
 
-  // マウント（＝パネルオープン）時に履歴を復元する。
   useEffect(() => {
     let cancelled = false;
     const storedId = getStoredConversationId();
@@ -348,7 +334,6 @@ export default function AssistantPanel({
     }
   }, [messages, sending, initializing, scrollToBottom]);
 
-  // スクロール位置を監視し、最下部付近かどうかを記録する。
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
@@ -368,8 +353,8 @@ export default function AssistantPanel({
       const userMsgId = nextMessageId();
 
       // 入力欄は「いま送る文言がそのまま残っているとき」だけ空にする。無条件に消していた頃は、
-      // 「もう一度聞く」（フォームを経由せずここへ来る）が、catch で気を遣って戻した文言や
-      // 書きかけの相談文まで巻き添えで捨てていた（サジェスト chip の追記仕様と同じ規律）。
+      // 「もう一度聞く」（フォームを経由せずここへ来る）が、catch で戻した文言や書きかけの
+      // 相談文まで巻き添えで捨てていた。
       setInput((cur) => (cur.trim() === trimmed ? '' : cur));
       atBottomRef.current = true;
       setMessages((prev) => [
@@ -418,9 +403,8 @@ export default function AssistantPanel({
         // 無効なIDのまま永久に失敗し続けるループを断つ（履歴復元側と扱いを揃える）。
         if (apiErr?.status === 404) applyConversationId(null);
         // 失敗時はサーバー側に何も保存されていない（chat は成功時にしか commit しない）ので、
-        // 楽観表示した user バブルを取り消して表示とサーバー履歴を一致させ、
-        // 入力文を戻してそのまま再送できるようにする（書きかけがあれば上書きしない）。
-        // 消した発話はエラーバブルに retryText として預け、「もう一度聞く」の再送元にする。
+        // 楽観表示した user バブルを取り消して表示とサーバー履歴を一致させ、入力文を戻す
+        // （書きかけがあれば上書きしない）。消した発話は retryText として「もう一度聞く」へ預ける。
         setMessages((prev) => [
           ...prev.filter((m) => m.id !== userMsgId),
           {
@@ -441,7 +425,6 @@ export default function AssistantPanel({
         // 最大60秒後（backend の _CHAT_TIMEOUT）にフォーカスを奪いに来る。
         if (sessionRef.current === session) {
           setSending(false);
-          // 送信後に入力欄へフォーカスを戻す。
           inputRef.current?.focus();
         }
       }
@@ -454,9 +437,8 @@ export default function AssistantPanel({
     void send(input);
   };
 
-  // サジェスト chip タップ：入力欄へ**追記**してフォーカス（自動送信はしない）。
-  // 上書きにすると、書きかけの相談文が chip を1つ触っただけで消える。追記なら
-  // 「ギフトを探す」＋「予算5,000円で探す」のように条件を重ねられる。
+  // サジェスト chip タップ：入力欄へ**追記**してフォーカス（自動送信はしない）。上書きにすると、
+  // 書きかけの相談文が chip を1つ触っただけで消える。追記なら条件を重ねられる。
   // useCallback は ChipGroup の memo 境界のため（打鍵ごとに作り直すと bail out しない）。
   const handleSuggestion = useCallback((text: string) => {
     setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
@@ -497,14 +479,10 @@ export default function AssistantPanel({
     [onNavigate],
   );
 
-  // ── 幅のドラッグ（接岸中のみ） ──────────────────────────────────────────
   // 掴んだ瞬間のアンカー（ポインタのXと、そのときの幅）。以降は差分だけで幅を出す。
-  // ビューポート右端からの絶対座標で出すと、サイドバーがどこに接岸しているか
-  // （--assistant-gutter のぶん内側に置いてある）を1フレームごとに再導出することになり、
-  // 接岸位置の決め方を変えた瞬間にドラッグだけが静かにカーソルからずれる。差分なら
-  // 基準が「掴んだときの自分の幅」なので、接岸位置が何であろうと正しい。
-  // レイアウトの読み取り（clientWidth）が毎フレーム消えるという実利もある——直前のフレームで
-  // body の padding を書き換えた直後に読むので、あれは強制同期レイアウトだった。
+  // 絶対座標にすると接岸位置（--assistant-gutter のぶん内側）を毎フレーム再導出することになり、
+  // 接岸のしかたを変えた瞬間にドラッグだけが静かにカーソルからずれる。毎フレームの clientWidth
+  // 読み（body の padding を書き換えた直後なので強制同期レイアウト）が消えるという実利もある。
   const anchorRef = useRef({ x: 0, width: 0 });
   // 掴んでいる間の幅。null = まだ動かしていない（＝ただのクリックなので保存しない。
   // ウィンドウを一時的に狭めている間にクリックすると、好みの幅がクランプ後の値で潰れる）。
@@ -560,7 +538,6 @@ export default function AssistantPanel({
     e.preventDefault();
   };
 
-  // Esc で閉じる／Tab を dialog 内に閉じ込める（フォーカストラップ）。
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     // 確認ダイアログが開いている間はキー操作をそちらへ譲る。ConfirmDialog は body へポータルしても
     // React の合成イベントは JSX ツリーを辿るのでこの onKeyDown まで上がってくる。ダイアログ側の Esc は
@@ -572,11 +549,9 @@ export default function AssistantPanel({
       return;
     }
     if (e.key !== 'Tab') return;
-    // フォーカストラップはオーバーレイ（＝モーダル）のときだけ。接岸中は本文と併置された
-    // 非モーダルの領域なので、Tab はサイドバーから本文へ素直に抜けるのが正しい。
-    // ここで閉じ込めると、サイドバーを開いている間キーボードだけの利用者が店を回れなくなる。
+    // フォーカストラップはオーバーレイ（＝モーダル）のときだけ。接岸中に閉じ込めると、
+    // サイドバーを開いている間キーボードだけの利用者が店を回れなくなる。
     if (docked) return;
-    // 巡回そのものは共有の trapTab に任せる（フォーカス可能要素の定義は lib/focusTrap.ts が唯一の源）。
     // 罫を畳んだ問い合わせ履歴など隠れている要素があるので、visibleOnly で除く。
     trapTab(panelRef.current, e, { visibleOnly: true });
   };
@@ -585,9 +560,6 @@ export default function AssistantPanel({
   const remaining = MAX_INPUT_LENGTH - input.length;
   const nearLimit = remaining <= 50;
 
-  // バブルの行長は .assistant-bubble（globals.css §6）がスクロール領域の実幅から決める。
-  // サイドバーの幅で分岐させないのは、同じ実幅でも別の基準が効く二重の規律を作らないため。
-
   // ルートの tabIndex={-1} は、本文のドラッグ選択・バブル余白やカードの空き部分のタップで
   // activeElement が body へ落ちて onKeyDown が発火しなくなる（Escape も Tab トラップも死ぬ）
   // 経路を塞ぐためのもの。-1 なので Tab の巡回対象（[tabindex]:not([tabindex="-1"])）には入らない。
@@ -595,12 +567,8 @@ export default function AssistantPanel({
   // 入場前の位置。接岸は右から差し込み、オーバーレイは下から持ち上げる。
   const enterFrom = docked ? 'translate-x-4' : 'translate-y-3';
 
-  // ルートで補間するのは入場の opacity/transform だけ（transition-[opacity,transform]）。
-  // width は **補間しない**——ドラッグの追従は1フレームごとの即値であるべきで、
-  // transition が乗ると指から遅れてついてくる。開閉のときだけ translate で滑らせる。
-  //
-  // 形は2つだけ。接岸（docked）＝右端に居座る非モーダルのサイドバー、
-  // それ以外＝全画面のモーダル。role と aria-modal もここで切り替える。
+  // ルートで補間するのは入場の opacity/transform だけ。width は **補間しない**——ドラッグの
+  // 追従は1フレームごとの即値であるべきで、transition が乗ると指から遅れてついてくる。
   // right は 0 ではなく --assistant-gutter（縦スクロールバーの実測幅。AssistantWidget が配る）。
   // 0 にすると文書のスクロールバーを覆い、つまみを掴めなくなる環境がある。
   return (
@@ -618,13 +586,11 @@ export default function AssistantPanel({
       } ${entered ? 'translate-x-0 translate-y-0 opacity-100' : `opacity-0 ${enterFrom}`}`}
     >
       {/* 幅のドラッグハンドル。左端の罫に重ね、外へ 6px はみ出させて掴みやすくする
-          （罫の 1px だけを狙わせると実用にならない）。role="separator" ＋ tabIndex で
-          ウィンドウ・スプリッタとして名乗り、キーボードだけでも幅を変えられるようにする。
+          （罫の 1px だけを狙わせると実用にならない）。
           touch-none が無いと、タッチでのドラッグがページのスクロールに吸われて幅が動かない。
-          focus の見えに共有の FOCUS_RING を使わない唯一の箇所。あれは ring-2 + ring-offset-2 で、
-          幅 12px・高さ全画面の帯に回すと輪だけが外へはみ出してサイドバーの縁を二重に見せる。
-          代わりに下の罫を brand-600 で全高点灯させる（対 surface 6.0:1。造形は違うが、
-          focus の在り処は同じだけ明確に出る）。 */}
+          focus の見えに共有の FOCUS_RING を使わない唯一の箇所——ring-2 + ring-offset-2 を
+          幅 12px・高さ全画面の帯に回すと輪だけが外へはみ出す。代わりに下の罫を brand-600 で
+          全高点灯させる（対 surface 6.0:1）。 */}
       {docked && (
         <div
           role="separator"
@@ -644,8 +610,8 @@ export default function AssistantPanel({
           title="ドラッグで幅を変更（ダブルクリック／Enter で既定幅に戻す）"
           className="group absolute inset-y-0 -left-1.5 z-10 flex w-3 cursor-col-resize touch-none items-center justify-center focus-visible:outline-none"
         >
-          {/* 掴める場所であることを示す罫。既定は透明で、hover / フォーカス / ドラッグ中だけ色が乗る。
-              常時見せると、サイドバーの左端に意味の無い縦線がもう1本増えるだけになる。 */}
+          {/* 既定は透明で、hover / フォーカス / ドラッグ中だけ色が乗る。常時見せると、
+              サイドバーの左端に意味の無い縦線がもう1本増えるだけになる。 */}
           <span
             aria-hidden
             className={`h-full w-[3px] rounded-full transition-colors duration-fast ease-standard group-hover:bg-brand-300 group-focus-visible:bg-brand-600 ${
@@ -654,9 +620,7 @@ export default function AssistantPanel({
           />
         </div>
       )}
-      {/* ヘッダー。丸アイコンではなく節記号（brand の縦罫）＋ eyebrow ＋ 明朝の見出しで、
-          サイトの扉（PageMasthead・ProductFilters の絞り込みドロワー）と同じ組み方に揃える。
-          text-h3 の fontWeight:500 は Zen Old Mincho が 700 しか持たないためフォントマッチングで
+      {/* text-h3 の fontWeight:500 は Zen Old Mincho が 700 しか持たないためフォントマッチングで
           700 面が選ばれる（合成ボールドにはならない）。
           下端の罫は line ではなく line-strong。すぐ下がスクロール面（bg-page）で、
           line は対 page 1.28:1 とほぼ見えず、ヘッダーが帯として閉じない。 */}
@@ -669,7 +633,7 @@ export default function AssistantPanel({
         </div>
         {/* 捨てられる会話が無い（履歴も会話IDも無い）ときだけ出さない。復元に失敗して画面が空でも
             会話IDが残っていれば出す。送信中も無効化しない（世代ガードで整合が取れる）。
-            btn('ghost','sm') は h-9 だが .hit（globals.css §5）が ±6px 広げるので実効48px。 */}
+            btn('ghost','sm') は h-9 だが .hit（globals.css §3）が ±6px 広げるので実効48px。 */}
         {(messages.length > 0 || conversationId !== null) && (
           <button
             type="button"
@@ -681,8 +645,7 @@ export default function AssistantPanel({
             <ArrowPathIcon className="h-4 w-4" />
             {/* ラベルの出し分けはヘッダー帯自身の実幅で決める（globals.css §6 の
                 .assistant-header-label）。ビューポート基準の sm: だと、1440px の画面で
-                サイドバーを 320px まで狭めてもラベルが出続け、見出し「Hibino の店員AI」を
-                2行に折って帯の高さを押し上げる。バブルの行長・カードの列数と同じ規律。 */}
+                サイドバーを 320px まで狭めてもラベルが出続け、見出しを2行に折る。 */}
             <span className="assistant-header-label">新しい会話</span>
           </button>
         )}
@@ -693,7 +656,6 @@ export default function AssistantPanel({
         </button>
       </div>
 
-      {/* メッセージリスト */}
       <div className="relative flex-1 overflow-hidden">
         {/* テキストだけの応答が続くとスクロール領域に一つもフォーカス対象が無くなり、
             キーボードだけでは履歴を遡れなくなる。tabIndex={0} で領域自体を到達可能にし、
@@ -714,8 +676,6 @@ export default function AssistantPanel({
           ) : (
             <>
               {showWelcome && (
-                // ウェルカムは上詰めで各セクションを一定間隔（gap-4）に並べ、
-                // chips とガイドの間に大きな空白が残らないようにする。
                 // mx-auto は付けない：中央寄せにすると、下に続くメッセージ列（左原点）と
                 // ウェルカムの左端が段差する。
                 <div className="flex max-w-[40rem] flex-col gap-4">
@@ -723,19 +683,16 @@ export default function AssistantPanel({
                     {WELCOME_MESSAGE}
                   </div>
 
-                  {/* 商品ページを見ているなら「これ」で指せることが伝わる chip に差し替える。
-                      並べて両方出さないのは、最初の1文を選ぶ場面で粒が10個になると
-                      選ぶこと自体が仕事になるため。定数どうしの差し替えなので
-                      ChipGroup の memo は効いたまま。 */}
+                  {/* 並べて両方出さないのは、最初の1文を選ぶ場面で粒が10個になると選ぶこと
+                      自体が仕事になるため。定数どうしの差し替えなので ChipGroup の memo は効いたまま。 */}
                   <ChipGroup
                     label="SUGGESTED"
                     items={activeContext ? PRODUCT_SUGGESTIONS : SUGGESTIONS}
                     onPick={handleSuggestion}
                   />
-                  {/* カテゴリは取得できたときだけ出る（0件なら ChipGroup が見出しごと畳む）。 */}
                   <ChipGroup label="CATEGORIES" items={categories} onPick={handleCategoryPick} />
 
-                  {/* 地は surface。面の階層は surface > tile > page > sunken の4段しかないので、
+                  {/* 面の階層は surface > tile > page > sunken の4段しかないので、
                       surface/70 のような5段目の中間色をここだけ作らない。 */}
                   <div className="rounded-2xl bg-surface p-4 shadow-paper">
                     <p className="mb-2 text-eyebrow uppercase font-num text-ink-muted">HOW IT WORKS</p>
@@ -780,8 +737,7 @@ export default function AssistantPanel({
                       <li key={msg.id}>
                         {/* sr-only は position:absolute なので、直下に置いても flex の配置に響かない。 */}
                         <span className="sr-only">あなた: </span>
-                        {/* 自分の発言は右寄せ（この flex）だけで判別できるので、地は brand 塗りにしない。
-                            塗りを外して淡い brand の面＋内側リングにし、誌面の面の階層に戻す。 */}
+                        {/* 自分の発言は右寄せ（この flex）だけで判別できるので、地は brand 塗りにしない。 */}
                         <div className="flex justify-end">
                           <div className="assistant-bubble whitespace-pre-wrap break-words rounded-2xl bg-brand-50 px-4 py-2.5 text-body text-brand-900 ring-1 ring-inset ring-brand-200">
                             {msg.content}
@@ -803,8 +759,7 @@ export default function AssistantPanel({
                         </div>
                         {msg.products.length > 0 && (
                           // 列数は auto-fill がグリッド実幅から決める（globals.css の
-                          // .assistant-product-grid。列幅の下限 20rem は「カートに追加」が
-                          // 1行に収まる寸法）。normal でも広ければそのぶん列が増える。
+                          // .assistant-product-grid。列幅の下限 20rem は「カートに追加」が1行に収まる寸法）。
                           <div
                             className="assistant-product-grid"
                             role="group"
@@ -853,7 +808,6 @@ export default function AssistantPanel({
                 </ul>
               )}
 
-              {/* 生成待ちのタイピングインジケータ（点の造形と周期は TypingDots が持つ）。 */}
               {sending && (
                 <div className="flex justify-start">
                   <div className="flex items-center gap-1.5 rounded-2xl bg-surface px-4 py-3 shadow-paper">
@@ -865,7 +819,6 @@ export default function AssistantPanel({
           )}
         </div>
 
-        {/* 新着へ移動：上へスクロール中に応答が届いたときだけ表示する。 */}
         {showJumpToLatest && (
           <button
             type="button"
@@ -877,31 +830,23 @@ export default function AssistantPanel({
           </button>
         )}
 
-        {/* スクリーンリーダー向けの応答通知（視覚的には非表示）。 */}
         <div aria-live="polite" role="status" className="sr-only">
           {liveMessage}
         </div>
       </div>
 
-      {/* 入力欄 */}
       <form
         onSubmit={handleSubmit}
         className="border-t border-line px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
       >
         {/* 送信中も input/button を disabled にしない。disabled にすると activeElement が body へ落ち、
             応答が返るまで（最大60秒）Escape も Tab トラップも効かなくなるうえ、finally の
-            inputRef.focus() は再描画前に走るため復帰もしない。readOnly / aria-disabled なら
-            フォーカスは入力欄に留まったまま、編集と押下の意味だけを止められる。
-            二重送信・空送信は send() 冒頭の `if (!trimmed || sending) return;` が防ぐ。
-            入力欄には aria-disabled を **付けない**。readOnly は「フォーカスできるが編集できない」を
-            aria-readonly として自動で公開するのに対し、aria-disabled は「操作できない」と名乗る別の状態で、
-            両者を併記すると支援技術に矛盾が届く。スクリーンリーダーのフォームモードには
-            aria-disabled の要素を読み飛ばす実装があり、それではフォーカスを入力欄へ留めた意味が消える。
-            送信中であることは上の status 領域が可聴で伝えている。 */}
-        {/* いま見ている画面のピル。**送っているものは必ず見えていて、必ず外せる**——
-            見えないまま前提が効くと、別の商品の話がしたい人に逃げ場が無くなる。
-            名前が引けていない間（通信中・一時的な失敗）は総称で出す。ピルを名前が
-            届くまで出さない作りにすると、送っているのに見えない時間が生まれる。 */}
+            inputRef.focus() は再描画前に走るため復帰もしない。二重送信・空送信は send() 冒頭の
+            `if (!trimmed || sending) return;` が防ぐ。
+            入力欄には aria-disabled を **付けない**——readOnly が自動で公開する aria-readonly と
+            矛盾するうえ、aria-disabled の要素を読み飛ばす SR 実装ではフォーカスを留めた意味が消える。 */}
+        {/* いま見ている画面のピル。名前が引けていない間（通信中・一時的な失敗）は総称で出す
+            ——名前が届くまで出さない作りにすると、送っているのに見えない時間が生まれる。 */}
         {activeContext && (
           <div
             id="assistant-page-context"
@@ -954,8 +899,7 @@ export default function AssistantPanel({
           >
             {sending ? (
               // label={null} で aria-hidden にする。中身が空のまま新規挿入される live 領域は
-              // 読まれない組み合わせが多いので通知役は持たせない（状態通知は上の status 領域へ
-              // 一本化する）。軌道は currentColor なので brand 塗りの中では白になる。
+              // 読まれない組み合わせが多いので、状態通知は上の status 領域へ一本化する。
               <Spinner label={null} className="h-5 w-5" />
             ) : (
               <PaperAirplaneIcon className="h-5 w-5" />
@@ -968,7 +912,6 @@ export default function AssistantPanel({
         <span id="assistant-input-hint" className="sr-only">
           最大{MAX_INPUT_LENGTH}文字
         </span>
-        {/* 文字数カウンタ。上限が近づいたら警告色で残数を示す（目で見るための表示）。 */}
         <div className="mt-1 flex justify-end px-1">
           <span
             aria-hidden="true"
@@ -981,11 +924,9 @@ export default function AssistantPanel({
 
       {/* 確認ダイアログは body 直下へポータルする。このパネルのルートは入場アニメの translate-y を
           常に持ち、transform を持つ要素は position:fixed の含有ブロックになるため、ツリー内に
-          置くと `fixed inset-0` の膜と中央寄せがサイドバーの箱（320〜720px）に閉じ込められ、
-          ページ全体が暗転しない・ボタン行が 320px に潰れる。
+          置くと `fixed inset-0` の膜と中央寄せがサイドバーの箱に閉じ込められる。
           React の合成イベントはポータル越しでも JSX ツリーを辿って伝わるので、handleKeyDown 先頭の
-          `if (resetOpen) return;`（Esc をダイアログへ譲るガード）は引き続き必要。
-          パネルはクリック後にしかマウントされないが、SSR で document が無い場合に備えて存在を確かめる。 */}
+          `if (resetOpen) return;`（Esc をダイアログへ譲るガード）は引き続き必要。 */}
       {typeof document !== 'undefined' &&
         createPortal(
           <ConfirmDialog

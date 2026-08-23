@@ -2,9 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ============================================================
-   1. ルート変数
-   ============================================================ */
+/* 1. ルート変数 */
 :root {
   --header-h: 4rem;              /* Header の行を h-16 に固定するため exact */
   --dur-fast: 120ms;
@@ -42,30 +40,24 @@ body {
 }
 
 body {
-  /* next/font の CSS 変数（--font-sans-jp）を先頭に置く。以降はフォールバック。 */
+  /* --font-sans-jp は自己ホストの app/fonts.css が :root に定義する。以降はフォールバック。 */
   font-family: var(--font-sans-jp), -apple-system, BlinkMacSystemFont,
     'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
-  line-height: 1.8;              /* 1.625 → 1.8。和文の呼吸を作る */
+  line-height: 1.8;              /* 和文の呼吸を作る */
   -webkit-font-smoothing: antialiased;
 }
 
-/* ============================================================
-   2. 和文組版
-   ============================================================ */
+/* 2. 和文組版 */
 :lang(ja) {
   font-feature-settings: 'palt' 1;   /* 約物アキを詰める */
   line-break: strict;
 }
 
-/* ── 明朝（Zen Old Mincho）の字送り ──────────────────────────────────────
-   実測（Playwright / 評価と同じ Chromium）:
-     'ドリップケトル' を 100px で組んだときの幅は
-       normal / palt / pkna / pwid / halt / kern … すべて 700px（= 7em）で不変。
-     一方 Noto Sans JP は palt で 692 → 612px に詰まる。
-   つまり配信している Zen Old Mincho のサブセットには GSUB/GPOS が入っておらず、
-   **明朝に palt は効かない**。ここでの font-feature-settings は
-   ①フォールバック（Hiragino Mincho ProN / YuMincho）で効かせるため、
-   ②将来フル機能のフォントに差し替えたときに自動で効くようにするため、の宣言。
+/* 明朝（Zen Old Mincho）の字送り。配信しているサブセットには GSUB/GPOS が入っておらず、
+   **明朝に palt は効かない**（実測: 'ドリップケトル' を 100px で組むと normal / palt / pkna /
+   pwid / halt / kern のいずれでも 700px = 7em で不変。Noto Sans JP は palt で 692 → 612px）。
+   それでも宣言するのは ①フォールバック（Hiragino Mincho ProN / YuMincho）で効かせるため、
+   ②将来フル機能のフォントに差し替えたときに自動で効くようにするため。
    Web フォント側の実効的な補正は下の --kana-track（.kana）と
    tailwind.config.ts の fontSize トークンの負トラッキングで行う。 */
 .font-mincho {
@@ -76,36 +68,33 @@ body {
   --kana-edge: -0.03em;
 }
 
-/* カタカナだけ字面が em の 6 割前後しかないのに全角送りで並ぶため、
-   同じ行の漢字と比べてカタカナ語だけアキが開いて見える（「ケ ト ル」問題）。
-   lib/wordBreak.ts の withWordBreaks() が連続カタカナを <span class="kana"> で包むので、
-   祖先が指定した --kana-track のぶんだけ語の内側の字送りを詰める。
-   letter-spacing は最後の1文字の後ろにも入るので、その分は margin で戻す。
-   こうすると「カタカナ語の内側だけ詰まり、隣の漢字とのアキは変わらない」になる。 */
+/* カタカナだけ字面が em の 6 割前後しかないのに全角送りで並ぶため、同じ行の漢字と比べて
+   カタカナ語だけアキが開いて見える（「ケ ト ル」問題）。lib/wordBreak.ts の withWordBreaks() が
+   連続カタカナを <span class="kana"> で包むので、祖先が指定した --kana-track のぶんだけ
+   語の内側の字送りを詰める。letter-spacing は最後の1文字の後ろにも入るので、その分は margin
+   で戻す（＝カタカナ語の内側だけ詰まり、隣の漢字とのアキは変わらない）。 */
 .kana {
   letter-spacing: var(--kana-track, 0em);
   margin-inline-end: calc(var(--kana-track, 0em) * -1);
 }
 
-/* 漢字↔カタカナの継ぎ目。.kana は語の内側しか詰めないので、
-   カタカナ語の両端に残る「字面の余り」（em の 2 割前後）がそのまま継ぎ目のアキになる。
-   実測（1440px / text-display 68px / 「温度調整ドリップケトル」）:
-     手当て前 … 「整」と「ド」の字面の間が約 0.9em。同じ行の漢字どうし（ほぼ 0）と比べて明白。
+/* 漢字↔カタカナの継ぎ目。.kana は語の内側しか詰めないので、カタカナ語の両端に残る
+   「字面の余り」（em の 2 割前後）がそのまま継ぎ目のアキになる（実測: 1440px / text-display
+   68px の「温度調整ドリップケトル」で「整」と「ド」の間が約 0.9em。漢字どうしはほぼ 0）。
    隣にグループがある側にだけ付ける（行頭・行末や約物の隣は詰めない）。
    margin-inline-end は .kana の宣言を上書きするので、必ず .kana より後ろに置くこと。 */
 .kana-edge-s { margin-inline-start: var(--kana-edge, 0em); }
 .kana-edge-e { margin-inline-end: calc(var(--kana-track, 0em) * -1 + var(--kana-edge, 0em)); }
 
-/* 小書き仮名（ァィゥェォッャュョヮヵヶ）だけの追加の詰め。
-   letter-spacing は「その文字の**後ろ**」にしか効かないので、前のアキは
-   margin-inline-start で戻す。両側から詰めないと、
-   「ドリッ|プ」（後ろだけ空く）「キャ|ンプ」（前だけ空く）のどちらかが必ず残る。
-   最後の1文字が小書きだったときは、.kana 側の margin-inline-end が --kana-track ぶんしか
-   戻していないので、追加ぶんをここで戻す（語の右のアキが隣の漢字と食い違わないように）。 */
+/* 小書き仮名（ァィゥェォッャュョヮヵヶ）だけの追加の詰め。letter-spacing は「その文字の
+   **後ろ**」にしか効かないので、前のアキは margin-inline-start で戻す。両側から詰めないと
+   「ドリッ|プ」（後ろだけ空く）「キャ|ンプ」（前だけ空く）のどちらかが必ず残る。 */
 .kana-small {
   letter-spacing: calc(var(--kana-track, 0em) + var(--kana-small, 0em));
   margin-inline-start: var(--kana-small, 0em);
 }
+/* 語末が小書きのときは .kana 側の margin-inline-end が --kana-track ぶんしか戻していないので、
+   追加ぶんをここで戻す（語の右のアキが隣の漢字と食い違わないように）。 */
 .kana > .kana-small:last-child {
   margin-inline-end: calc(var(--kana-small, 0em) * -1);
 }
@@ -116,7 +105,7 @@ h2,
 h3,
 .jp-head {
   line-height: 1.25;
-  text-wrap: balance;                /* 見出しの行数を均等割り */
+  text-wrap: balance;
 }
 
 p,
@@ -148,24 +137,16 @@ li,
 }
 
 /* 表紙・扉の大見出し（text-display / text-h1）専用。.jp-name と必ず併用する。
-   なぜ balance を戻せるのか:
-     r1 で「温度調整ド／リップケトル」を起こしたのは、balance が候補幅を狭めて再組みする途中で
-     overflow-wrap: break-word が任意位置に改行機会を作っていたため。
-     いまは withWordBreaks() が語境界に <wbr> を挿し、.jp-name の keep-all が
-     それ以外の改行機会を消すので、balance は「語の切れ目」からしか選べない。
-   実測（390 / 768 / 1440、Chromium）:
-     balance なし: 温度調整ドリップ／ケトル（8:3）、ワイヤレスイヤ／ホン（7:2）
-     balance あり: 温度調整／ドリップケトル（4:7）、ワイヤレス／イヤホン（5:4）
+   balance を許せるのは、withWordBreaks() が語境界に <wbr> を挿し .jp-name の keep-all が
+   それ以外の改行機会を消すため（「温度調整ド／リップケトル」が起きたのは、balance が候補幅を
+   狭めて再組みする途中で overflow-wrap: break-word が任意位置に改行機会を作っていたから）。
    text-pretty ユーティリティより後に置いてあるので、併記した場合はこちらが勝つ。 */
 .jp-display {
   text-wrap: balance;
-  /* 大きい号数ほどカタカナのアキが目立つので一段強く詰める。
-     実測（1440px / text-display = 68px / 「ドリップケトル」）:
-       -0.08em … 1文字あたりの送り 62.6px（0.92em）。隣の「温度調整」（0.99em 送りだが
-                 字面が em いっぱい）に対してカタカナだけ明らかに散漫だった。
-       -0.13em … 62.6 → 59.2px（0.87em）。カタカナの字面（約 0.62em）に対する
-                 アキが漢字の字面に対するアキとほぼ揃う。
-     サイト最大の活字が最も緩い、という型の規律の逆転をここで解消している。 */
+  /* 大きい号数ほどカタカナのアキが目立つので一段強く詰める。実測（1440px / text-display
+     68px / 「ドリップケトル」）: -0.08em では1文字あたりの送りが 62.6px（0.92em）で隣の
+     「温度調整」に対して散漫、-0.13em で 59.2px（0.87em）＝カタカナの字面（約 0.62em）に
+     対するアキが漢字の字面に対するアキとほぼ揃う。 */
   --kana-track: -0.13em;
   --kana-small: -0.05em;
   --kana-edge: -0.07em;
@@ -187,11 +168,9 @@ textarea::placeholder {
   font-feature-settings: 'tnum' 1, 'palt' 0;
 }
 
-/* ============================================================
-   3. コンテンツ幅（3系統）と縦リズム（4段階）
+/* 3. コンテンツ幅（3系統）と縦リズム（4段階）
    帯は <main> 直下の <section> なので既に全幅。100vw は使わない
-   （スクロールバー分の横スクロールが出る）。内側に .wrap* を置くだけ。
-   ============================================================ */
+   （スクロールバー分の横スクロールが出る）。内側に .wrap* を置くだけ。 */
 @layer components {
   .wrap-wide { max-width: 82.5rem; margin-inline: auto; padding-inline: 1rem; }  /* 1320px */
   .wrap      { max-width: 72rem;   margin-inline: auto; padding-inline: 1rem; }  /* 1152px = 現 max-w-6xl */
@@ -220,18 +199,15 @@ textarea::placeholder {
 
 }
 
-/* ============================================================
-   3b. 面の段差 と モーション（段階的な出現・高さの展開）
+/* 3b. 面の段差 と モーション（段階的な出現・高さの展開）
    ここは @layer に入れない。@layer components に置くと Tailwind が
    「content に出てこないクラス」として削除してしまい、他エリアが使い始めるまで
    CSS が存在しない＝レビュー時に効かない、という事故になるため。
-   モーションはすべて §5 の prefers-reduced-motion ガードで無効化される。
-   ============================================================ */
+   モーションはすべて §5 の prefers-reduced-motion ガードで無効化される。 */
 
 /* 沈んだ帯（扉・編集帯・カテゴリ帯）の上下端。
    地色差（sunken:page = 1.23:1）だけでは大きな面の切り替わりが読みにくいので、
-   線を1本足して段差を明示する。border ユーティリティと衝突しない inset shadow で持つ。
-   （下端だけの .edge-b も持っていたが、帯は必ず上下1対で使うため使い道が無く削除した） */
+   線を1本足して段差を明示する。border ユーティリティと衝突しない inset shadow で持つ。 */
 .edge-y {
   box-shadow:
     inset 0 1px 0 theme(colors.line-strong),
@@ -242,17 +218,13 @@ textarea::placeholder {
    --stagger-step ずつ増える。子には別途アニメーション
    （例 animate-rise / motion-safe:animate-rise）を付けること。
    遅れが積み上がって「最後の1枚がいつまでも出ない」のを避けるため 8 枚で頭打ちにする。
-   刻みを変えたいときは呼び出し側で `[--stagger-step:40ms]`。
 
-   ⚠ animation-delay に !important が要る理由（実測）:
-   `animate-rise` 等の Tailwind ユーティリティは `animation:` **ショートハンド**を書くので、
-   後から適用されると animation-delay を 0s に巻き戻す。media variant（motion-safe:）付きの
-   ユーティリティは生成 CSS の最後（実測 idx 396,059 / .stagger > * は 382,682）に出るため、
-   素の詳細度では必ず負ける。ここを !important にしておくと、子が
-   `animate-rise` でも `motion-safe:animate-rise` でも段差が付く。
-   !important どうしでは詳細度の高い `.stagger > *`（0,1,0）が §5 の全称ガード（0,0,0）に
-   勝ってしまうので、この宣言だけ no-preference のときにしか出さない。
-   reduce のときは §5 の `animation-delay: 0ms !important` がそのまま効く。 */
+   ⚠ animation-delay に !important が要る理由（実測）: `animate-rise` 等の Tailwind
+   ユーティリティは `animation:` **ショートハンド**を書くので、後から適用されると
+   animation-delay を 0s に巻き戻す。media variant（motion-safe:）付きは生成 CSS の最後に
+   出るため素の詳細度では必ず負ける。ただし !important どうしでは詳細度の高い
+   `.stagger > *`（0,1,0）が §5 の全称ガード（0,0,0）に勝ってしまうので、この宣言だけ
+   no-preference のときにしか出さない（reduce では §5 の 0ms がそのまま効く）。 */
 @media (prefers-reduced-motion: no-preference) {
   .stagger > * { animation-delay: calc(var(--stagger-step, 70ms) * var(--stagger-i, 0)) !important; }
 }
@@ -291,13 +263,10 @@ textarea::placeholder {
     opacity var(--dur-base) var(--ease-entrance);
 }
 
-/* ============================================================
-   4. インタラクション
-   ============================================================ */
-/* 操作可能要素の状態遷移。
-   色だけでなく opacity / transform / box-shadow も既定で遷移させる。
-   ホバー以外（focus-visible・aria-expanded・group-focus-within で現れるお気に入り等）の
-   状態変化が「パッと切り替わる」のをなくすため。個別に transition-* を書いた要素は
+/* 4. インタラクション */
+/* 操作可能要素の状態遷移。色だけでなく opacity / transform / box-shadow も既定で遷移させる
+   （ホバー以外＝focus-visible・aria-expanded・group-focus-within で現れるお気に入り等の
+   状態変化が「パッと切り替わる」のをなくすため）。個別に transition-* を書いた要素は
    ユーティリティが後勝ちするのでここは上書きされる。 */
 button,
 a,
@@ -312,9 +281,8 @@ textarea,
   transition-duration: var(--dur-fast);
 }
 
-/* 全ての操作可能要素にキーボードフォーカス時の統一されたリングを付与する。
-   マウス/タッチ操作時は :focus-visible が発火しないため見た目は変わらない。
-   brand-400 は対 page 2.65:1 で WCAG 2.2 の 3:1 を満たさないため brand-600（5.5:1）にする。 */
+/* キーボードフォーカス時の統一されたリング。brand-400 は対 page 2.65:1 で WCAG 2.2 の
+   3:1 を満たさないため brand-600（5.5:1）にする。 */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
@@ -332,9 +300,7 @@ textarea:focus-visible,
   outline-color: #8FC0BA;
 }
 
-/* ============================================================
-   5. prefers-reduced-motion の一括ガード
-   ============================================================ */
+/* 5. prefers-reduced-motion の一括ガード */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -347,13 +313,10 @@ textarea:focus-visible,
   }
 }
 
-/* ============================================================
-   6. AIアシスタント
-   ============================================================ */
-/* ── サイドバー（xl 以上で接岸）が本文を押しのける ─────────────────────────
-   サイドバーは position:fixed なので body の padding では動かない。幅を1つの変数で配り、
-   body（本文を詰める側）とサイドバー自身（幅を持つ側）が同じ値を見る。
-   変数を置くのは AssistantWidget の effect（開いている間だけ、xl 以上のときだけ）。
+/* 6. AIアシスタント */
+/* サイドバー（xl 以上で接岸）が本文を押しのける。サイドバーは position:fixed なので body の
+   padding では動かず、幅は AssistantWidget の effect が置く変数で配る（開いている間だけ、
+   xl 以上のときだけ）。本文（下の padding-right）と幅を持つ側が同じ値を見る。
 
    --assistant-dock   … サイドバーの幅
    --assistant-gutter … 縦スクロールバーの実測幅。サイドバーはこのぶん内側へ寄る
@@ -369,8 +332,8 @@ body {
 
 /* ハンドルを掴んでいる間の全体の振る舞い（印は AssistantWidget が <html> に付ける）。
    ・本文の補間を切る: 付けたままだと本文が指から 280ms 遅れて追いかけてくる。
-   ・選択を止める: user-select は継承するので <html> に一度書けば足りる（pointerdown の
-     preventDefault で始まりは断てるが、掴む前からあった選択が伸び続けるのを防ぐ）。
+   ・選択を止める: user-select は継承するので <html> に一度書けば足りる（掴む前からあった
+     選択が伸び続けるのを防ぐ）。
    ・カーソルを固定する: **ここだけは全称セレクタが要る**。ポインタはハンドルに capture
      されているが、カーソルの絵柄は下に居る要素の指定が出る——cursor も継承はするものの、
      リンクやボタンが自分で pointer を指定しているので継承では上書きできない。 */
@@ -384,7 +347,7 @@ html[data-assistant-resizing] * {
   cursor: col-resize !important;
 }
 
-/* AIアシスタント: 列数は .assistant-product-grid の auto-fill がグリッド実幅から決める。
+/* 列数は .assistant-product-grid の auto-fill がグリッド実幅から決める。
    container はバブルの行長にだけ使う（ビューポート基準だと、幅を自由に変えられる接岸時と
    全画面のオーバーレイ時で実効幅が一致しないため、スクロール領域自体を基準にする）。 */
 .assistant-scroll {
@@ -397,15 +360,14 @@ html[data-assistant-resizing] * {
 
 /* バブルの行長。ch は「0」の送り幅を単位にするので、42ch と書いても和文では全角21字にしかならず
    「全角30〜40字」の目安を達成できない。rem で持ち、SignatureBand の max-w-[34rem] や
-   .wrap-read（40rem）と同じ語彙に揃える。閾値の基準はビューポートではなくスクロール領域
-   （上の container: assistant）なので、サイドバーをどの幅に広げても、全画面のオーバーレイでも
-   同じ実幅なら同じ行長になる。 */
+   .wrap-read（40rem）と同じ語彙に揃える。閾値の基準は上の container: assistant なので、
+   サイドバーをどの幅に広げても全画面のオーバーレイでも、同じ実幅なら同じ行長になる。 */
 .assistant-bubble { max-width: 88%; }
 @container assistant (min-width: 34rem) { .assistant-bubble { max-width: 32rem; } }
 @container assistant (min-width: 52rem) { .assistant-bubble { max-width: 40rem; } }
 
-/* AIアシスタント: ヘッダー帯。「新しい会話」のラベルは帯の実幅で出し分ける（ビューポート
-   基準にすると、広い画面でサイドバーを狭めたときにラベルが残って見出しを2行に折る）。
+/* ヘッダー帯。「新しい会話」のラベルは帯の実幅で出し分ける（ビューポート基準にすると、
+   広い画面でサイドバーを狭めたときにラベルが残って見出しを2行に折る）。
    23rem は帯の内寸（px-4 を除いた実幅）なので、器としては約 416px から出る。ラベルまで載せても
    見出し「Hibino の店員AI」が1行に収まる下限の実測値。 */
 .assistant-header {
@@ -418,7 +380,7 @@ html[data-assistant-resizing] * {
 /* 列幅の下限を 20rem に固定し、何列入るかはグリッドの実幅に任せる。閾値で列数を決めていた頃は
    280px列・257px列で「カートに追加」が必ず2行に折れていた。ドラッグで幅が連続に変わる以上、
    閾値では正しい列数を出せない。min() が無いと 320px 端末（コンテナ288px）でトラック下限が溢れる。
-   ⚠ この 20rem はサイドバーの下限（lib/assistant-context.ts の ASSISTANT_MIN_WIDTH = 320px）の
+   ⚠ この 20rem はサイドバーの下限（lib/assistant-context.tsx の ASSISTANT_MIN_WIDTH = 320px）の
    根拠でもある。広げるなら向こうも一緒に上げること（1列も入らない幅まで狭められるようになる）。 */
 .assistant-product-grid {
   display: grid;

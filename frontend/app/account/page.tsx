@@ -22,7 +22,6 @@ function initialOf(name: string): string {
   return trimmed ? Array.from(trimmed)[0] : 'H';
 }
 
-/** アカウント内の導線カード（注文履歴・お気に入り・住所帳・ログアウト）の共通クラス。 */
 const menuCardClass =
   'group flex h-full items-center gap-3 rounded-xl bg-surface p-4 text-left shadow-paper transition-[background-color,box-shadow] duration-base ease-standard hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600';
 
@@ -144,7 +143,6 @@ export default function AccountPage() {
 
   return (
     <>
-      {/* 扉。全ページ共通の PageMasthead に寄せる（幅は本文と同じ wrap ＝ width="default"）。 */}
       <PageMasthead
         eyebrow="ACCOUNT"
         title={`${user.name} さん`}
@@ -163,7 +161,6 @@ export default function AccountPage() {
       />
 
       <div className="wrap band-lg">
-        {/* カードメニュー */}
         <div className="mb-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {/* 導線カードはデータで持つ。丸アイコンの寸法や矢印の色を変えるのに
               同じ11行を3箇所直す必要が無いようにする（ログアウトだけは button なので下に別で置く）。 */}

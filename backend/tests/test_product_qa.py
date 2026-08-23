@@ -32,9 +32,7 @@ class TestBuildProductBlock:
 
     def test_uses_effective_price_when_on_sale(self):
         block = product_qa.build_product_block(_product(sale_price=3980), None)
-        # sale_price があれば実売価格を使う。
         assert "価格: ¥3,980" in block
-        # レビューが無ければ平均評価は「まだレビューなし」。
         assert "平均評価: まだレビューなし" in block
 
     def test_availability_in_stock(self):
@@ -94,7 +92,6 @@ class TestBuildUserPrompt:
 
 class TestSystemPrompt:
     def test_grounding_and_injection_guard(self):
-        # 根拠限定・不明時は正直に・インジェクション緩和が明示されていること。
         assert "根拠" in product_qa.SYSTEM_PROMPT
         assert "推測で答えず" in product_qa.SYSTEM_PROMPT
         assert "<question>" in product_qa.SYSTEM_PROMPT

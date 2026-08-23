@@ -41,7 +41,6 @@ const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 
 /** 同時表示の上限。超えた分は古いものから消す。 */
 const MAX_TOASTS = 4;
-/** 自動消滅までの時間（ミリ秒）。 */
 const AUTO_DISMISS_MS = 4000;
 /** 退出トランジションの時間（ミリ秒）。 */
 const EXIT_MS = 200;
@@ -142,7 +141,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       type: opts?.type ?? 'info',
       action: opts?.action,
     };
-    // 上限を超える場合は古いものから捨てる。
     setToasts((prev) => [...prev, toast].slice(-MAX_TOASTS));
   }, []);
 

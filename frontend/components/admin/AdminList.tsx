@@ -5,17 +5,13 @@ import { PlusIcon } from '@/components/Icons';
 import { btnPrimary, btnSecondary } from '@/lib/buttonStyles';
 
 /**
- * 管理画面の一覧ページの器。
- *
- * 商品・カテゴリ・クーポン・注文・利用者の5枚が「見出し行 → 読み込み中 → エラー →
- * 空状態の箱 → 白カード＋表」を一字一句同じ文字列で写していた。空状態の言い回しや
- * 表の罫を直すのに5箇所を回ることになり、実際に片側だけ進んでいる差分があった。
+ * 管理画面の一覧ページの器。「見出し行 → 読み込み中 → エラー → 空状態の箱 → 白カード＋表」
+ * を5枚の一覧で共有する。
  *
  * ⚠ 店頭側の EmptyState / ErrorNotice はここでは使わない。管理画面は gray-* / text-sm の
  *   別系統で組まれており（意図的）、混ぜると1画面の中で2つの体系が並ぶ。
  */
 
-/** 一覧の見出し行。右端に「新規作成」を置く（読み取り専用の一覧では onCreate を省く）。 */
 export function AdminListHeader({
   title,
   onCreate,
@@ -55,7 +51,6 @@ interface AdminListProps {
   error: string;
   /** 表の中身が0件か。読み込み中は評価しない。 */
   isEmpty: boolean;
-  /** 空のときの説明文。 */
   emptyText: string;
   /** 空状態の箱に置く「新規作成」。読み取り専用の一覧では省く。 */
   onCreate?: () => void;
@@ -63,7 +58,6 @@ interface AdminListProps {
   minWidth: number;
   /** `<tr>` を1本。列ごとの寄せは呼び出し側が持つ。 */
   head: ReactNode;
-  /** `<tr>` の並び。 */
   children: ReactNode;
 }
 
@@ -117,7 +111,6 @@ export default function AdminList({
   );
 }
 
-/** 一覧の行。hover の当たりを1箇所に閉じる。 */
 export const adminRowClass = 'hover:bg-gray-50 transition-colors';
 
 /**

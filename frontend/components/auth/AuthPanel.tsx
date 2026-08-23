@@ -5,21 +5,11 @@ import { KettleMotif, CupMotif, PlantMotif } from '@/components/BrandMotifs';
 import { inputClass } from '@/lib/formStyles';
 
 /**
- * ログインと会員登録の扉。
+ * ブランド面の「棚」。ログインと会員登録の扉は造形が透かしの図案とリード文1行しか違わない
+ * ので、器はこの1ファイルに閉じる。
  *
- * 2ファイルに約110行がコメントごとバイト単位で写されていた（BrandShelf・PasswordField・
- * 帯とパネルの外枠・Suspense の fallback）。差分は透かしの図案とリード文1行だけで、
- * 造形を直すたびに両方を回る必要があった。lib/formStyles.ts が「同じ文字列が3ファイルに
- * 写されていた」問題を潰したのと同じ流儀で、器のほうもここへ出す。
- */
-
-/**
- * ブランド面の「棚」。
- *
- * 3点の高さは同じ（h-12）。BrandMotifs の viewBox を 120×120 の正方形・接地線 y=108 に
- * 統一したので、同じ数字を渡せば光学サイズも接地も揃う。個別に h-14 / h-10 / h-12 と
- * 手当てしていた頃は、同じ3点セットがページごとに別の大小関係になっていた
- * （署名帯・フッター・ログイン・カテゴリ札で4通り）。棚の造形は1つに閉じる。
+ * 3点の高さは同じ数字を渡す。BrandMotifs の viewBox が 120×120 の正方形・接地線 y=108 に
+ * 統一されているので、それだけで光学サイズも接地も揃う（図案ごとに手当てしないこと）。
  */
 function BrandShelf({ className = '' }: { className?: string }) {
   return (
@@ -39,12 +29,10 @@ interface PasswordFieldProps {
    * ここを取り違えるとパスワード管理ソフトが既存の資格情報を新規欄に埋める。
    */
   autoComplete: 'current-password' | 'new-password';
-  /** 検証エラーがある欄。罫を critical に振り、aria-invalid を立てる。 */
   invalid?: boolean;
   onChange: (value: string) => void;
 }
 
-/** 表示/非表示トグル付きのパスワード入力。 */
 export function PasswordField({
   id,
   value,
@@ -101,7 +89,7 @@ export function AuthPanelFallback() {
 
 /**
  * 深緑のブランド面（デスクトップは左カラム、モバイルはフォーム上の横帯）＋ フォーム面。
- * どちらの判型でも世界観が出るようにして、片側だけ消える状態を避ける。
+ * どちらの判型でもブランド面を出す（片側だけ消える状態を作らない）。
  */
 export default function AuthPanel({
   watermark,
@@ -120,14 +108,12 @@ export default function AuthPanel({
   watermark: ReactNode;
   /** ブランド面のリード文（ログインと会員登録で1行だけ違う）。 */
   lead: string;
-  /** 右カラムのフォーム。 */
   children: ReactNode;
 }) {
   return (
     /* 版面幅は他ページと同じ3系統に揃える（max-w-5xl のような第4の幅を作らない）。 */
     <div className="wrap band-lg">
       <div className="grid overflow-hidden rounded-2xl bg-surface shadow-float md:grid-cols-12">
-        {/* モバイル用のブランド横帯（md 未満）。 */}
         <div className="on-dark bg-invert px-6 py-8 md:hidden">
           <p className="text-eyebrow uppercase font-num text-on-dark-muted">
             HIBINO — 日々の暮らしの道具店
@@ -159,7 +145,6 @@ export default function AuthPanel({
           <BrandShelf className="relative border-t border-brand-400/30 pt-6" />
         </div>
 
-        {/* 右: フォーム */}
         <div className="p-8 sm:p-10 md:col-span-7">{children}</div>
       </div>
     </div>

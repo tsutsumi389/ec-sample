@@ -4,10 +4,8 @@ import { useEffect, useRef, type RefObject } from 'react';
 
 /**
  * 焦点を当てられる要素の定義。**サイト内で唯一の源**にすること。
- *
- * 以前はモーダル・ドロワー・アシスタントの8箇所にこのセレクタ文字列がコピーされていて、
- * `details`/`summary` や `contenteditable` を足したいときに触り漏れが出る状態だった
- * （実際に写しの1つは textarea と select の順が入れ替わっていた）。
+ * 8箇所に写されていた頃は `details`/`summary` や `contenteditable` を足したいときに触り漏れが
+ * 出る状態だった（実際に写しの1つは textarea と select の順が入れ替わっていた）。
  */
 export const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';

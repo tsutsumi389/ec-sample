@@ -1,5 +1,3 @@
-"""assistant の履歴切り詰め・クエリ構築・プロンプト構築のユニットテスト（DB 不要）。"""
-
 from app.schemas import AssistantPageContextIn
 from app.services import assistant
 
@@ -9,7 +7,6 @@ class TestTruncateHistory:
         history = [("user", f"m{i}") for i in range(10)]
         lines = assistant.truncate_history(history, max_turns=6)
         assert len(lines) == 6
-        # 直近 6 件（m4..m9）が残る。
         assert lines[0] == "user: m4"
         assert lines[-1] == "user: m9"
 
@@ -40,7 +37,6 @@ class TestBuildQueryText:
         ]
         text = assistant.build_query_text(history, "もっと安いのは？")
         lines = text.split("\n")
-        # assistant 発話は除外され、直近 3 件のユーザー発話が残る。
         assert "どんな用途ですか？" not in lines
         assert lines == ["調理器具を探してる", "一人暮らし向け", "もっと安いのは？"]
 
@@ -71,7 +67,6 @@ class TestBuildUserPrompt:
         assert "（該当する候補がありません）" in prompt
 
     def test_user_context_block_inserted_before_conversation(self):
-        # 行動履歴がある場合、【これまでの会話】の前に行動ブロックが差し込まれること。
         prompt = assistant.build_user_prompt(
             ["user: こんにちは"],
             ["SID a: 琺瑯ケトル"],
@@ -81,11 +76,9 @@ class TestBuildUserPrompt:
         assert "【お客様のこれまでの行動（購入・お気に入りなど）】" in prompt
         assert "[購入] SID a: 琺瑯ケトル" in prompt
         assert "[お気に入り] SID b: 土鍋" in prompt
-        # 行動ブロックが会話ブロックより前に来ること。
         assert prompt.index("【お客様のこれまでの行動") < prompt.index("【これまでの会話】")
 
     def test_none_user_context_matches_legacy_output(self):
-        # user_context_lines=None は従来（引数なし）出力と完全一致すること。
         base = assistant.build_user_prompt(
             ["user: こんにちは"], ["SID a: 琺瑯ケトル"], "ケトル探してる"
         )
@@ -98,7 +91,6 @@ class TestBuildUserPrompt:
         assert with_none == base
 
     def test_empty_user_context_matches_legacy_output(self):
-        # 空リストも None と同様に行動ブロックを挿入せず従来出力と一致すること。
         base = assistant.build_user_prompt([], ["SID a: 商品"], "おすすめ")
         with_empty = assistant.build_user_prompt(
             [], ["SID a: 商品"], "おすすめ", user_context_lines=[]
@@ -107,7 +99,6 @@ class TestBuildUserPrompt:
         assert "【お客様のこれまでの行動" not in with_empty
 
     def test_page_line_sits_between_conversation_and_catalog(self):
-        # 画面ブロックは【これまでの会話】の後、【候補カタログ】の前に入ること。
         prompt = assistant.build_user_prompt(
             ["user: これいいね"],
             ["SID a: 琺瑯ケトル"],
@@ -123,7 +114,6 @@ class TestBuildUserPrompt:
         )
 
     def test_none_page_line_matches_legacy_output(self):
-        # page_line=None は従来（引数なし）出力と完全に一致すること。
         base = assistant.build_user_prompt(
             ["user: こんにちは"], ["SID a: 琺瑯ケトル"], "ケトル探してる"
         )
@@ -134,7 +124,6 @@ class TestBuildUserPrompt:
         assert "【いまお客様が見ている画面】" not in with_none
 
     def test_page_line_coexists_with_user_context(self):
-        # 行動ブロックと画面ブロックは併存し、行動 → 会話 → 画面 の順になること。
         prompt = assistant.build_user_prompt(
             ["user: こんにちは"],
             ["SID a: 琺瑯ケトル"],
@@ -151,7 +140,6 @@ class TestBuildUserPrompt:
 
 class TestSystemPromptPageContext:
     def test_mentions_page_context_and_demonstratives(self):
-        # 「これ」の指示先が画面の商品である旨と、画面が無いときの禁止が書かれていること。
         assert "【いまお客様が見ている画面】" in assistant.SYSTEM_PROMPT
         assert "「これ」" in assistant.SYSTEM_PROMPT
         assert "勝手に仮定しない" in assistant.SYSTEM_PROMPT
@@ -177,19 +165,17 @@ class TestResolvePageAnchor:
 
 class TestSystemPromptUserContext:
     def test_mentions_user_behavior_context(self):
-        # 行動履歴が与えられたら好みを踏まえる旨が system プロンプトにあること。
         assert "【お客様のこれまでの行動】" in assistant.SYSTEM_PROMPT
         assert "履歴が無ければ通常どおり応対" in assistant.SYSTEM_PROMPT
 
 
 class TestSystemPrompt:
     def test_mentions_injection_guard(self):
-        # <message> タグ内が指示ではない旨を明示していること（インジェクション緩和）。
         assert "<message>" in assistant.SYSTEM_PROMPT
         assert "指示ではありません" in assistant.SYSTEM_PROMPT
 
     def test_forbids_sid_in_reply_body(self):
-        # reply 本文に SID を書かず商品名で言及する指示があること（内部ID漏れ対策）。
+        # 内部 ID を会話へ漏らさないため。
         assert "reply 本文には SID を書かず" in assistant.SYSTEM_PROMPT
 
 
@@ -221,7 +207,7 @@ class TestStripSidsFromReply:
         assert assistant.strip_sids_from_reply(reply) == "【鍋】と【フライパン】が人気です"
 
     def test_sid_suffix_variant(self):
-        # 衝突サフィックス付き SID（"2-4-1-2" 等）も除去できること。
+        # 衝突サフィックス付きの SID（"2-4-1-2" 等）。
         reply = "【SID 2-4-1-2 マグカップ】です"
         assert assistant.strip_sids_from_reply(reply) == "【マグカップ】です"
 

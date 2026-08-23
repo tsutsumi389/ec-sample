@@ -21,8 +21,8 @@ interface StockLabelProps {
  */
 export default function StockLabel({ stock, elevated = false, className = '' }: StockLabelProps) {
   if (stock <= 0) {
-    // 文言と色は SOLD_OUT_BADGE から採る。productStatus.ts が「在庫切れの札の源はここ1箇所」と
-    // 宣言しているのに、ここだけ同じ値を書き直していた（片方だけ濃度を変えると割れる）。
+    // 文言と色は SOLD_OUT_BADGE から採る（在庫切れの札の源は productStatus.ts の1箇所だけ。
+    // 書き写すと片方だけ濃度を変えたときに割れる）。
     return (
       <Badge variant={SOLD_OUT_BADGE.variant} elevated={elevated} className={className}>
         {SOLD_OUT_BADGE.label}

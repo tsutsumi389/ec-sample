@@ -1,16 +1,10 @@
 /**
  * 商品詳細パネルの状態と、ホスト（MCP Apps SDK）との配線。
  *
- * 並び替えもページングも無いので、search の View より状態は単純
- * （読み込み中／表示中／エラーの3つ）。再取得の土台になるのも product_id 1つで、
- * search 側の state.base に相当する。
- *
- * **文言を組み立てる処理はここにも一切書かない。** availability も含め、表示する
- * 日本語はサーバーが完成文で寄越したものをそのまま出す（backend の
- * services/cart.py が唯一の源）。
- *
- * ホストとの接続手順（useApp / useHostStyles / safe area / 接続失敗の検出）は
- * shared/useHostApp.ts が持つ（search 側と共通）。
+ * 並び替えもページングも無いので、search の View より状態は単純（読み込み中／表示中／
+ * エラーの3つ）。再取得の土台になるのも product_id 1つで、search 側の state.base に
+ * 相当する。**文言を組み立てる処理はここにも一切書かない**（availability も含め、
+ * 表示する日本語はサーバーが完成文で寄越したものをそのまま出す）。
  */
 
 import { useCallback, useEffect, useReducer } from "react";
@@ -32,9 +26,6 @@ import { useLatestRef } from "../shared/useLatestRef.ts";
 /**
  * 結果を読めなかったときの文言。
  * **サーバーが返した文言があるならそちらが常に優先される**（extractErrorMessage）。
- * get_product が存在しない product_id に返す "Product not found" は英語のまま
- * 素通しされるが、View 側で日本語に訳し直さない——訳の対応表を持つと backend が
- * 文言を足したときに View だけが古い訳を出し続ける。
  */
 const FAILURE_MESSAGES = {
   missing: "商品情報を受け取れませんでした。",
@@ -52,10 +43,9 @@ interface ProductState {
   loading: boolean;
   /**
    * 直近成功時の商品。**null であることが「まだ一度も描けていない」の唯一の表現**で、
-   * これが「初回の失敗＝全面エラー / 2回目以降の失敗＝バナー」の分岐そのもの
-   * （移植前の hasResult フラグに相当する）。失敗では絶対に null へ戻さないこと——
-   * 最初の取得に失敗した画面が再試行ボタンの無いバナーだけになり、利用者は
-   * 何もできなくなる。
+   * これが「初回の失敗＝全面エラー / 2回目以降の失敗＝バナー」の分岐そのもの。
+   * 失敗では絶対に null へ戻さないこと——最初の取得に失敗した画面が再試行ボタンの
+   * 無いバナーだけになり、利用者は何もできなくなる。
    */
   data: ProductDetail | null;
   /** 直近成功時の _meta.ui（画像の絶対URLと商品ページURL）。 */
@@ -80,8 +70,7 @@ type ProductAction =
 
 /**
  * 起動直後は **loading: true** から始める。ホストから tool-input も tool-result も
- * 届いていない時点では、再読み込みも再試行も押させてはならない（移植前はエントリ HTML
- * 側で操作系を hidden にしていた役目）。
+ * 届いていない時点では、再読み込みも再試行も押させてはならない。
  */
 const INITIAL_STATE: ProductState = {
   productId: null,
@@ -116,9 +105,8 @@ function reducer(state: ProductState, action: ProductAction): ProductState {
       };
 
     // 失敗の見せ方を二層に振り分ける唯一の場所（search 側の reducer と同じ判断）。
-    // **全面エラーはバナーに触らず、バナーは全面エラーに触らない。** この非対称は
-    // 意図的で、片方を出すときにもう片方を掃除しに行くと「バナーを閉じたら全面エラー
-    // まで消えた」のような組み合わせが生まれる。
+    // **全面エラーはバナーに触らず、バナーは全面エラーに触らない**——片方を出すときに
+    // もう片方を掃除しに行くと「バナーを閉じたら全面エラーまで消えた」が生まれる。
     case "failure":
       return state.data !== null
         ? { ...state, loading: false, banner: action.message }
@@ -163,8 +151,8 @@ export function useProductView(): UseProductViewResult {
   const stateRef = useLatestRef(state);
 
   /**
-   * ツールの結果を受けて画面を作り直す。ホストからの通知（toolresult）と、
-   * View から撃った再取得（callServerTool）の戻り値が同じここに集まる。
+   * ホストからの通知（toolresult）と、View から撃った再取得（callServerTool）の
+   * 戻り値が同じここに集まる。
    */
   const handleToolResult = useCallback((result: ToolResult | undefined): void => {
     const outcome = parseToolResult<ProductDetail>(result, FAILURE_MESSAGES);
@@ -215,8 +203,6 @@ export function useProductView(): UseProductViewResult {
     dispatch({ type: "initial-error", message: connectError });
   }, [connectError]);
 
-  // ---- 画面からの操作 ----------------------------------------------------
-
   const fetchProduct = useCallback(async (): Promise<void> => {
     const current = stateRef.current;
     // app が null なのは接続が終わるまで。ツールは撃てないので何もしない。
@@ -227,10 +213,9 @@ export function useProductView(): UseProductViewResult {
     }
     dispatch({ type: "request" });
     try {
-      // `satisfies`（`:` ではなく）で受けるのは、callServerTool の arguments が
-      // `{ [x: string]: unknown }` を求めるため。interface で注釈すると暗黙の
-      // インデックスシグネチャが付かず代入できない。satisfies なら backend の
-      // 引数契約（shared/types.ts）との照合はそのまま効く。
+      // `:` ではなく `satisfies` で受けるのは、callServerTool の arguments が
+      // `{ [x: string]: unknown }` を求めるため（interface で注釈すると暗黙の
+      // インデックスシグネチャが付かず代入できない）。型の照合はそのまま効く。
       const args = { product_id: current.productId } satisfies GetProductArgs;
       const result = await app.callServerTool({ name: "get_product", arguments: args });
       handleToolResult(result);

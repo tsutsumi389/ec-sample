@@ -9,10 +9,6 @@
  * **書き込みを effect に置くのは、描画中に ref を書き換えないため。** React は次の
  * discrete イベントを処理する前に passive effect を流すので、クリックやセレクト操作
  * から読む値が古いことは無い。
- *
- * 両 View が一字一句同じものを持っていたので括った。**理由（このコメント）ごと
- * ここに置いてあることが要点**——コードだけを写して理由を写さないと、3枚目の View で
- * 「なぜ ref 越しなのか」が分からないまま複製される。
  */
 
 import { useEffect, useRef, type MutableRefObject } from "react";

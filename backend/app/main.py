@@ -34,32 +34,23 @@ from app.routers import (
 )
 from app.seed import seed_data
 
-# アプリ側のロガー（埋め込み同期・レコメンド生成の状況）を stdout に出す。
 # uvicorn は自前の named ロガーのみ設定しルートには handler を付けないため、
 # ここで INFO レベルの handler を用意しないとアプリの info/warning が握り潰される。
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    # force=True は必須。MCP SDK の MCPServer() は生成時に configure_logging() を呼び、
-    # root ロガーに handler を 1 本付ける（mcp/server/mcpserver/server.py）。basicConfig は
-    # 既に handler があると **黙って何もしない** ので、force を外すとこの format が捨てられ、
-    # 以後アプリのログから時刻もレベルもロガー名も消える。`make logs-backend` で起動エラーを
-    # 目視する運用手順が、まさにこのログを読む手順なので効かないと痛い。
-    # （import 順の入れ替えで避けるのは不可。isort / ruff が並べ直した瞬間に再発する。）
+    # force=True は必須。MCP SDK の MCPServer() は生成時に root ロガーへ handler を 1 本付け、
+    # basicConfig は既に handler があると **黙って何もしない**。外すとこの format が捨てられ、
+    # 以後アプリのログから時刻もレベルもロガー名も消える（import 順の入れ替えでは避けられない。
+    # isort / ruff が並べ直した瞬間に再発する）。
     force=True,
 )
 
 logger = logging.getLogger(__name__)
 
-# MCP サーバー。**この import は失敗しても店を止めない。**
-# 付随機能の失敗で本体を落とさないのは、このリポジトリが既に持っている設計判断
-# （マイグレーション 0001 / 0002 を分けて、pgvector が無い DB でも 0001 までで起動できる
-# ようにしてあるのと同じ規律）。MCP は「あると便利な追加口」であって、店が開くための必須
-# 部品ではない。ここを素の import にすると、SDK の API 改称・依存の入れ忘れ（再ビルド前の
-# `make restart` など）だけで商品一覧からチェックアウトまで全部止まる。
-#
-# 例外は握るが黙らせない。logger.exception で起動ログにスタックトレースが残るので、
-# CLAUDE.md が next/font で嫌っている「無言でフォールバックに落ちる」にはならない。
+# **この import は失敗しても店を止めない。** 素の import にすると、SDK の API 改称・依存の
+# 入れ忘れ（再ビルド前の `make restart` など）だけで商品一覧からチェックアウトまで全部止まる。
+# 例外は握るが黙らせない——logger.exception で起動ログにスタックトレースを残す。
 try:
     from app.mcp_server.server import mcp, mcp_asgi_app
 except Exception:  # noqa: BLE001 - MCP が読めなくても REST は生かす
@@ -73,7 +64,6 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
 def _wait_for_db(max_attempts: int = 10, delay_seconds: float = 1.5) -> None:
-    """DB コンテナの起動待ち。接続できるまで短くリトライする。"""
     for attempt in range(1, max_attempts + 1):
         try:
             with engine.connect() as conn:
@@ -88,8 +78,7 @@ def _wait_for_db(max_attempts: int = 10, delay_seconds: float = 1.5) -> None:
 def _pgvector_available() -> bool:
     """pgvector 拡張が使える DB か（導入済み、または導入可能）を調べる。
 
-    拡張の作成そのものはマイグレーション 0002 の仕事なので、ここでは判定だけする。
-    pgvector が無い DB でも起動が落ちないようにするための分岐に使う。
+    拡張の作成そのものはマイグレーション 0002 の仕事で、ここでは判定だけする。
     """
     try:
         with engine.connect() as conn:
@@ -105,8 +94,8 @@ def _pgvector_available() -> bool:
 def _alembic_config() -> Config:
     """アプリから alembic を叩くための設定。
 
-    script_location を絶対パスで上書きするのは、alembic.ini の相対パスが
-    カレントディレクトリ基準で解決されるため（uvicorn の起動場所に依存させない）。
+    script_location を絶対パスで上書きするのは、alembic.ini の相対パスがカレント
+    ディレクトリ基準で解決されるため（uvicorn の起動場所に依存させない）。
     configure_logger=False は env.py 側で参照し、fileConfig によるロガー無効化を防ぐ。
     """
     cfg = Config(str(BACKEND_DIR / "alembic.ini"))
@@ -195,13 +184,11 @@ async def lifespan(app: FastAPI):
     # 埋め込み同期は起動をブロックしないよう別スレッドで走らせる。
     threading.Thread(target=_startup_embedding_sync, daemon=True).start()
 
-    # MCP のストリーミング HTTP は、リクエストを捌くタスクグループをこの async CM の中で
-    # 開く。/mcp は Route として直接ぶら下げており、子 ASGI アプリの lifespan は誰も
-    # 呼ばないため、ここで明示的に起動する。忘れると /mcp への最初のリクエストが
-    # 「Task group is not initialized」で落ちる（stateless でも同じ。検査が先に来る）。
-    # MCP が読めていればセッションマネージャを開く（読めていなければ何もしない）。
-    # 分岐は式に閉じること——ここで early return すると、以後 lifespan に足した起動処理が
-    # 「MCP が落ちている環境でだけ走らない」という、誰も日常的に踏まない無言の欠落になる。
+    # MCP のストリーミング HTTP は、リクエストを捌くタスクグループをこの async CM の中で開く。
+    # /mcp は Route として直接ぶら下げており子 ASGI アプリの lifespan は誰も呼ばないため、
+    # ここで明示的に起動する（忘れると最初のリクエストが「Task group is not initialized」で
+    # 落ちる。stateless でも同じ）。分岐は式に閉じること——ここで early return すると、以後
+    # lifespan に足した起動処理が「MCP が落ちている環境でだけ走らない」無言の欠落になる。
     async with (mcp.session_manager.run() if mcp is not None else nullcontext()):
         yield
 
@@ -239,15 +226,12 @@ app.include_router(home.router, prefix="/api")
 app.include_router(experiments.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 
-# MCP サーバー。REST ではないので include_router を使わず、厳密パスの Route として
-# ルーターへ直接足す（OpenAPI スキーマにも載らない＝「/api 配下は REST だけ」という
-# 整理を保つ）。
-#
+# REST ではないので include_router を使わず、厳密パスの Route として直接足す
+# （OpenAPI スキーマにも載らない＝「/api 配下は REST だけ」という整理を保つ）。
 # mcp.streamable_http_app() が返す Starlette アプリを mount してはいけない。あれは内側で
 # もう一度 "/mcp" に Route を張るので実効パスが /mcp/mcp になる。内側を "/" にして mount
 # すると今度は POST /mcp が 307 で /mcp/ へ飛び、リダイレクトを追わないクライアントが壊れる。
-#
-# **/mcp にネットワーク的なアクセス制御は掛かっていない**（理由は server.py に書いてある）。
-# 認証は各ツールの require_user（= 既存の JWT）が担い、露出面は既存の /api と同等になる。
+# **ネットワーク的なアクセス制御は掛かっていない**（理由は server.py）。認証は各ツールの
+# require_user（= 既存の JWT）が担い、露出面は既存の /api と同等になる。
 if mcp_asgi_app is not None:
     app.router.routes.append(Route("/mcp", endpoint=mcp_asgi_app))

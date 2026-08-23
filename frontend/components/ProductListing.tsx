@@ -75,18 +75,11 @@ function FilterChip({
 }
 
 /**
- * グリッドの途中に挟む「棚の途中で」の帯（全幅1行）。
+ * グリッドの途中に挟む「棚の途中で」の帯（全幅1行）。巻末の EDITOR'S NOTE（bg-invert）とは
+ * 造形を変える——同じ暗色帯を2本出すとリズムではなく模様になるので、暗色帯＝巻末の締め、
+ * という役割分担を保つ。
  *
- * なぜ必要か: 一覧は 4列×3行が同一の余白で連続し、1440px で 5,400px 以上スクロールしても
- * 版面のリズムが変わるのは巻末の EDITOR'S NOTE の1回だけだった。グリッドを途中で
- * 1本割って「2行＋帯＋1行」にすると、誌面としての段落が生まれる。
- *
- * 巻末の EDITOR'S NOTE（bg-invert）とは造形を変える。同じ暗色帯を2本出すと
- * 「同じ装置の反復」になり、リズムではなく模様になるため、こちらは沈んだ地＋上下罫の
- * 静かな帯にして、暗色帯＝巻末の締め、という役割分担を保つ。
- *
- * 差し込み位置は列数で変わる（全幅セルは行の途中に入れないこと。行が閉じずに穴が空く）:
- *   2列（<md）… 8枚目の後   3列（md〜xl未満）… 6枚目の後   4列（xl〜）… 8枚目の後
+ * 差し込み位置は列数で変わる（**全幅セルを行の途中に入れないこと**。行が閉じずに穴が空く）。
  * 位置ごとに DOM を2つ置き、効かない側は display:none で消す（grid から外れるので穴は空かない）。
  */
 function ShelfNote({ className }: { className: string }) {
@@ -94,10 +87,8 @@ function ShelfNote({ className }: { className: string }) {
     // ⚠ ここに animate-rise を付けないこと（実測）。この <li> は列数で display を
     // 切り替える（hidden ⇄ block）ので、display が none から戻るたびに CSS アニメーションが
     // **最初から**やり直しになる。ビューポートの高さを変えてから撮る full-page
-    // スクリーンショット（Playwright の fullPage / 評価の撮影も同じ）はまさにその瞬間を
-    // 捉えるため、.stagger の遅延（270ms）中＝opacity 0 で写り、
+    // スクリーンショットはその瞬間を捉えるため、.stagger の遅延（270ms）中＝opacity 0 で写り、
     // 「グリッドの途中に 193px の空白が空いているだけ」の画になっていた。
-    // 静止した編集の帯なので、出現の動きは持たせない。
     <li className={`col-span-full ${className}`}>
       <div className="edge-y relative flex flex-col gap-3 overflow-hidden rounded-xl bg-sunken px-6 py-7 sm:flex-row sm:items-center sm:justify-between sm:gap-10">
         {/* 線画は隅で裁ち落とす（文字とは重ねない）。図案は扉の「棚の器」と同じ湯呑み。 */}
@@ -354,7 +345,6 @@ export default function ProductListing({
     ? '商品の読み込みに失敗しました'
     : `${total}件の商品が見つかりました`;
 
-  // 見出し: 検索中は検索結果、カテゴリページはカテゴリ名、素の /products は「商品一覧」。
   const heading = search
     ? `「${search}」の検索結果`
     : fixedCategory
@@ -372,22 +362,16 @@ export default function ProductListing({
         ]
       : breadcrumbs;
 
-  // 初回ロード（まだ結果グリッドを一度も出していない）だけスケルトンに置き換える。
-  // 2回目以降のロード中は直前のグリッドを薄く残して差し替える。
   const showSkeleton = loading && (!hasLoadedOnce || products.length === 0);
   const showDimmedGrid = loading && hasLoadedOnce && products.length > 0;
   const showGrid = showDimmedGrid || (!loading && !error && products.length > 0);
 
-  // グリッドの終いに置く「編集の声」。
-  //
-  // 以前はカード1枚ぶんのセルとして 7 番目に挟んでいたが、列数が 2/3/4 と変わる版面では
-  // 総セル数が必ず列数の倍数から外れ、毎回1枚だけの孤立行（widow）が残った。
-  // 2・3・4 のいずれでも割り切れる差し込み位置はグリッドの先頭か末尾しかないため、
-  // 全幅（col-span-full）の帯として末尾に置き、ページ送りの直前で誌面を締める形にした。
-  // これで商品セルは常に 12 枚＝どの列数でも行が閉じる。lg 未満でも出す。
+  // グリッドの終いに置く「編集の声」。カード1枚ぶんのセルとして途中に挟むと、列数が 2/3/4 と
+  // 変わる版面では総セル数が必ず列数の倍数から外れ、毎回1枚だけの孤立行（widow）が残る。
+  // 2・3・4 のいずれでも割り切れる差し込み位置は先頭か末尾しかないので、全幅（col-span-full）
+  // の帯として末尾に置く。これで商品セルは常に 12 枚＝どの列数でも行が閉じる。
   const showEditorsNote = page === 1 && products.length >= 6;
   // 出現の段は親の .stagger（globals.css §3b）が配る。子ごとの inline style は持たない。
-  // 刻み・8枚での頭打ち・低モーション時の扱いはすべて globals.css §3b の頭注にある。
   //
   // グリッドの途中に挟む「棚の途中で」の帯。帯の後ろに最低2枚が残る枚数のときだけ出す
   // （残り1枚だと帯の直後に孤立行ができ、割った意味が消える）。
@@ -421,10 +405,9 @@ export default function ProductListing({
           />
           <div className="relative min-w-0">
             <p className="text-eyebrow uppercase font-num text-on-dark-muted">EDITOR&apos;S NOTE</p>
-            {/* ブランドの標語（「毎日ふれるものほど、すこし良いものを。」）は
-                署名帯とフッター奥付の2箇所だけに置く。各ページの扉／ノートは必ず別の一文にする。
-                ここに標語を置いていたため、ホーム→商品一覧で同じ文が2ページ連続し、
-                しかも一方は本文・他方は柱の見出しと階層が食い違っていた。 */}
+            {/* ブランドの標語（「毎日ふれるものほど、すこし良いものを。」）は署名帯とフッター
+                奥付の2箇所だけに置く。ここに置いていた頃はホーム→商品一覧で同じ文が2ページ
+                連続していた。各ページの扉／ノートは必ず別の一文にすること。 */}
             <p className="mt-3 font-mincho text-h2 text-on-dark jp-head jp-name">
               棚に置く前に、一度は使ってみる。
             </p>
@@ -447,10 +430,8 @@ export default function ProductListing({
       {/* 扉は全ページ共通の PageMasthead に寄せる。下に続くグリッドが wrap-wide なので
           width も wide で揃える（左端が段差しないための契約）。 */}
       <PageMasthead
-        // 扉の柱は「欧文の柱 — 編集の一言」。ホームの各節（No.02 — Left in your cart 等）と
-        // 同じ組み方にして、一覧も同じ誌面の一節として読ませる。号数は振らない:
-        // ホームの節番号はログイン状態でレーン本数が変わり（実測 ゲスト No.05 まで /
-        // ログイン済み No.06 まで）、固定の番号を他ページに振ると通しが飛ぶため。
+        // 号数は振らない: ホームの節番号はログイン状態でレーン本数が変わる（実測 ゲスト
+        // No.05 まで / ログイン済み No.06 まで）ので、固定の番号を他ページに振ると通しが飛ぶ。
         eyebrow={
           search
             ? 'Products — 探しもの'
@@ -477,10 +458,9 @@ export default function ProductListing({
       <ProductFilters value={filtersValue} onChange={handleFiltersChange} searching={Boolean(search)} />
 
       <div className="wrap-wide band-lg">
-        {/* 適用中の条件は「出る／消える」ではなく「開く／閉じる」で見せる（.reveal / globals.css §3b）。
-            高さ 0⇄auto を grid-template-rows 0fr→1fr で遷移させ、開きは entrance・閉じは exit と
-            イージングが非対称になる。チップ自体は hasActiveFilters のときだけ描くので、
-            閉じているあいだ隠れた操作要素がタブ順に残ることはない。 */}
+        {/* 適用中の条件は「開く／閉じる」で見せる（.reveal / globals.css §3b）。
+            チップ自体は hasActiveFilters のときだけ描くので、閉じているあいだ隠れた
+            操作要素がタブ順に残ることはない。 */}
         <div className="reveal" data-open={hasActiveFilters}>
           {/* .reveal の子は overflow:hidden なので、そのままだとチップの focus リング
               （ring-2 + offset-2 = 4px）が上端で切られる。内側に 4px の逃げを作り、
@@ -578,12 +558,10 @@ export default function ProductListing({
                       >
                         絞り込みをすべて解除する
                       </button>
-                      {/* 言葉で探して空振りした人の行き止まりを断つ。何を探していたかを
-                          持ったままアシスタントを開き、入力欄へ入れて渡す（送信はしない。
-                          予算や用途を書き足してから送れるようにするため）。
-                          最重要 CTA をどちらにするかは 0件の原因の当たりで決める——
-                          カテゴリや価格帯で絞り込んでいるなら条件側が原因である方が多いので、
-                          機械的に直せる「絞り込み解除」に primary を譲る。 */}
+                      {/* 何を探していたかを持ったままアシスタントを開く（prefill は入力欄へ
+                          入れるだけで送信しない）。最重要 CTA をどちらにするかは 0件の原因の
+                          当たりで決める——カテゴリや価格帯で絞り込んでいるなら条件側が原因で
+                          ある方が多いので、機械的に直せる「絞り込み解除」に primary を譲る。 */}
                       {search && (
                         <button
                           ref={assistantCtaRef}
@@ -618,9 +596,8 @@ export default function ProductListing({
             aria-busy={showDimmedGrid || undefined}
           >
             {/* 見出しの段は h1（扉）→ h2（この行）→ h3（カードの商品名）と飛ばさずに下る。
-                版面には扉の見出しがあるので視覚的には要らないが、この h2 が無いと
-                h1 の次が h3 になり axe の heading-order 違反になる（実測: 4幅 × 通常/
-                ドロワー展開で 7 nodes → 0 nodes）。 */}
+                視覚的には要らないが、この h2 が無いと h1 の次が h3 になり
+                axe の heading-order 違反になる（実測 7 nodes → 0 nodes）。 */}
             <h2 className="sr-only">商品一覧</h2>
             {/* 行間を列間の倍にして誌面の行送りを作る。1024px 未満は 2 列のまま
                 カードを大きく見せ、xl で 4 列に開く。 */}

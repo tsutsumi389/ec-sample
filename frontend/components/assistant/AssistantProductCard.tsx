@@ -36,8 +36,7 @@ interface AssistantProductCardProps {
 /**
  * 提案理由（reason）を丸める文字数。**行数ではなく文字数で持つ**理由は
  * components/ProductLane.tsx の REASON_BUDGET と同じ（同じ文字列が幅の違う器に流れる）。
- * この器の実効幅は 296〜366px（列幅の下限 20rem からカードの p-3 を引いた値が最狭）、
- * text-caption は 0.8125rem + letter-spacing .02em なので1行に全角22〜27字しか入らない。
+ * この器の実効幅は 296〜366px、text-caption は1行に全角22〜27字しか入らないので、
  * 1行に収める上限として 24 文字を取る（超過分は line-clamp-1 が最後の砦になる）。
  */
 const REASON_BUDGET = 24;
@@ -50,24 +49,14 @@ const REASON_BUDGET = 24;
  */
 type CartResult = { kind: 'added' } | { kind: 'login' } | { kind: 'error'; message: string };
 
-/**
- * 操作行の2つの粒。造形は lib/buttonStyles.ts が持つ（アシスタント内の chip と同じ源）。
- * 記号と語の間隔だけはここで言う——chip() は gap を握らない。
- */
+/** 造形は lib/buttonStyles.ts が持つ。gap だけはここ——chip() は gap を握らない。 */
 const DETAIL_LINK_CLASS = `${chip('action')} flex-1 gap-1`;
 const ADD_BUTTON_CLASS = `${chip('action', 'solid')} flex-1 gap-1.5`;
 
 /**
- * チャット内に表示する商品カード。
- * 画像（96px）・商品名（2行まで）・評価・価格・在庫状況を示し、
- * 「商品を見る」リンクと「カートに追加」ボタンを 1 行に並置して導線を明示する。
- * 一覧の走査性を保つため縦丈を抑え（画像 96px・提案理由は 1 行に折り畳み）、
- * 操作行はモバイルで 44px を確保しつつデスクトップでは高さを詰める。
- * 買えない理由は Product.status から導く（lib/productStatus.ts）。文言も色も表の値を
- * そのまま Badge に渡す（「在庫なし」の灰色一色に潰すと、近日発売＝brand も
- * 販売停止中＝accent も同じ死札になり、次の期待が持てない）。
- * 画像・商品名クリックでも商品詳細へ遷移する。遷移時は onNavigate でパネルを閉じる
- * （閉じないと背景に張った inert が残ったまま遷移し、遷移先が一切操作できない）。
+ * チャット内に表示する商品カード。一覧の走査性を保つため縦丈を抑える。
+ * 遷移時は onNavigate でパネルを閉じる（閉じないと背景に張った inert が残ったまま遷移し、
+ * 遷移先が一切操作できない）。
  * カート追加の結果（成功／要ログイン／失敗）はトーストではなくカードの中に残す
  * （トーストの器はパネルと下端・右端が重なって入力欄を数秒覆ううえ、
  *   パネルは aria-modal なのでトースト内のリンクにキーボードでも SR でも到達できない）。
@@ -80,14 +69,13 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
   const [result, setResult] = useState<CartResult | null>(null);
 
   // 在庫は「急ぐ理由がある」ときだけ知らせる。通常在庫の「在庫 78 点」は
-  // ProductCard.tsx:39 と同じ規律でカードに出さない。
+  // ProductCard.tsx と同じ規律でカードに出さない。
   const lowStock = isLowStock(product);
   // 買えないときの札（在庫切れ／近日発売／販売停止中…）。文言も色も1箇所から採る。
   const unavailable = unavailableBadge(product);
 
-  // カート追加。API 呼び出しとカート再取得の手順は商品詳細ページ
-  // （app/products/[id]/page.tsx の handleAddToCart）と揃える。ただし未ログイン時の遷移と
-  // トーストは意図的に分ける（理由は下の分岐コメントと、このコンポーネントの docstring）。
+  // API 呼び出しとカート再取得の手順は商品詳細ページ（app/products/[id]/page.tsx の
+  // handleAddToCart）と揃える。未ログイン時の遷移とトーストだけは意図的に分ける（下の分岐と docstring）。
   const handleAddToCart = async () => {
     if (!user) {
       // ここで /login へ飛ばすとパネルが畳まれ、相談中の会話ごと視界から消える。
@@ -152,10 +140,8 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
               onClick={onNavigate}
               className={`rounded hover:text-brand-700 ${FOCUS_RING}`}
             >
-              {/* 語中改行（「ワイヤレスイヤホ／ン」）を止める。可変長の和文は必ずこれを通す。
-                  列幅の下限は 20rem（globals.css の .assistant-product-grid）なので、この器は
-                  最狭でも約 190px（320 − p-3 の 24 − 画像 96 − gap-3 の 12）。サイトの中では
-                  依然として狭い部類で、語中改行がいちばん出やすい場所でもある。 */}
+              {/* 語中改行（「ワイヤレスイヤホ／ン」）を止める。この器は最狭で約 190px
+                  （320 − p-3 の 24 − 画像 96 − gap-3 の 12）＝語中改行がいちばん出やすい場所。 */}
               {withWordBreaks(product.name)}
             </Link>
           </h4>
@@ -171,10 +157,9 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
 
       {reason && (
         // 丸めは文字数ではなく「文」で行う（truncateAtSentence）。line-clamp だけだと
-        // 「食卓の必…」と文節の途中で断ち切られ、組版の中でここだけ無配慮になる。
+        // 「食卓の必…」と文節の途中で断ち切られる。
         // withWordBreaks は通さない（散文なので .jp-body の text-wrap: pretty が正。
         // .jp-name の keep-all を散文に掛けると行末が痩せる）。
-        // line-clamp-1 は想定外に長い reason が来ても器を壊さない最後の砦として残す。
         <p className="line-clamp-1 text-caption text-ink-muted jp-body">
           {truncateAtSentence(reason, REASON_BUDGET)}
         </p>
@@ -207,10 +192,8 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
         ) : (
           // 買えない理由（文言と色）は lib/productStatus.ts の unavailableBadge が唯一の源。
           // 在庫切れ（on_sale + stock 0）だけ status に現れないので、その分岐も向こうが持つ。
-          // 色は表の variant をそのまま Badge へ渡す
-          // （近日発売＝brand / 販売停止中＝accent / 販売終了・在庫切れ＝neutral）。
-          // 灰色のベタ札で受けていた頃は、どの状態も同じ死札になって次の期待が持てず、
-          // ProductCard・関連商品・商品ページと同じ status がここだけ別の見えになっていた。
+          // 色は表の variant をそのまま Badge へ渡す——灰色のベタ札に潰すと、近日発売も
+          // 販売停止中も同じ死札になって次の期待が持てない。
           // flex-1 は付けない：札は語の幅だけ取り、余りは「商品を見る」に渡す。
           <span className="inline-flex shrink-0 items-center">
             <Badge variant={unavailable.variant}>{unavailable.label}</Badge>
@@ -258,10 +241,9 @@ function AssistantProductCard({ product, reason, onNavigate }: AssistantProductC
 }
 
 /**
- * memo 境界。カードを描く AssistantPanel は入力欄の値も同じ state に持つので、
- * 相談文を1文字打つたびにメッセージ列ごと再描画される。カードは商品名の語分割
- * （withWordBreaks = Intl.Segmenter）と reason の文丸めを毎回やり直すので、
- * 30字打てば「30回 × 画面上の全カード」ぶんの無駄になる。
+ * memo 境界。カードを描く AssistantPanel は入力欄の値も同じ state に持つので、相談文を
+ * 1文字打つたびにメッセージ列ごと再描画され、商品名の語分割（Intl.Segmenter）と reason の
+ * 文丸めを画面上の全カードぶんやり直すことになる。
  * props は messages state 内のオブジェクトと useCallback 済みの関数で同一性が保たれるため、
  * 比較関数は要らない（ProductCard.tsx と同じ判断）。
  */

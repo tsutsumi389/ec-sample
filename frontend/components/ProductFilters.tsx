@@ -101,10 +101,8 @@ function FilterBody({
   return (
     <>
       {/*
-        カテゴリ: 帯の中で最も面積を取る。
-        lg 未満（＝768px 帯）では basis-full で単独の1段目を占有し、並び替え・価格帯を
+        カテゴリは lg 未満（＝768px 帯）では basis-full で単独の1段目を占有し、並び替え・価格帯を
         2段目へ落とす。同じ行に押し込むとチップが min-content まで潰れてピルが崩壊する。
-        lg 以上でだけ残り幅を受け取る1カラムに戻す。
       */}
       <div className="flex flex-wrap gap-2 sm:min-w-0 sm:basis-full lg:basis-0 lg:flex-1">
         {loadingCategories ? (
@@ -194,8 +192,7 @@ function FilterBody({
         />
         {/* 入力欄と同じ行に並ぶ二次ボタンは btn('field')。secondary の罫は line-strong
             （対 surface 1.76:1）で、隣の input の line-input（3.65:1）より2段淡く、
-            押せるボタンだけが無効化されて見えていた。罫の濃度を行の中で1つに揃える。
-            （局所の `!border-line-input` 上書きは buttonStyles の 'field' に畳んだ） */}
+            押せるボタンだけが無効化されて見える。罫の濃度を行の中で1つに揃える。 */}
         <button type="button" onClick={applyPriceRange} className={btn('field', 'md')}>
           適用
         </button>
@@ -260,7 +257,6 @@ function FilterDrawer({
           entered ? 'translate-y-0' : 'translate-y-full'
         }`}
       >
-        {/* ドロワーの掴み手 */}
         <div aria-hidden className="mx-auto mb-4 h-1 w-10 rounded-full bg-line-strong" />
         <div className="mb-5 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -365,11 +361,6 @@ export default function ProductFilters({ value, onChange, searching }: ProductFi
 
   return (
     <>
-      {/*
-        マストヘッド（bg-sunken）から続く「沈んだ面」の下端。深度は地の色差だけで表し、
-        影・角丸は持たせない（§5-4 手段①）。PC ではヘッダー直下に貼り付いて、
-        グリッドをスクロールしても条件が視野から消えないようにする。
-      */}
       {/*
         マストヘッド（bg-sunken）から続く「沈んだ面」の下端。深度は地の色差だけで表し、
         影・角丸は持たせない（§5-4 手段①）。上端の罫はマストヘッドの border-b が担うので

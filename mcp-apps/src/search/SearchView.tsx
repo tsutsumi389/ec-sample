@@ -5,13 +5,10 @@
  * 届く。並び替え・ページング・再試行では、この画面から同じツールを
  * callServerTool("search_products") で撃ち直す（配線は useSearchView.ts）。
  *
- * **判断はここに一切持たない。** 購入可否の理由（availability）も価格帯の申し送り
- * （note）もサーバーが完成文で寄越すものをそのまま出す。文言を組み立て直すと同じ判断が
- * backend（services/cart.py）と二重になり、必ず片方が古くなる。
- *
- * **押せる／押せないは必ず状態からの派生で書く。** 移植前は setLoading() と
- * resetControlsToConfirmed() が DOM の disabled を書き換えており、経路によって
- * 片方だけ通る食い違いが実際に起きていた。ここでは disabled 属性の式が唯一の源。
+ * **判断はここに一切持たない**——購入可否の理由（availability）も価格帯の申し送り
+ * （note）もサーバーの完成文をそのまま出す。**押せる／押せないも必ず状態からの派生で
+ * 書く**（disabled 属性の式が唯一の源。DOM を書き換えていた頃は、経路によって片方だけ
+ * 通る食い違いが実際に起きていた）。
  */
 
 import type { ReactElement } from "react";
@@ -23,10 +20,9 @@ import { useSearchView } from "./useSearchView.ts";
 
 /**
  * 並び順の表示名。**キーの列を書き並べず、SortKey 全件を要求する Record で持つ。**
- * 文言は View 側のものだが、キーの集合は backend の写し（types.ts の SORT_KEYS）が
- * 唯一の源であり、ここに5つ書き写すと「SORT_KEYS に足したのに画面に出ない」が
- * 型検査を素通りしてしまう（SORT_KEYS を配列で持っているのは、まさにその食い違いを
- * 防ぐため）。Record<SortKey, string> なら並び順が1つ増えた時点でここが型エラーになる。
+ * 文言は View 側のものだが、キーの集合の唯一の源は types.ts の SORT_KEYS であり、
+ * Record<SortKey, string> なら並び順が1つ増えた時点でここが型エラーになる（自前で
+ * 5つ書き写すと「SORT_KEYS に足したのに画面に出ない」が型検査を素通りする）。
  *
  * 画面に出る順序はこの宣言順（オブジェクトの文字列キーは挿入順を保つ）。
  */
@@ -43,8 +39,7 @@ const SORT_LABELS: Record<SortKey, string> = {
  *
  * disabled は「このカードのリンクを開いている最中か」だけを見る。**読み込み中を
  * ここに足さないこと**——通信中にカードを押させないのは .grid[data-loading="true"] の
- * pointer-events: none の役目で、両方でやると読み込み中に .card:disabled の減光が
- * 二重に掛かる。
+ * pointer-events: none の役目で、両方でやると .card:disabled の減光が二重に掛かる。
  */
 function ProductCard({
   item,
@@ -78,8 +73,7 @@ function ProductCard({
           ) : null}
         </div>
         <span className="card-rating">{formatRating(item.avg_rating, item.review_count)}</span>
-        {/* availability は「購入できます」/ 買えない理由の完成文がサーバーから来る。
-            理由をここで組み立て直さない（CLAUDE.md の規律をそのまま踏襲）。 */}
+        {/* availability は完成文がサーバーから来る。理由をここで組み立て直さない。 */}
         <span className="card-availability" data-ok={String(item.purchasable)}>
           {item.availability}
         </span>
@@ -90,8 +84,8 @@ function ProductCard({
 
 export function SearchView(): ReactElement {
   // result は「全面エラーが出ている間は null」に揃えたもの（useSearchView が確定させる）。
-  // 全面エラーはグリッド・ページング・読み込み中の表示を丸ごと置き換え、バナー
-  // （下の ErrorBanner）はそのどれにも触らない、という二層の分け方がこれで保たれる。
+  // 全面エラーはグリッド・ページング・読み込み中の表示を丸ごと置き換え、バナーはその
+  // どれにも触らない。
   const { state, result, totalPages, changeSort, goToPage, retry, dismissBanner, openPage } =
     useSearchView();
 
@@ -107,8 +101,8 @@ export function SearchView(): ReactElement {
 
   return (
     // id="app" は theme.css が余白を当てるためのフック。safe area のインセットは
-    // shared/host.ts の useSafeAreaInsets がドキュメントのルートへ載せ、足し算は
-    // theme.css の calc() 側がやる（この要素に ref を付ける必要はない）。
+    // useSafeAreaInsets がドキュメントのルートへ載せ、足し算は theme.css の calc() が
+    // やる（この要素に ref を付ける必要はない）。
     <div id="app">
       <header className="header">
         <h1 className="title">{title}</h1>
@@ -116,10 +110,9 @@ export function SearchView(): ReactElement {
           <label className="sort-label" htmlFor="sort-select">
             並び替え
           </label>
-          {/* value を state.sort で制御する。**これが移植前の
-              resetControlsToConfirmed() の代わり**——再検索が失敗しても state.sort は
-              書き換わらないので、セレクトの表示は勝手に確定済みの値へ戻る
-              （「表示は旧ソート・セレクトは新ソート」の食い違いが構造的に起きない）。 */}
+          {/* value を state.sort で制御する。再検索が失敗しても state.sort は書き換わら
+              ないので、セレクトの表示は勝手に確定済みの値へ戻る（「表示は旧ソート・
+              セレクトは新ソート」の食い違いが構造的に起きない）。 */}
           <select
             id="sort-select"
             value={state.sort}
@@ -133,8 +126,7 @@ export function SearchView(): ReactElement {
             ))}
           </select>
         </div>
-        {/* structuredContent.note（価格帯の申し送り、またはカテゴリ不一致の案内）。
-            控えめな表示にとどめ、無ければ何も出さない。 */}
+        {/* structuredContent.note（価格帯の申し送り、またはカテゴリ不一致の案内）。 */}
         {result !== null && result.note ? <p className="note">{result.note}</p> : null}
       </header>
 

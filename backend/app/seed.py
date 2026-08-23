@@ -30,31 +30,22 @@ def _product_image(slug: str) -> str:
     return f"/products/{slug}.svg"
 
 
-# 各商品に sku を付与。sale_price / status / gallery は任意（未指定時は
-# それぞれ「なし」「on_sale」「メイン画像のみ」として扱う）。
-# gallery はギャラリー表示のデモ用に既存 SVG を流用したプレースホルダ。
+# sale_price / status / gallery は任意（未指定時はそれぞれ「なし」「on_sale」
+# 「メイン画像のみ」として扱う）。
 #
 # description は「商品説明」であると同時に **埋め込みの原文** でもある
-# （services/embedding.py の build_product_text が 商品名/カテゴリ/説明/価格帯 を
-# 連結してベクトル化する）。「高品質な〇〇です」のようなテンプレ文を並べると全商品の
-# ベクトルが近距離に密集し、セマンティック検索のフィルタもホームのレーン分離も効かなく
-# なる（config.py の OLLAMA_EMBED_MODEL のコメント参照。過去にモデル側で踏んだのと
-# 同じ失敗をデータ側で再現しないこと）。用途・素材・シーン・サイズなど、その商品にしか
-# 出てこない具体語を必ず入れる。
+# （services/embedding.py の build_product_text）。「高品質な〇〇です」のようなテンプレ文を
+# 並べると全商品のベクトルが近距離に密集し、セマンティック検索のフィルタもホームのレーン
+# 分離も効かなくなる。用途・素材・シーン・サイズなど、その商品にしか出てこない具体語を
+# 必ず入れる。
 #
-# image_slug は frontend/public/products/ にある 24 枚の SVG のいずれかを指す。
-#
-# ⚠ 図版はこの誌面の主役なので、**同じ絵が1画面に2枚出ない**ことを配分の条件にする。
-#   10 枚しか無かった頃は yoga-mat 12件 / wrist-watch 11件 / electric-kettle 10件と偏り、
-#   一覧・レーン・「合わせておすすめ」のどのグリッドでも隣り合うカードが同じ絵になって
-#   「レンダリングのバグ」に見えていた（フロント側の重複除外だけでは一覧を救えない）。
-#   いまは 24 枚を最大5件までに散らし、**この配列上で同じ slug が3件以内に再出現しない**
-#   ように並べてある（並びは created_at の順にほぼそのまま出る）。
-#   商品名と図案が1対1で対応する商品（炊飯器・テント・ニット帽など）は固定で、
-#   残りを間隔が空くように振っている。
-#   商品を足すときは、前後3件と違う slug を選ぶこと。意味の近い絵が無ければ SVG を1枚足す
-#   （地色 #F2ECE1 = tailwind.config.ts の tile・接地の楕円 #E6DDCC・brand/accent の平塗り、
-#   という既存の作法に合わせる。地色は tile トークンと必ず一致させること）。
+# image_slug は frontend/public/products/ にある 24 枚の SVG のいずれか。
+# **同じ絵が1画面に2枚出ない**ことを配分の条件にし、**この配列上で同じ slug が3件以内に
+# 再出現しない**ように並べてある（並びは created_at の順にほぼそのまま出る）。偏らせると
+# 一覧でも「合わせておすすめ」でも隣り合うカードが同じ絵になり、レンダリングのバグに見える
+# （フロント側の重複除外だけでは一覧を救えない）。商品を足すときは前後3件と違う slug を
+# 選び、意味の近い絵が無ければ SVG を1枚足す（地色 #F2ECE1 は tailwind.config.ts の tile
+# トークンと必ず一致させること）。
 SEED_PRODUCTS = [
     {
         "name": "ワイヤレスイヤホン",
@@ -84,7 +75,6 @@ SEED_PRODUCTS = [
     {"name": "ブルートゥーススピーカー", "slug": "bluetooth-speaker", "sku": "ELC-2024-009", "description": "防水仕様のポータブルBluetoothスピーカー。", "price": 6980, "sale_price": 5480, "stock": 30},
     {"name": "腕時計", "slug": "wrist-watch", "sku": "FSN-2024-010", "description": "シンプルで上品なデザインのクオーツ腕時計。", "price": 15800, "stock": 0},
     {"name": "スマートウォッチ", "slug": "smart-watch", "sku": "FSN-2024-011", "description": "健康管理機能を搭載した次世代スマートウォッチ。近日発売予定。", "price": 19800, "stock": 30, "status": "coming_soon", "image_slug": "smart-watch"},
-    # ---- キッチン家電 ----
     {
         "name": "電気圧力鍋",
         "slug": "electric-pressure-cooker",
@@ -181,7 +171,6 @@ SEED_PRODUCTS = [
         "image_slug": "coffee-maker",
         "gallery": ["coffee-maker"],
     },
-    # ---- 生活家電 ----
     {
         "name": "空気清浄機",
         "slug": "air-purifier",
@@ -258,7 +247,6 @@ SEED_PRODUCTS = [
         "image_slug": "wireless-earphone",
         "gallery": ["bluetooth-speaker"],
     },
-    # ---- 日用品 ----
     {
         "name": "保温タンブラー",
         "slug": "insulated-tumbler",
@@ -352,7 +340,6 @@ SEED_PRODUCTS = [
         "stock": 52,
         "image_slug": "humidifier",
     },
-    # ---- アウトドア ----
     {
         "name": "ワンタッチテント",
         "slug": "pop-up-tent",
@@ -456,7 +443,6 @@ SEED_PRODUCTS = [
         "status": "suspended",
         "image_slug": "tent",
     },
-    # ---- ファッション小物 ----
     {
         "name": "本革ベルト",
         "slug": "leather-belt",
@@ -560,10 +546,8 @@ SEED_CATEGORIES = [
     {"name": "ファッション小物", "slug": "fashion-accessories"},
 ]
 
-# 各商品スラッグに割り当てるカテゴリスラッグ。
 # 新しいカテゴリは足さず既存の 5 つに配分する。home_page.py の novelty はレーンの
-# カテゴリ分布で多様性を測るため、1 カテゴリに偏らせるとページ生成の挙動が歪む
-# （現状は 12 商品 × 5 カテゴリ）。
+# カテゴリ分布で多様性を測るため、1 カテゴリに偏らせるとページ生成の挙動が歪む。
 PRODUCT_CATEGORY_SLUG = {
     "wireless-earphone": "home-appliances",
     "coffee-maker": "kitchen-appliances",
@@ -576,7 +560,6 @@ PRODUCT_CATEGORY_SLUG = {
     "bluetooth-speaker": "home-appliances",
     "wrist-watch": "fashion-accessories",
     "smart-watch": "fashion-accessories",
-    # キッチン家電
     "electric-pressure-cooker": "kitchen-appliances",
     "hand-blender": "kitchen-appliances",
     "oven-toaster": "kitchen-appliances",
@@ -587,7 +570,6 @@ PRODUCT_CATEGORY_SLUG = {
     "food-processor": "kitchen-appliances",
     "food-steamer": "kitchen-appliances",
     "gooseneck-kettle": "kitchen-appliances",
-    # 生活家電
     "air-purifier": "home-appliances",
     "circulator-fan": "home-appliances",
     "garment-steamer": "home-appliances",
@@ -596,7 +578,6 @@ PRODUCT_CATEGORY_SLUG = {
     "electric-blanket": "home-appliances",
     "usb-charging-station": "home-appliances",
     "bone-conduction-headphone": "home-appliances",
-    # 日用品
     "insulated-tumbler": "daily-goods",
     "diatomite-bath-mat": "daily-goods",
     "laundry-net-set": "daily-goods",
@@ -607,7 +588,6 @@ PRODUCT_CATEGORY_SLUG = {
     "glass-food-container": "daily-goods",
     "microfiber-towel": "daily-goods",
     "soap-dispenser": "daily-goods",
-    # アウトドア
     "pop-up-tent": "outdoor",
     "sleeping-bag": "outdoor",
     "led-lantern": "outdoor",
@@ -619,7 +599,6 @@ PRODUCT_CATEGORY_SLUG = {
     "solar-charger": "outdoor",
     "trail-running-shoes": "outdoor",
     "hammock": "outdoor",
-    # ファッション小物
     "leather-belt": "fashion-accessories",
     "bifold-wallet": "fashion-accessories",
     "cashmere-scarf": "fashion-accessories",
@@ -632,15 +611,13 @@ PRODUCT_CATEGORY_SLUG = {
     "key-case": "fashion-accessories",
 }
 
-# ---------- 仕様（product_specs）----------
-#
 # 商品ページの「仕様」欄と、埋め込み原文（services/embedding.py の build_product_text）が
-# ここを読む。description に散文で書いてあった「モノの事実」を、項目名と値に割ったもの。
+# ここを読む。
 #
 # ⚠ 在庫・価格・販売状態は入れないこと。あれは状態であって仕様ではなく、並べると
 #   商品ページの StockLabel（残りN点）と同じ数字が同一画面に二度出る。
-# ⚠ 項目名はカテゴリを跨いで使い回す（重量・素材・本体サイズ・保証期間 等）。商品ごとに
-#   言い換えると、同じ棚の商品を並べたときに行が揃わない。
+# ⚠ 項目名はカテゴリを跨いで使い回す（重量・素材・本体サイズ 等）。商品ごとに言い換えると、
+#   同じ棚の商品を並べたときに行が揃わない。
 # ⚠ 値は単位まで含めた表示用の文字列。数値として集計・絞り込みに使う設計ではない
 #   （「〜18畳」「1本あたり240g」のように範囲や但し書きが要る項目が多いため）。
 #
@@ -724,7 +701,6 @@ PRODUCT_SPECS: dict[str, list[tuple[str, str]]] = {
         ("防水性能", "5気圧防水"),
         ("対応OS", "iOS / Android"),
     ],
-    # キッチン家電
     "electric-pressure-cooker": [
         ("容量", "3.0L（3〜4人分）"),
         ("調理モード", "圧力／無水／低温／煮込み"),
@@ -795,7 +771,6 @@ PRODUCT_SPECS: dict[str, list[tuple[str, str]]] = {
         ("注ぎ口", "グースネック（細口）"),
         ("消費電力", "1000W"),
     ],
-    # 生活家電
     "air-purifier": [
         ("適用床面積", "〜18畳"),
         ("フィルター", "HEPA＋脱臭（交換目安2年）"),
@@ -852,7 +827,6 @@ PRODUCT_SPECS: dict[str, list[tuple[str, str]]] = {
         ("重量", "約29g"),
         ("バンド", "チタン（形状記憶）"),
     ],
-    # 日用品
     "insulated-tumbler": [
         ("容量", "350mL"),
         ("保温・保冷", "6時間で60℃以上／8℃以下"),
@@ -923,7 +897,6 @@ PRODUCT_SPECS: dict[str, list[tuple[str, str]]] = {
         ("電源", "単三電池4本（約6か月）"),
         ("防水性能", "IPX4"),
     ],
-    # アウトドア
     "pop-up-tent": [
         ("定員", "2〜3人"),
         ("組立サイズ", "幅210×奥行150×高さ120cm"),
@@ -1001,7 +974,6 @@ PRODUCT_SPECS: dict[str, list[tuple[str, str]]] = {
         ("収納時サイズ", "12×12cm（一体型ポケット）"),
         ("付属品", "幅広ストラップ2本・カラビナ"),
     ],
-    # ファッション小物
     "leather-belt": [
         ("素材", "牛革（ベジタブルタンニンなめし）"),
         ("幅", "35mm"),
@@ -1074,38 +1046,34 @@ PRODUCT_SPECS: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
-# ---------- 行動データ（ホームのレーンとパーソナライズのデモに必須）----------
-#
 # home_page.py の for_you / byw / recently_viewed / cart_reminder / top10 は行動データが
 # 無いと 1 本も成立しない。かつ lane / ranked の最小件数は 4 件（_MIN_ITEMS_BY_LAYOUT）
 # なので、各シグナルは 4 件以上を投入する。
 #
-# 注文は Order.created_at を server_default（= 投入時刻）に任せる。top10 は
-# get_recent_popular_products の 7 日窓で集計するため、シード直後は全注文が窓に入る。
-# 逆に言うとシードから 7 日以上放置した DB では top10 が空になる（make reset で復活する）。
+# 注文の created_at は投入時刻に任せる。top10 は 7 日窓で集計するため、シードから
+# 7 日以上放置した DB では top10 が空になる（make reset で復活する）。
 SEED_ORDERS = [
-    # user@example.com の購入実績。レビュー投稿の資格（cancelled 以外の注文で購入済み）を
-    # 満たすよう、レビュー対象は必ずここに含める。
+    # レビュー投稿の資格（cancelled 以外の注文で購入済み）を満たすよう、レビュー対象は
+    # 必ずここに含める。
     {"user": "user", "status": "delivered", "items": [("wireless-earphone", 1), ("stainless-bottle", 1)]},
     {"user": "user", "status": "shipped", "items": [("coffee-maker", 1), ("yoga-mat", 1)]},
-    # admin の購入実績。top10（7日窓の購入数ランキング）に十分な商品数と件数差を作る。
-    # user 側で買い足すと exclude_ids（購入済み+カート）が膨らんで byw / category / sale の
-    # 候補が痩せるため、ランキングの厚みは別ユーザーの注文で作る。
+    # ランキングの厚みは admin の注文で作る。user 側で買い足すと exclude_ids
+    # （購入済み+カート）が膨らんで byw / category / sale の候補が痩せるため。
     {"user": "admin", "status": "delivered", "items": [("electric-kettle", 3), ("mobile-battery", 2), ("folding-umbrella", 4)]},
     {"user": "admin", "status": "delivered", "items": [("oven-toaster", 2), ("insulated-tumbler", 5), ("led-lantern", 3)]},
     {"user": "admin", "status": "paid", "items": [("bluetooth-speaker", 1), ("rice-cooker", 1), ("air-purifier", 2)]},
     {"user": "admin", "status": "shipped", "items": [("hiking-backpack", 1), ("cashmere-scarf", 2), ("microfiber-towel", 3)]},
 ]
 
-# user@example.com のカート。cart_reminder レーンは lane の最小 4 件を要求する。
+# cart_reminder レーンは lane の最小 4 件を要求する。
 SEED_USER_CART_SLUGS = ["hand-blender", "insulated-tumbler", "led-lantern", "leather-belt"]
 
-# user@example.com のお気に入り（プロフィールベクトルの重み 2.0 / 除外はされない）。
+# プロフィールベクトルの重みは 2.0（お気に入りは候補から除外されない）。
 SEED_USER_WISHLIST_SLUGS = ["bifold-wallet", "cooler-box", "trekking-poles"]
 
-# user@example.com の閲覧履歴（新しい順）。recently_viewed レーンの実体であり、
-# byw のアンカー（先頭 3 件）もここから取られる。viewed_at は明示的に時刻をずらす
-# （server_default に任せると全件同時刻になり viewed_at desc の並びが不定になるため）。
+# 新しい順。recently_viewed レーンの実体であり、byw のアンカー（先頭 3 件）もここから
+# 取られる。viewed_at は明示的に時刻をずらす（server_default に任せると全件同時刻になり
+# viewed_at desc の並びが不定になるため）。
 SEED_USER_VIEW_SLUGS = [
     "gooseneck-kettle",
     "air-purifier",
@@ -1115,7 +1083,7 @@ SEED_USER_VIEW_SLUGS = [
     "oven-toaster",
 ]
 
-# レビュー: (ユーザーキー, 商品スラッグ, 評価, コメント)。
+# (ユーザーキー, 商品スラッグ, 評価, コメント)。
 # 対象商品は SEED_ORDERS に購入実績があること（アプリ側の投稿資格と整合させる）。
 SEED_REVIEWS = [
     ("user", "wireless-earphone", 5, "音質が良く、ノイズキャンセリングも効いていて満足しています。"),
@@ -1149,12 +1117,8 @@ SEED_COUPONS = [
 ]
 
 
-# ---------- A/Bテスト（動作確認用の実験）----------
-#
-# レイアウト実験の実例。どちらの枝も「並び順の配列」を config に持つだけで、フロント側は
-# その配列どおりに描画する。枝を増やしてもコードに if を足す必要がないのがこの持ち方の
-# 利点で、レイアウト変更の検証を設定だけで回せる。
-#
+# どちらの枝も「並び順の配列」を config に持つだけで、フロント側はその配列どおりに描画する
+# （枝を増やしてもコードに if を足さずに済む）。
 # salt はシードでは固定値にする（起動のたびに割り当てが変わると動作確認しづらいため）。
 # 管理画面から新規作成する実験には UUID が自動採番される。
 
@@ -1280,7 +1244,6 @@ def seed_data(db: Session) -> None:
     for coupon in SEED_COUPONS:
         db.add(Coupon(**coupon))
 
-    # 動作確認用の行動データを投入する（購入・カート・お気に入り・閲覧・レビュー）。
     users_by_key = {"admin": admin, "user": user}
     for spec in SEED_ORDERS:
         _place_order(db, users_by_key[spec["user"]], spec["status"], spec["items"], products_by_slug)
@@ -1351,9 +1314,8 @@ def _place_order(
 ) -> None:
     """注文 1 件を在庫の引き当て込みで作る。
 
-    金額は必ず effective_price（セール中ならセール価格）でスナップショットし、
-    OrderItem に注文時点の商品名・価格を焼き付ける。商品マスタを参照して後から
-    再計算しないのが運用ルールなので、シードもその形に揃えておく。
+    金額は必ず effective_price でスナップショットし、OrderItem に注文時点の商品名・価格を
+    焼き付ける（本番と同じく、商品マスタを参照して後から再計算しない形に揃えておく）。
     """
     order_items: list[OrderItem] = []
     total = 0
