@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { ChatBubbleIcon } from '@/components/Icons';
 import AssistantPanel from '@/components/assistant/AssistantPanel';
 import { useAssistant, useAssistantGeometry } from '@/lib/assistant-context';
+import { isProductDetail } from '@/lib/assistantPageContext';
 import { FOCUS_RING } from '@/lib/buttonStyles';
 
 /**
@@ -167,7 +168,8 @@ export default function AssistantWidget() {
 
   // 商品詳細はモバイルで固定購入バーが出るため、FAB をその上へ逃がす。
   // それ以外のページでも safe-area 分を足し、レーンや一覧のカードに被らせない。
-  const onPdp = /^\/products\/[^/]+$/.test(pathname ?? '');
+  // 経路の判定は lib/assistantPageContext.ts の1本（アシスタントへ送る画面と同じ源）。
+  const onPdp = isProductDetail(pathname);
   // 商品詳細の固定購入バーは `lg:hidden`（= 1024px 未満で表示）なので、
   // FAB の退避解除も lg に揃える。md（768px）で解除すると 768〜1023px で
   // FAB が「カートに追加」の右上角に乗る。
