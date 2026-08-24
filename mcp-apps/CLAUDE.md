@@ -10,4 +10,7 @@ backend 側の規律（`_meta.ui` の組み立て・UI リソースの登録順�
 
 ## 検証
 
-**`package.json` を変えたときは `make mcp-deps`**（匿名ボリュームの `node_modules` は `make up-d` では入れ替わらない）。そのうえで `make mcp-typecheck` を通す（**ビルドは型を見ない**——Vite 8 は rolldown/oxc で型注釈を落とすだけなので、型エラーがあってもビルドは成功しログにも出ない。フロントの `make lint` にあたる）。あわせて `make logs-mcp-apps` でビルドが通っているか確認する（watch ビルドが常駐しているので、通常は保存するだけで dist が更新される。取りこぼしたときは `make mcp-ui-build`）。そのうえで `make mcp-check` を叩き、ツールが 11 本見えることと「UIリソース」に `ui://` が2本（検索・商品詳細）載ることを確認する。**dist の更新だけでは反映されない**——backend が再起動して読み直すまで古い UI が配られる（compose の `--reload-include '*.html'` が拾うので、`make logs-backend` に再起動のログが出るのを待つ）。
+1. `package.json` を変えたときは `make mcp-deps`（`make up-d` では足りない理由は上の `package.json` の項目）。
+2. `make mcp-typecheck` を通す。**ビルドは型を見ない**——Vite 8 は rolldown/oxc で型注釈を落とすだけなので、型エラーがあってもビルドは成功しログにも出ない。フロントの `make lint` にあたるのはこれ。
+3. `make logs-mcp-apps` でビルドが通っているか見る（watch ビルドが常駐しているので、通常は保存するだけで dist が更新される。取りこぼしたときは `make mcp-ui-build`）。
+4. `make mcp-check` を叩き、ツールが 11 本見えることと「UIリソース」に `ui://` が2本（検索・商品詳細）載ることを確認する。**dist の更新だけでは反映されない**ので、`make logs-backend` に backend の再起動が出てから叩くこと（理由は上の View の項目）。
