@@ -101,7 +101,7 @@ migrate-status: ## 適用済みリビジョンと履歴を表示
 # ModuleNotFoundError のまま直らない——その取り違えをここで検出する。
 # ホストから叩くこと。transport security の allowed_hosts に compose のサービス名
 # （backend:8000）は入れていないので、コンテナ内から叩くと 421 になる。
-mcp-check: ## MCP サーバー(/mcp)の疎通確認（ツール一覧・UIリソースの有無を表示）
+mcp-check: ## MCP サーバー(/mcp)の疎通確認（新旧プロトコル・ツール一覧・UIリソースの有無を表示）
 	@curl -sS -X POST http://localhost:8000/mcp \
 		-H 'Content-Type: application/json' \
 		-H 'Accept: application/json, text/event-stream' \
@@ -123,6 +123,37 @@ mcp-check: ## MCP サーバー(/mcp)の疎通確認（ツール一覧・UIリソ
 		-d '{"jsonrpc":"2.0","id":2,"method":"resources/list"}' \
 		| sed -n 's/^data: //p' \
 		| python3 -c 'import json,sys; r=json.load(sys.stdin)["result"]["resources"]; ui=[x["uri"] for x in r if x.get("mimeType")=="text/html;profile=mcp-app"]; print("UIリソース:", ", ".join(ui) if ui else "なし（make logs-mcp-apps でビルドの状況を確認できます）")'
+	@echo
+	@# ここから下は 2026-07-28（stateless core・ヘッダルーティング・server/discover）の経路。
+	@# **上の2本が通っても、新仕様側が壊れていないことの証明にはならない。** SDK は
+	@# MCP-Protocol-Version ヘッダ「だけ」を見て新旧を振り分けており（mcp 2.0.0 の
+	@# streamable_http_manager が、既知のハンドシェイク版以外を _streamable_http_modern
+	@# へ回す）、ヘッダを送らない上の2本は必ず旧経路（2025-11-25 でネゴシエート）を通る。
+	@# 新仕様の要求は2つあり、どちらを欠いても 400 になる:
+	@#   - method（tools/call なら name も）を mcp-method / mcp-name ヘッダに複製する。
+	@#     本文と食い違うと -32020。
+	@#   - params._meta に io.modelcontextprotocol/protocolVersion と
+	@#     .../clientCapabilities の封筒を入れる（initialize が無くなった代わり）。
+	@# **応答は素の JSON で返る**（SSE ではない）ので、上の2本の sed でのフレーム剥がしは
+	@# ここには要らない。逆に足すと空を食わせることになる。
+	@curl -sS -X POST http://localhost:8000/mcp \
+		-H 'Content-Type: application/json' \
+		-H 'Accept: application/json, text/event-stream' \
+		-H 'MCP-Protocol-Version: 2026-07-28' \
+		-H 'mcp-method: server/discover' \
+		-d '{"jsonrpc":"2.0","id":3,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' \
+		| python3 -c 'import json,sys; r=json.load(sys.stdin)["result"]; ext=list(r.get("capabilities",{}).get("extensions",{})); print("2026-07-28 server/discover: OK  拡張:", ", ".join(ext) if ext else "なし")' \
+		|| { echo '--- 2026-07-28 の経路で server/discover に失敗しました。旧経路（上の tools/list）が通っているならツール登録は無事で、壊れているのは新仕様側の口です。mcp SDK を上げた直後なら、要求されるヘッダ・封筒の形が変わっていないか確認してください'; exit 1; }
+	@# ツール本数が旧経路（上の tools/list）と食い違っていたら、どちらかの経路にだけ
+	@# 登録が漏れている。並べて出しているのはそれを目で拾うため。
+	@curl -sS -X POST http://localhost:8000/mcp \
+		-H 'Content-Type: application/json' \
+		-H 'Accept: application/json, text/event-stream' \
+		-H 'MCP-Protocol-Version: 2026-07-28' \
+		-H 'mcp-method: tools/list' \
+		-d '{"jsonrpc":"2.0","id":4,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' \
+		| python3 -c 'import json,sys; t=json.load(sys.stdin)["result"]["tools"]; ui=[x["name"] for x in t if x.get("_meta",{}).get("ui")]; print(f"2026-07-28 tools/list: {len(t)} tools（UI付き: " + (", ".join(ui) if ui else "なし") + "）")' \
+		|| { echo '--- 2026-07-28 の経路で tools/list に失敗しました'; exit 1; }
 
 ## --- MCP Apps（/mcp の画面部分） ----------------------------------
 # View（検索結果カード一覧・商品詳細パネル）は mcp-apps コンテナが watch ビルド
